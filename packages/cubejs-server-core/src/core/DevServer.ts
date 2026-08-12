@@ -277,10 +277,20 @@ export class DevServer {
             if (!columns?.length) {
               columns = await loadCompiledColumns();
             }
-            if (!columns?.length) {
+            const dimensionColumns = Object.entries(evaluatedCube?.dimensions || {}).map(([name, dimension]: [string, any]) => ({
+              name,
+              type: dimension?.type ? String(dimension.type) : undefined,
+            }));
+            const columnNames = new Set((columns || []).map(column => String(column.name).toLowerCase()));
+            const allColumns = [
+              ...(columns || []),
+              ...dimensionColumns.filter(column => !columnNames.has(column.name.toLowerCase())),
+            ];
+
+            if (!allColumns.length) {
               throw new Error('The database driver did not return column metadata');
             }
-            diagramCube.columns = (columns || []).map(column => {
+            diagramCube.columns = allColumns.map(column => {
               const name = String(column.name);
               const normalizedName = name.toLowerCase();
               return {
