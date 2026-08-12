@@ -1,8 +1,9 @@
-import { DialogForm, LoadingIcon, Radio, Space, TextArea, useForm } from '@cube-dev/ui-kit';
+import { DialogForm, Radio, Space, TextArea, useForm } from '@cube-dev/ui-kit';
 import { Meta, Query } from '@cubejs-client/core';
 import { ValidationRule } from '@cube-dev/ui-kit/types/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { parse as BestEffortJsonParse } from 'best-effort-json-parser';
+import { LoadingIcon } from '../../shared/icons/FontAwesomeIcons';
 
 import { useQueryBuilderContext } from '../context';
 import { useServerCoreVersionGte } from '../hooks';

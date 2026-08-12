@@ -1,6 +1,7 @@
 import { useMemo, useRef } from 'react';
-import { Menu, MenuTrigger, Space, Text, CloseIcon, PlusIcon, CubeIcon } from '@cube-dev/ui-kit';
+import { Menu, MenuTrigger, Space, Text } from '@cube-dev/ui-kit';
 import { TCubeMeasure, TCubeDimension, TCubeSegment, Cube, MemberType } from '@cubejs-client/core';
+import { CloseIcon, CubeIcon, PlusIcon } from '../../shared/icons/FontAwesomeIcons';
 
 import { getTypeIcon } from '../utils';
 import { PrimaryKeyIcon } from '../icons/PrimaryKeyIcon';

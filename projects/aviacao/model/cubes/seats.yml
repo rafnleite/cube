@@ -1,0 +1,25 @@
+cubes:
+  - name: seats
+    sql_table: bookings.seats
+    data_source: default
+    dimensions:
+      - name: airplane_code
+        sql: airplane_code
+        type: string
+        title: Código do avião
+      - name: fare_conditions
+        sql: fare_conditions
+        type: string
+        title: Condição de tarifa
+      - name: seat_no
+        sql: seat_no
+        type: string
+        title: Número do assento
+      - name: plane_seat_id
+        sql: "CONCAT({CUBE}.airplane_code, '-', {CUBE}.seat_no)"
+        type: string
+        primary_key: true
+    measures:
+      - name: count
+        type: count
+    title: Assentos

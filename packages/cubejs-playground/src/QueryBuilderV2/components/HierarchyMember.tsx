@@ -1,6 +1,7 @@
-import { Text, tasty, HierarchyIcon, Space } from '@cube-dev/ui-kit';
+import { Text, tasty, Space } from '@cube-dev/ui-kit';
 import { Cube } from '@cubejs-client/core';
 import { ReactElement, useRef } from 'react';
+import { HierarchyIcon } from '../../shared/icons/FontAwesomeIcons';
 
 import { MemberViewType, TCubeHierarchy } from '../types';
 import { useShownMemberName } from '../hooks';

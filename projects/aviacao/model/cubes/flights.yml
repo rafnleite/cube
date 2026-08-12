@@ -1,0 +1,37 @@
+cubes:
+  - name: flights
+    sql_table: bookings.flights
+    data_source: default
+    dimensions:
+      - name: flight_id
+        sql: flight_id
+        type: string
+        primary_key: true
+      - name: route_no
+        sql: route_no
+        type: string
+        title: Número de rota
+      - name: status
+        sql: status
+        type: string
+        title: Status
+      - name: actual_arrival
+        sql: actual_arrival
+        type: time
+        title: Chegada real
+      - name: actual_departure
+        sql: actual_departure
+        type: time
+        title: Partida real
+      - name: scheduled_arrival
+        sql: scheduled_arrival
+        type: time
+        title: Chegada agendada
+      - name: scheduled_departure
+        sql: scheduled_departure
+        type: time
+        title: Partida agendada
+    measures:
+      - name: count
+        type: count
+    title: Voos

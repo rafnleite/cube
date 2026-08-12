@@ -9,7 +9,8 @@ import {
   useRef,
   useEffect,
 } from 'react';
-import { Action, tasty, CloseIcon, Styles } from '@cube-dev/ui-kit';
+import { Action, tasty, Styles } from '@cube-dev/ui-kit';
+import { CloseIcon } from '../../../shared/icons/FontAwesomeIcons';
 
 import { useEvent } from '../../hooks';
 

@@ -1,5 +1,6 @@
-import { CalendarEditIcon, CalendarIcon, Text } from '@cube-dev/ui-kit';
+import { Text } from '@cube-dev/ui-kit';
 import { useRef } from 'react';
+import { CalendarIcon, CalendarIcon as CalendarEditIcon } from '../../shared/icons/FontAwesomeIcons';
 
 import { MemberViewType } from '../types';
 

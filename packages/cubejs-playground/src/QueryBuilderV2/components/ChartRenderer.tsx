@@ -491,7 +491,7 @@ const TypeToChartComponent = {
     >
       <Col>
         {resultSet.seriesNames().map((s: any) => (
-          <StyledStatistic key={s.key} value={resultSet.totalRow()[s.key] || 'No data'} />
+          <StyledStatistic key={s.key} value={resultSet.totalRow()[s.key] || 'Sem dados'} />
         ))}
       </Col>
     </Row>

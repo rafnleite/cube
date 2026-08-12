@@ -1,9 +1,10 @@
-import { LockIcon, ThunderboltIcon, Panel, Space, Button } from '@cube-dev/ui-kit';
+import { Panel, Space, Button } from '@cube-dev/ui-kit';
 import { CubeProvider } from '@cubejs-client/react';
 import { Card } from 'antd';
 import { useLayoutEffect } from 'react';
 import { useHistory } from 'react-router-dom';
 import styled from 'styled-components';
+import { LockIcon, ThunderboltIcon } from '../../shared/icons/FontAwesomeIcons';
 
 import { CubeLoader } from '../../atoms';
 import { useCloud } from '../../cloud';
@@ -175,6 +176,7 @@ function QueryTabsRenderer({
           <QueryBuilder
             apiUrl={apiUrl}
             apiToken={token}
+            memberViewType="title"
             defaultQuery={query}
             defaultChartType={chartType}
             schemaVersion={props.schemaVersion}

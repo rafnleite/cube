@@ -10,11 +10,10 @@ import {
   tasty,
   Text,
   Title,
-  CloseIcon,
   TooltipProvider,
   ResizablePanel,
-  ClearIcon,
 } from '@cube-dev/ui-kit';
+import { ClearIcon, CloseIcon } from '../shared/icons/FontAwesomeIcons';
 import {
   ReactNode,
   useCallback,
@@ -185,7 +184,7 @@ export function QueryBuilderSidePanel({
     () => (
       <Button
         qa="EditQueryButton"
-        aria-label="Edit Query"
+        aria-label="Editar consulta"
         type="primary"
         size="small"
         icon={<EditOutlined />}
@@ -211,7 +210,7 @@ export function QueryBuilderSidePanel({
             isDisabled={!cubes.length}
             inputStyles={{ placeContent: 'center' }}
           >
-            Cubes <CountBadge radius="1r">{cubes.length}</CountBadge>
+            Cubos <CountBadge radius="1r">{cubes.length}</CountBadge>
           </RadioButton>
           <RadioButton
             qa="QueryBuilderTab-views"
@@ -219,7 +218,7 @@ export function QueryBuilderSidePanel({
             isDisabled={!views.length}
             inputStyles={{ placeContent: 'center' }}
           >
-            Views <CountBadge radius="1r">{views.length}</CountBadge>
+            Visões <CountBadge radius="1r">{views.length}</CountBadge>
           </RadioButton>
         </Radio.ButtonGroup>
       </Space>
@@ -227,7 +226,7 @@ export function QueryBuilderSidePanel({
   }, [selectedType, meta, cubes.length, views.length]);
 
   const searchInput = useMemo(() => {
-    const description = `Search ${selectedType === 'cubes' ? 'cubes' : 'views'} and members`;
+    const description = `Pesquisar ${selectedType === 'cubes' ? 'cubos' : 'visões'} e membros`;
 
     return (
       <SearchInput
@@ -407,10 +406,10 @@ export function QueryBuilderSidePanel({
         <Space gap="1x">
           {showEditQueryButton ? editQueryButton : null}
           {!usedCubes.length ? (
-            <Title preset="h6">All members</Title>
+            <Title preset="h6">Todos os membros</Title>
           ) : (
             <TooltipProvider
-              title={'Toggle between all members and only those that are used in the query'}
+              title={'Alternar entre todos os membros e apenas os usados na consulta'}
               placement="top"
             >
               <Button
@@ -421,17 +420,17 @@ export function QueryBuilderSidePanel({
                 icon={viewMode === 'all' ? <StarOutlined /> : <StarFilled />}
                 onPress={() => setViewMode(viewMode === 'all' ? 'query' : 'all')}
               >
-                {viewMode === 'all' ? 'All members' : 'Used only'}
+                {viewMode === 'all' ? 'Todos os membros' : 'Somente usados'}
               </Button>
             </TooltipProvider>
           )}
           {isVerifying || isMetaLoading ? <LoadingOutlined /> : null}
         </Space>
         <Space gap=".5x">
-          <TooltipProvider title="Reset the query">
+          <TooltipProvider title="Limpar a consulta">
             <Button
               qa="ResetQuery"
-              aria-label="Reset the query"
+              aria-label="Limpar a consulta"
               size="small"
               type="secondary"
               theme="danger"
@@ -444,7 +443,7 @@ export function QueryBuilderSidePanel({
                 resetScrollAndContentSize();
               }}
             >
-              Reset
+              Limpar
             </Button>
           </TooltipProvider>
         </Space>
@@ -477,7 +476,7 @@ export function QueryBuilderSidePanel({
         >
           {!filteredCubes.length ? (
             <Text preset="c2">
-              No {selectedType === 'cubes' ? 'cubes' : 'views'} or members found
+              Nenhum {selectedType === 'cubes' ? 'cubo' : 'visão'} ou membro encontrado
             </Text>
           ) : null}
         </Space>

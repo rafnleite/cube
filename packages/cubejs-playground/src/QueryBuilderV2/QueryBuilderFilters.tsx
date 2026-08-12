@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, ClearIcon, Flex, Flow, Space, tasty } from '@cube-dev/ui-kit';
+import { Button, Flex, Flow, Space, tasty } from '@cube-dev/ui-kit';
 import { TCubeDimension, TCubeMeasure } from '@cubejs-client/core';
+import { ClearIcon } from '../shared/icons/FontAwesomeIcons';
 
 import { useQueryBuilderContext } from './context';
 import { useEvent } from './hooks';
@@ -91,7 +92,7 @@ export function QueryBuilderFilters({ onToggle }: { onToggle?: (isExpanded: bool
     <AccordionCard
       noPadding
       isExpanded={isExpanded}
-      title="Filters"
+      title="Filtros"
       subtitle={
         timeCounter || dimensionCounter || measureCounter || segmentsCounter ? (
           <BadgeContainer mods={{ hidden: isExpanded }}>
@@ -113,7 +114,7 @@ export function QueryBuilderFilters({ onToggle }: { onToggle?: (isExpanded: bool
       extra={
         timeCounter || dimensionCounter || measureCounter || segmentsCounter ? (
           <Button icon={<ClearIcon />} size="small" theme="danger" onPress={onClearAction}>
-            Remove All
+            Remover todos
           </Button>
         ) : null
       }

@@ -1,0 +1,27 @@
+[
+  {
+    "id": "postgres",
+    "label": "PostgreSQL",
+    "dbType": "postgres",
+    "fields": [
+      { "name": "CUBEJS_DB_HOST", "label": "Host", "driverOption": "host", "required": true },
+      { "name": "CUBEJS_DB_PORT", "label": "Porta", "driverOption": "port", "required": true },
+      { "name": "CUBEJS_DB_NAME", "label": "Banco", "driverOption": "database", "required": true },
+      { "name": "CUBEJS_DB_USER", "label": "Usuário", "driverOption": "user", "required": true },
+      { "name": "CUBEJS_DB_PASS", "label": "Senha", "driverOption": "password", "secret": true, "required": true }
+    ],
+    "defaults": {
+      "CUBEJS_DB_HOST": "host.containers.internal",
+      "CUBEJS_DB_PORT": "5432",
+      "CUBEJS_DB_NAME": "demo"
+    }
+  },
+  {
+    "id": "odbc",
+    "label": "ODBC",
+    "dbType": "odbc",
+    "fields": [
+      { "name": "CUBEJS_DB_ODBC_CONNECTION_STRING", "label": "Connection string", "secret": true, "required": true }
+    ]
+  }
+]

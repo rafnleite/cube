@@ -118,7 +118,7 @@ export function QueryBuilderChart(props: QueryBuilderChartProps) {
     return pivotConfig ? (
       <DialogTrigger type="popover">
         <Button size="small" rightIcon={<ChevronIcon direction="bottom" />}>
-          Pivot
+          Pivô
         </Button>
         <Dialog border overflow="hidden" width="40x max-content 80x">
           <PivotAxes pivotConfig={pivotConfig} onMove={onMove} />
@@ -135,7 +135,7 @@ export function QueryBuilderChart(props: QueryBuilderChartProps) {
     <AccordionCard
       qa="QueryBuilderChart"
       isExpanded={isExpanded}
-      title="Chart"
+      title="Gráfico"
       subtitle={
         isLoading ? (
           isExpanded ? (
@@ -160,25 +160,25 @@ export function QueryBuilderChart(props: QueryBuilderChartProps) {
               <Radio.Button qa="LineChartType" value="line">
                 <Space gap=".5x">
                   <LineChartOutlined style={{ fontSize: 'var(--icon-size)' }} />
-                  <span>Line</span>
+                  <span>Linha</span>
                 </Space>
               </Radio.Button>
               <Radio.Button qa="BarChartType" value="bar">
                 <Space gap=".5x">
                   <BarChartOutlined style={{ fontSize: 'var(--icon-size)' }} />
-                  <span>Bar</span>
+                  <span>Barras</span>
                 </Space>
               </Radio.Button>
               <Radio.Button qa="AreaChartType" value="area">
                 <Space gap=".5x">
                   <AreaChartOutlined style={{ fontSize: 'var(--icon-size)' }} />
-                  <span>Area</span>
+                  <span>Área</span>
                 </Space>
               </Radio.Button>
               <Radio.Button qa="TableChartType" value="table">
                 <Space gap=".5x">
                   <TableOutlined style={{ fontSize: 'var(--icon-size)' }} />
-                  <span>Table</span>
+                  <span>Tabela</span>
                 </Space>
               </Radio.Button>
             </Radio.ButtonGroup>
@@ -191,13 +191,13 @@ export function QueryBuilderChart(props: QueryBuilderChartProps) {
                   icon={<CodeOutlined />}
                   onPress={() => setIsVizardLoaded(true)}
                 >
-                  Code
+                  Código
                 </Button>
                 {/*<TooltipProvider title="Get a code example that visualize your data using a charting library of your choice.">*/}
                 {/*</TooltipProvider>*/}
                 <Dialog isDismissable>
                   <Header>
-                    <Title>Chart Prototyping</Title>
+                    <Title>Prototipagem de gráfico</Title>
                   </Header>
                   {isVizardLoaded ? (
                     <VizardComponent

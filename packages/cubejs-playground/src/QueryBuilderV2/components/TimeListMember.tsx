@@ -1,15 +1,13 @@
 import { useMemo, useRef } from 'react';
 import {
-  CloseIcon,
   Flex,
   Menu,
   MenuTrigger,
-  PlusIcon,
   Space,
   tasty,
   Text,
-  TimeIcon,
 } from '@cube-dev/ui-kit';
+import { CloseIcon, PlusIcon, TimeIcon } from '../../shared/icons/FontAwesomeIcons';
 import { Cube, TCubeDimension, TimeDimensionGranularity } from '@cubejs-client/core';
 
 import { ChevronIcon } from '../icons/ChevronIcon';

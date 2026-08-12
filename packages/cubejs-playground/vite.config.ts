@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { fileURLToPath, URL } from 'node:url';
 
 export default defineConfig(({ mode }) => ({
   base: './',
@@ -17,6 +18,14 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
   ],
+  resolve: {
+    alias: [
+      {
+        find: /^@ant-design\/icons$/,
+        replacement: fileURLToPath(new URL('./src/shared/icons/FontAwesomeIcons.tsx', import.meta.url)),
+      },
+    ],
+  },
   css: {
     preprocessorOptions: {
       less: {

@@ -4,11 +4,11 @@ import {
   ComboBox,
   Menu,
   MenuTrigger,
-  PlusIcon,
   Select,
   tasty,
   useToastsApi,
 } from '@cube-dev/ui-kit';
+import { PlusIcon } from '../../shared/icons/FontAwesomeIcons';
 import { Filter, TCubeDimension, TCubeMeasure, TCubeSegment } from '@cubejs-client/core';
 import { Key, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -20,7 +20,7 @@ import { MemberLabel } from './MemberLabel';
 
 const AddFilterButton = tasty(Button, {
   qa: 'AddFilterButton',
-  'aria-label': 'Add a new filter',
+  'aria-label': 'Adicionar um filtro',
   size: 'small',
   type: 'secondary',
   icon: <PlusIcon />,
@@ -190,19 +190,19 @@ export function AddFilterInput(props: AddFilterInputProps) {
 
   const items = useMemo(() => {
     const items = [
-      { value: 'dimension', label: 'Filter by Dimension' },
-      { value: 'measure', label: 'Filter by Measure' },
+      { value: 'dimension', label: 'Filtrar por dimensão' },
+      { value: 'measure', label: 'Filtrar por medida' },
     ];
 
     if (onSegmentAdd) {
-      items.push({ value: 'segment', label: 'Filter by Segment' });
+      items.push({ value: 'segment', label: 'Filtrar por segmento' });
     }
 
     if (onDateRangeAdd) {
-      items.push({ value: 'dateRange', label: 'Filter by Date Range' });
+      items.push({ value: 'dateRange', label: 'Filtrar por período' });
     }
 
-    items.push({ value: 'and', label: 'AND Branch' }, { value: 'or', label: 'OR Branch' });
+    items.push({ value: 'and', label: 'Ramo E' }, { value: 'or', label: 'Ramo OU' });
 
     return items;
   }, [onDateRangeAdd, onSegmentAdd]);
@@ -232,15 +232,15 @@ export function AddFilterInput(props: AddFilterInputProps) {
   useEffect(() => {
     if (mode && !shownMembers.length && !['or', 'and'].includes(mode)) {
       const title = {
-        measure: 'filter',
-        dimension: 'filter',
-        segment: 'segment',
-        dateRange: 'date range',
+        measure: 'filtro',
+        dimension: 'filtro',
+        segment: 'segmento',
+        dateRange: 'período',
       }[mode];
 
       toast.attention({
-        header: `Unable to add new ${title}`,
-        description: 'No available members',
+        header: `Não foi possível adicionar ${title}`,
+        description: 'Não há membros disponíveis',
       });
       setMode(null);
     }
@@ -259,7 +259,7 @@ export function AddFilterInput(props: AddFilterInputProps) {
       {!mode ? (
         <MenuTrigger>
           <AddFilterButton mods={{ label: hasLabel }}>
-            {hasLabel ? 'Add' : undefined}
+            {hasLabel ? 'Adicionar' : undefined}
           </AddFilterButton>
           <Menu items={items} disabledKeys={disabledKeys} onAction={onAction}>
             {items.map((item) => (

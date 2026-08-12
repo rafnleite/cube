@@ -1,7 +1,8 @@
 import { Key } from 'react';
-import { tasty, MenuTrigger, Menu, CalendarIcon } from '@cube-dev/ui-kit';
+import { tasty, MenuTrigger, Menu } from '@cube-dev/ui-kit';
 import { FilterOutlined, MoreOutlined } from '@ant-design/icons';
 import { TCubeDimension, TCubeMeasure, TCubeSegment } from '@cubejs-client/core';
+import { CalendarIcon } from '../../shared/icons/FontAwesomeIcons';
 
 import { ListMemberButton } from './ListMemberButton';
 

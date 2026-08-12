@@ -1,0 +1,18 @@
+cubes:
+  - name: airplanes
+    sql_table: bookings.airplanes
+    data_source: default
+    dimensions:
+      - name: airplane_code
+        sql: airplane_code
+        type: string
+        title: Código
+        primary_key: true
+      - name: model
+        sql: model
+        type: string
+        title: Modelo
+    measures:
+      - name: count
+        type: count
+    title: Aviões

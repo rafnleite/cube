@@ -64,10 +64,10 @@ const QueryBuilderInternals = memo(function QueryBuilderInternals() {
           styles={{ padding: '0 1x' }}
           onChange={(tab: string) => setTab(tab as Tab)}
         >
-          <Tab keepMounted id="results" title="Results">
+          <Tab keepMounted id="results" title="Resultados">
             <QueryBuilderResults forceMinHeight={!isChartExpanded} />
           </Tab>
-          <Tab id="generated-sql" title="Generated SQL">
+          <Tab id="generated-sql" title="SQL gerado">
             <QueryBuilderGeneratedSQL />
           </Tab>
           <Tab id="sql" title="SQL API">

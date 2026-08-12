@@ -1,0 +1,327 @@
+import { Alert, Button, Card, Descriptions, Form, Input, Select, Space, Spin, Tabs, Typography } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { FaPlug } from 'react-icons/fa6';
+import styled from 'styled-components';
+
+type ConnectionField = {
+  name: string;
+  label: string;
+  secret?: boolean;
+  required?: boolean;
+};
+
+type ConnectionPreset = {
+  id: string;
+  label: string;
+  dbType: string;
+  fields: ConnectionField[];
+  defaults?: Record<string, string>;
+};
+
+type Project = {
+  id: string;
+  name: string;
+  connectionId: string;
+};
+
+const Page = styled.div`
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: #f7f8fa;
+`;
+
+const Panel = styled(Card)`
+  width: min(640px, 100%);
+`;
+
+const ConnectionCard = styled(Card)`
+  background: #e6f7ff;
+  border-color: #91d5ff;
+
+  .ant-descriptions-row > th,
+  .ant-descriptions-row > td {
+    padding-bottom: 4px;
+  }
+
+  .ant-descriptions-row:last-child > th,
+  .ant-descriptions-row:last-child > td {
+    padding-bottom: 0;
+  }
+`;
+
+function ConnectionSummary({ connection }: { connection?: ConnectionPreset }) {
+  if (!connection?.defaults) return null;
+
+  return (
+    <ConnectionCard
+      size="small"
+      title={(
+        <Space size={8}>
+          <FaPlug />
+          <Typography.Text strong>{connection.label}</Typography.Text>
+        </Space>
+      )}
+    >
+      <Descriptions column={1} size="small" colon>
+        <Descriptions.Item label="Host">
+          {connection.defaults.CUBEJS_DB_HOST || '—'}
+        </Descriptions.Item>
+        <Descriptions.Item label="Porta">
+          {connection.defaults.CUBEJS_DB_PORT || '—'}
+        </Descriptions.Item>
+        <Descriptions.Item label="Banco">
+          {connection.defaults.CUBEJS_DB_NAME || '—'}
+        </Descriptions.Item>
+      </Descriptions>
+    </ConnectionCard>
+  );
+}
+
+export function ProjectSelector({ onReady }: { onReady: () => void }) {
+  const [openProjectForm] = Form.useForm();
+  const [createProjectForm] = Form.useForm();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [connections, setConnections] = useState<ConnectionPreset[]>([]);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedCreateConnectionId, setSelectedCreateConnectionId] = useState<string | undefined>();
+
+  const connection = useMemo(
+    () => connections.find(item => item.id === selectedProject?.connectionId),
+    [connections, selectedProject]
+  );
+
+  const hasConnectionDefaults = useMemo(
+    () => Boolean(connection?.defaults && Object.keys(connection.defaults).length > 0),
+    [connection]
+  );
+
+  const openCredentialFields = useMemo(
+    () => (connection?.fields || []).filter(field => !connection?.defaults?.[field.name]),
+    [connection]
+  );
+
+  const createConnection = useMemo(
+    () => connections.find(item => item.id === selectedCreateConnectionId),
+    [connections, selectedCreateConnectionId]
+  );
+
+  const hasCreateConnectionDefaults = useMemo(
+    () => Boolean(createConnection?.defaults && Object.keys(createConnection.defaults).length > 0),
+    [createConnection]
+  );
+
+  const createCredentialFields = useMemo(
+    () => (createConnection?.fields || []).filter(field => !createConnection?.defaults?.[field.name]),
+    [createConnection]
+  );
+
+  useEffect(() => {
+    fetch('playground/projects')
+      .then(async response => {
+        const value = await response.json();
+        if (!response.ok) throw new Error(value.error || 'Não foi possível carregar os projetos');
+        setProjects(value.projects);
+        setConnections(value.connections);
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    openProjectForm.resetFields();
+    if (connection?.defaults) {
+      openProjectForm.setFieldsValue(connection.defaults);
+    }
+  }, [connection, openProjectForm]);
+
+  useEffect(() => {
+    const currentConnectionId = createProjectForm.getFieldValue('connectionId');
+    if (!currentConnectionId && connections.length === 1) {
+      createProjectForm.setFieldValue('connectionId', connections[0].id);
+      setSelectedCreateConnectionId(connections[0].id);
+      return;
+    }
+
+    if (currentConnectionId && currentConnectionId !== selectedCreateConnectionId) {
+      setSelectedCreateConnectionId(currentConnectionId);
+    }
+
+    if (!createConnection) {
+      return;
+    }
+
+    const clearedCredentialValues = Object.fromEntries(
+      createConnection.fields.map(field => [field.name, undefined])
+    );
+
+    createProjectForm.setFieldsValue({
+      ...clearedCredentialValues,
+      ...(createConnection.defaults || {}),
+    });
+  }, [connections, createConnection, createProjectForm]);
+
+  async function createProject(values) {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const { id, name, connectionId, ...credentials } = values;
+      const response = await fetch('playground/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name, connectionId, credentials }),
+      });
+      const value = await response.json();
+      if (!response.ok) throw new Error(value.error || 'Não foi possível validar conexão e criar o projeto');
+      setProjects(current => [...current, value.project]);
+      onReady();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function openProject(credentials) {
+    if (!selectedProject) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      const response = await fetch(`playground/projects/${selectedProject.id}/session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credentials }),
+      });
+      const value = await response.json();
+      if (!response.ok) throw new Error(value.error || 'Não foi possível conectar ao banco');
+      onReady();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (loading) return <Page><Spin size="large" /></Page>;
+
+  return (
+    <Page>
+      <Panel>
+        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+          <div>
+            <Typography.Title level={2}>Datamarts</Typography.Title>
+            <Typography.Text type="secondary">
+              Crie ou abra projetos. A criação agora só acontece após conexão bem-sucedida no banco.
+            </Typography.Text>
+          </div>
+
+          {error ? <Alert type="error" message={error} showIcon /> : null}
+
+          {selectedProject ? (
+            <>
+              <Typography.Title level={4}>{selectedProject.name}</Typography.Title>
+              {hasConnectionDefaults ? (
+                <ConnectionSummary connection={connection} />
+              ) : null}
+              <Form
+                form={openProjectForm}
+                layout="vertical"
+                onFinish={openProject}
+                initialValues={connection?.defaults}
+              >
+                {openCredentialFields.map(field => (
+                  <Form.Item
+                    key={field.name}
+                    name={field.name}
+                    label={field.label}
+                    rules={
+                      field.required
+                        ? [{ required: true, message: `${field.label} é obrigatório` }]
+                        : []
+                    }
+                  >
+                    {field.secret ? <Input.Password autoComplete="new-password" /> : <Input autoComplete="off" />}
+                  </Form.Item>
+                ))}
+                <Space>
+                  <Button onClick={() => setSelectedProject(null)}>Voltar</Button>
+                  <Button type="primary" htmlType="submit" loading={submitting}>Conectar e abrir</Button>
+                </Space>
+              </Form>
+            </>
+          ) : (
+            <Tabs defaultActiveKey={projects.length ? 'open' : 'create'}>
+              <Tabs.TabPane tab="Abrir projeto" key="open" disabled={!projects.length}>
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Select
+                    style={{ width: '100%' }}
+                    placeholder="Selecione um projeto"
+                    onChange={id => setSelectedProject(projects.find(project => project.id === id) || null)}
+                    options={projects.map(project => ({ value: project.id, label: project.name }))}
+                  />
+                </Space>
+              </Tabs.TabPane>
+              <Tabs.TabPane tab="Criar projeto" key="create">
+                <Form
+                  form={createProjectForm}
+                  layout="vertical"
+                  onFinish={createProject}
+                  onValuesChange={(changedValues) => {
+                    if ('connectionId' in changedValues) {
+                      setSelectedCreateConnectionId(changedValues.connectionId);
+                    }
+                  }}
+                >
+                  <Form.Item name="name" label="Nome" rules={[{ required: true }]}>
+                    <Input placeholder="Financeiro" />
+                  </Form.Item>
+                  <Form.Item
+                    name="id"
+                    label="Identificador"
+                    rules={[
+                      { required: true },
+                      { pattern: /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/, message: 'Use letras minúsculas, números e hífens' },
+                    ]}
+                  >
+                    <Input placeholder="financeiro" />
+                  </Form.Item>
+                  <Form.Item name="connectionId" label="Conexão" rules={[{ required: true }]}>
+                    <Select options={connections.map(item => ({ value: item.id, label: item.label }))} />
+                  </Form.Item>
+
+                  {hasCreateConnectionDefaults ? (
+                    <ConnectionSummary connection={createConnection} />
+                  ) : null}
+
+                  {createCredentialFields.map(field => (
+                    <Form.Item
+                      key={`create-${field.name}`}
+                      name={field.name}
+                      label={field.label}
+                      rules={
+                        field.required
+                          ? [{ required: true, message: `${field.label} é obrigatório` }]
+                          : []
+                      }
+                    hidden={!createConnection}
+                    >
+                      {field.secret ? <Input.Password autoComplete="new-password" /> : <Input autoComplete="off" />}
+                    </Form.Item>
+                  ))}
+
+                  <Button type="primary" htmlType="submit" loading={submitting}>
+                    Validar conexão e criar projeto
+                  </Button>
+                </Form>
+              </Tabs.TabPane>
+            </Tabs>
+          )}
+        </Space>
+      </Panel>
+    </Page>
+  );
+}

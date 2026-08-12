@@ -1,4 +1,5 @@
-import { Action, CubeActionProps, TooltipProvider, tasty, InfoCircleIcon } from '@cube-dev/ui-kit';
+import { Action, CubeActionProps, TooltipProvider, tasty } from '@cube-dev/ui-kit';
+import { InfoCircleIcon } from '../../shared/icons/FontAwesomeIcons';
 
 export type InfoTooltipButtonProps = {
   tooltipSuffix?: string;

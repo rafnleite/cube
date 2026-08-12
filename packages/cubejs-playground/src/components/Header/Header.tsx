@@ -47,15 +47,15 @@ export default function Header({ selectedKeys }: Props) {
       {isDesktopOrLaptop && (
         <StyledMenu theme="light" mode="horizontal" selectedKeys={selectedKeys}>
           <StyledMenuItem key="/build">
-            <Link to="/build">Playground</Link>
+            <Link to="/build">Consultas</Link>
           </StyledMenuItem>
 
           <StyledMenuItem key="/schema">
-            <Link to="/schema">Data Model</Link>
+            <Link to="/schema">Modelo de dados</Link>
           </StyledMenuItem>
 
           <StyledMenuItem key="/frontend-integrations">
-            <Link to="/frontend-integrations">Frontend Integrations</Link>
+            <Link to="/frontend-integrations">Integrações frontend</Link>
           </StyledMenuItem>
 
           <StyledMenuItem key="/cube-bi">
@@ -77,7 +77,7 @@ export default function Header({ selectedKeys }: Props) {
             target="_blank"
           >
             <FileFilled />
-            Docs
+            Documentação
           </StyledMenuButton>
 
           <RunOnCubeCloud />
@@ -90,11 +90,11 @@ export default function Header({ selectedKeys }: Props) {
             overlay={
               <Menu>
                 <Menu.Item key="/build">
-                  <Link to="/build">Playground</Link>
+                  <Link to="/build">Consultas</Link>
                 </Menu.Item>
 
                 <Menu.Item key="/schema">
-                  <Link to="/schema">Data Model</Link>
+                  <Link to="/schema">Modelo de dados</Link>
                 </Menu.Item>
               </Menu>
             }

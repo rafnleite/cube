@@ -1,6 +1,6 @@
-import { BooleanIcon, FilterIcon, NumberIcon, StringIcon, TimeIcon } from '@cube-dev/ui-kit';
 import { TCubeMemberType } from '@cubejs-client/core';
 import { QuestionCircleOutlined } from '@ant-design/icons';
+import { BooleanIcon, FilterIcon, NumberIcon, StringIcon, TimeIcon } from '../../shared/icons/FontAwesomeIcons';
 
 const ICON_MAP = {
   number: <NumberIcon />,

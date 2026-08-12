@@ -4,10 +4,10 @@ import {
   copy,
   tasty,
   CubeButtonProps,
-  CopyIcon as CopyIconUIKit,
 } from '@cube-dev/ui-kit';
 import { useState } from 'react';
 import { unstable_batchedUpdates } from 'react-dom';
+import { CopyIcon as CopyIconUIKit } from '../../shared/icons/FontAwesomeIcons';
 
 import { useDebouncedState, useEvent } from '../hooks';
 

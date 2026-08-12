@@ -1,5 +1,6 @@
-import { CubeIconProps, tasty, UpIcon } from '@cube-dev/ui-kit';
+import { CubeIconProps, tasty } from '@cube-dev/ui-kit';
 import { memo, useEffect, useState } from 'react';
+import { UpIcon } from '../../shared/icons/FontAwesomeIcons';
 
 const StyledUpIcon = tasty(UpIcon, {
   styles: {

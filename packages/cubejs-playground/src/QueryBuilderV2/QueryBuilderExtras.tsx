@@ -6,10 +6,8 @@ import {
   Content,
   Dialog,
   DialogTrigger,
-  DownIcon,
   Flow,
   Grid,
-  InfoCircleIcon,
   Link,
   NumberInput,
   Radio,
@@ -21,6 +19,7 @@ import {
   Title,
   TooltipProvider,
 } from '@cube-dev/ui-kit';
+import { DownIcon, InfoCircleIcon } from '../shared/icons/FontAwesomeIcons';
 import { forwardRef, Key, useEffect, useMemo, useState } from 'react';
 import { DragDropContext, Draggable, Droppable, OnDragEndResponder } from 'react-beautiful-dnd';
 import { TCubeMemberType } from '@cubejs-client/core';

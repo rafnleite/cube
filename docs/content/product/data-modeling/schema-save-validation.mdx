@@ -1,0 +1,109 @@
+# Validação ao salvar schemas
+
+O Playground valida alterações feitas nos arquivos de modelo antes de gravá-las no
+repositório. A validação é a mesma para o editor de código e para o editor visual,
+porque os dois utilizam o endpoint `POST /playground/files` para salvar o conteúdo.
+
+## Quando a validação acontece
+
+A validação é executada quando o usuário:
+
+- clica em **Salvar** no editor de código;
+- clica em **Salvar** no editor visual;
+- usa `Enter` como atalho de salvamento.
+
+O arquivo só é substituído depois que todas as etapas de validação forem concluídas
+com sucesso.
+
+## Validações implementadas
+
+### Segurança do nome do arquivo
+
+Antes de validar o conteúdo, o servidor verifica se:
+
+- `fileName` é uma string;
+- o arquivo existe no repositório de schemas;
+- o caminho não é absoluto;
+- o caminho não contém `..`;
+- o caminho não contém separadores de diretório inesperados.
+
+Essa etapa impede que o salvamento acesse arquivos fora do diretório do modelo.
+
+### Sintaxe YAML
+
+Arquivos `.yml` e `.yaml` são analisados antes da compilação. A validação verifica:
+
+- indentação e estrutura YAML;
+- aspas, listas e objetos bem formados;
+- chaves duplicadas ou estrutura que não pode ser interpretada;
+- existência de um objeto na raiz do documento.
+
+Quando possível, a mensagem informa a linha e a coluna do erro. Arquivos que usam
+Jinja são encaminhados diretamente ao compilador, porque precisam ser renderizados
+antes de serem interpretados como YAML.
+
+### Sintaxe JavaScript
+
+Arquivos JavaScript são analisados pelo compilador do schema. Erros de sintaxe,
+como parênteses ou chaves não fechados, impedem o salvamento.
+
+### Estrutura do modelo Cube
+
+Depois da análise de sintaxe, o servidor executa o compilador do Cube. Essa etapa
+valida os atributos obrigatórios e os tipos aceitos pelo schema, incluindo, entre
+outros:
+
+- cubos com `name` válido;
+- uso de exatamente uma fonte entre `sql` e `sql_table`;
+- dimensões com `type` obrigatório;
+- dimensões temporais com configuração compatível;
+- medidas com `type` válido e `sql` quando necessário;
+- joins com `sql` e `relationship` válidos;
+- segmentos com `sql`;
+- pré-agregações com tipos e propriedades compatíveis;
+- valores booleanos, numéricos e enumerados no formato esperado pelo Cube;
+- regras de chaves primárias exigidas para joins;
+- regras gerais de compilação, referências e agregações do modelo.
+
+Como essa etapa usa o compilador oficial do Cube, as regras acompanham as regras
+aplicadas ao modelo em execução, e não apenas a estrutura visual do formulário.
+
+## O que acontece quando há erro
+
+Quando uma validação falha:
+
+1. o conteúdo novo não permanece salvo;
+2. o conteúdo anterior é restaurado quando a falha acontece após a escrita temporária;
+3. o servidor retorna o motivo da falha;
+4. o editor exibe a mensagem de erro e permanece aberto para correção;
+5. o evento de salvamento é registrado como falha.
+
+Se o arquivo mudar no servidor enquanto a validação estiver em andamento, o
+salvamento é interrompido e o usuário deve recarregar o arquivo antes de tentar
+novamente.
+
+## Limitações atuais
+
+As validações dependem do compilador e do contexto disponível no momento do
+salvamento. Portanto, alguns erros só podem ser detectados quando o Cube resolve
+expressões, executa macros ou consulta informações externas.
+
+Arquivos Jinja não são validados como YAML puro antes da renderização. A validação
+definitiva ocorre depois que o compilador renderiza o template com o contexto do
+projeto.
+
+## Validações planejadas
+
+Estas verificações ainda não fazem parte da implementação atual, mas são boas
+extensões para uma validação mais orientada ao usuário:
+
+- destacar nomes duplicados diretamente no editor;
+- verificar referências para dimensões, medidas e cubos inexistentes;
+- comparar colunas usadas em joins com as colunas reais do banco;
+- identificar tipos incompatíveis entre as colunas de um join;
+- detectar mais de uma chave primária na mesma definição;
+- validar referências de medidas, dimensões e segmentos em pré-agregações;
+- validar expressões SQL com mensagens de linha e coluna;
+- sugerir correções para campos obrigatórios ausentes;
+- diferenciar erros bloqueantes de avisos de qualidade do modelo.
+

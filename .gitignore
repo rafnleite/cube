@@ -1,4 +1,5 @@
 node_modules
+.docker-anonymous/
 .yarn
 .yarnrc
 /.idea
@@ -23,6 +24,8 @@ testings/
 rust/cubesql/profile.json
 .cubestore
 .env
+.env.multi-project
+config/connections.json
 .vimspector.json
 .claude/settings.local.json
 gen

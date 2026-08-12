@@ -1,5 +1,6 @@
-import { Space, tasty, Text, TooltipProvider, ViewIcon, CubeIcon } from '@cube-dev/ui-kit';
+import { Space, tasty, Text, TooltipProvider } from '@cube-dev/ui-kit';
 import { PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { CubeIcon, ViewIcon } from '../../shared/icons/FontAwesomeIcons';
 
 import { CubeStats } from '../types';
 import { ChevronIcon } from '../icons/ChevronIcon';

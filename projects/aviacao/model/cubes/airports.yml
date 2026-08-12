@@ -1,0 +1,29 @@
+cubes:
+  - name: airports
+    sql_table: bookings.airports
+    data_source: default
+    dimensions:
+      - name: airport_code
+        sql: airport_code
+        type: string
+        title: Código
+      - name: airport_name
+        sql: airport_name
+        type: string
+        title: Nome
+      - name: city
+        sql: city
+        type: string
+        title: Cidade
+      - name: country
+        sql: country
+        type: string
+        title: País
+      - name: timezone
+        sql: timezone
+        type: string
+        title: Fuso horário
+    measures:
+      - name: count
+        type: count
+    title: Aeroportos

@@ -6,23 +6,13 @@ import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons';
 import { QueryBuilderError } from './QueryBuilderError';
 import { useQueryBuilderContext } from './context';
 import { PreAggregationAlerts } from './components/PreAggregationAlerts';
+import { StopFontAwesomeIcon } from '../shared/icons/FontAwesomeIcons';
 
-const StopIcon = tasty({
+const StopIcon = tasty(StopFontAwesomeIcon, {
   styles: {
-    position: 'relative',
     width: '16px',
     height: '16px',
-
-    '&::before': {
-      content: '""',
-      display: 'block',
-      position: 'absolute',
-      top: '2px',
-      left: '2px',
-      width: '12px',
-      height: '12px',
-      fill: '#danger',
-    },
+    color: '#danger',
   },
 });
 
@@ -70,7 +60,7 @@ export function QueryBuilderToolBar() {
           <TooltipProvider
             title={
               <>
-                <kbd>⌘</kbd> + <kbd>Enter</kbd> <span style={{ padding: '0 16px' }}>OR</span>{' '}
+                <kbd>⌘</kbd> + <kbd>Enter</kbd> <span style={{ padding: '0 16px' }}>OU</span>{' '}
                 <kbd>Ctrl</kbd> + <kbd>Enter</kbd>
               </>
             }
@@ -90,7 +80,7 @@ export function QueryBuilderToolBar() {
               }
               onPress={runQuery}
             >
-              Run Query
+              Executar consulta
             </Button>
           </TooltipProvider>
           {isLoading ? (
@@ -101,7 +91,7 @@ export function QueryBuilderToolBar() {
               icon={<StopIcon />}
               onPress={stopQuery}
             >
-              Stop
+              Parar
             </Button>
           ) : null}
         </Space>

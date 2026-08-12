@@ -70,6 +70,7 @@
     "lodash": "^4.17.0",
     "@types/node": "^22",
     "@types/ramda": "0.27.40",
+    "@babel/types": "7.29.8",
     "thrift": "0.20.0"
   },
   "license": "MIT",

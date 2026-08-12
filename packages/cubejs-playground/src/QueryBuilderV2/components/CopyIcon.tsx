@@ -1,6 +1,7 @@
 import { CheckOutlined } from '@ant-design/icons';
-import { Styles, tasty, CopyIcon as CopyIconUIKit } from '@cube-dev/ui-kit';
+import { Styles, tasty } from '@cube-dev/ui-kit';
 import { memo, useRef } from 'react';
+import { CopyIcon as CopyIconUIKit } from '../../shared/icons/FontAwesomeIcons';
 
 import { useDebouncedCallback } from '../hooks';
 

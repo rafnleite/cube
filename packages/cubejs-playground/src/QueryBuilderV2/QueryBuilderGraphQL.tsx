@@ -1,8 +1,9 @@
 import { PlayCircleOutlined } from '@ant-design/icons';
 import { ApolloClient, ApolloLink, gql, HttpLink, InMemoryCache, useQuery } from '@apollo/client';
 import { RetryLink } from '@apollo/client/link/retry';
-import { Alert, Block, Button, Grid, LockIcon, tasty, TooltipProvider } from '@cube-dev/ui-kit';
+import { Alert, Block, Button, Grid, tasty, TooltipProvider } from '@cube-dev/ui-kit';
 import { useEffect, useMemo, useState } from 'react';
+import { LockIcon } from '../shared/icons/FontAwesomeIcons';
 
 import { useQueryBuilderContext } from './context';
 import { convertJsonQueryToGraphQL } from './utils';

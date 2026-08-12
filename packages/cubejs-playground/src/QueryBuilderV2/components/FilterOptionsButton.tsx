@@ -1,6 +1,7 @@
-import { Button, Menu, MenuTrigger, MoreIcon, tasty } from '@cube-dev/ui-kit';
+import { Button, Menu, MenuTrigger, tasty } from '@cube-dev/ui-kit';
 import { Key } from '@react-types/shared';
 import { useMemo } from 'react';
+import { MoreIcon } from '../../shared/icons/FontAwesomeIcons';
 
 const OptionsButton = tasty(Button, {
   qa: 'FilterOptionsButton',

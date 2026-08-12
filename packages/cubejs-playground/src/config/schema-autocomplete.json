@@ -1,0 +1,204 @@
+{
+  "yaml": {
+    "enableSnippets": true,
+    "root": {
+      "keys": ["cubes", "views"]
+    },
+    "booleanKeys": [
+      "primary_key",
+      "public",
+      "shown",
+      "external",
+      "scheduled_refresh",
+      "sub_query",
+      "propagate_filters_to_sub_query"
+    ],
+    "sections": {
+      "cubes": {
+        "keys": [
+          "title",
+          "name",
+          "description",
+          "sql_table",
+          "sql",
+          "extends",
+          "data_source",
+          "public",
+          "refresh_key",
+          "joins",
+          "dimensions",
+          "hierarchies",
+          "measures",
+          "segments",
+          "pre_aggregations"
+        ],
+        "descriptions": {
+          "name": "Identificador único do cube, usado para referenciá-lo em outros cubes e nas queries.",
+          "sql": "Consulta SQL customizada usada como fonte de dados do cube (alternativa a sql_table).",
+          "sql_table": "Tabela do banco de dados usada como fonte de dados do cube (formato schema.tabela).",
+          "extends": "Nome de outro cube do qual este herda dimensions, measures e demais propriedades.",
+          "data_source": "Nome da conexão de dados a ser usada quando há múltiplas fontes configuradas.",
+          "public": "Controla se o cube é visível para os usuários da API (false o oculta).",
+          "title": "Título amigável exibido para o cube no Playground e em ferramentas de BI.",
+          "description": "Descrição textual do que o cube representa.",
+          "refresh_key": "Define quando os dados em cache deste cube devem ser considerados desatualizados."
+        }
+      },
+      "views": {
+        "keys": [
+          "name",
+          "description",
+          "public",
+          "title",
+          "cubes",
+          "includes",
+          "excludes"
+        ]
+      },
+      "joins": {
+        "newItemLabel": "nova junção",
+        "keys": ["name", "sql", "relationship"],
+        "values": {
+          "relationship": ["one_to_one", "one_to_many", "many_to_one"]
+        },
+        "descriptions": {
+          "name": "Nome do cube ao qual este join se conecta.",
+          "sql": "Condição SQL de junção entre este cube e o cube referenciado.",
+          "relationship": "Tipo de relacionamento entre os cubes (um-para-um, um-para-muitos ou muitos-para-um)."
+        }
+      },
+      "hierarchies": {
+        "newItemLabel": "nova hierarquia",
+        "keys": ["name", "title", "public", "levels"],
+        "descriptions": {
+          "name": "Nome da hierarquia, usado nas queries.",
+          "title": "TÃ­tulo amigÃ¡vel exibido para a hierarquia.",
+          "public": "Controla se a hierarquia Ã© visÃ­vel para os usuÃ¡rios da API.",
+          "levels": "DimensÃµes que formam os nÃ­veis da hierarquia, separadas por vÃ­rgula."
+        }
+      },
+      "dimensions": {
+        "newItemLabel": "nova dimensão",
+        "keys": [
+          "title",
+          "name",
+          "description",
+          "sql",
+          "type",
+          "primary_key",
+          "public",
+          "shown",
+          "case",
+          "sub_query",
+          "format",
+          "meta"
+        ],
+        "values": {
+          "type": ["string", "number", "boolean", "time", "geo"]
+        },
+        "descriptions": {
+          "name": "Identificador da dimension, usado nas queries.",
+          "sql": "Coluna ou expressão SQL que define o valor da dimension.",
+          "type": "Tipo de dado da dimension (string, number, time, boolean ou geo).",
+          "primary_key": "Marca esta dimension como (parte da) chave primária do cube.",
+          "public": "Controla se a dimension é visível para os usuários da API.",
+          "shown": "Controla se a dimension aparece na interface do Playground/BI.",
+          "title": "Título amigável exibido para a dimension.",
+          "description": "Descrição textual do que a dimension representa.",
+          "case": "Define uma expressão condicional (CASE WHEN) para calcular o valor da dimension.",
+          "sub_query": "Marca a dimension como resultado de uma subquery sobre outro cube.",
+          "format": "Formato de exibição do valor (ex.: currency, percent, imageUrl).",
+          "meta": "Metadados customizados livres, usados por integrações externas."
+        }
+      },
+      "measures": {
+        "newItemLabel": "nova medida",
+        "keys": [
+          "name",
+          "sql",
+          "type",
+          "public",
+          "title",
+          "description",
+          "format",
+          "drill_members",
+          "rolling_window",
+          "filters",
+          "meta"
+        ],
+        "values": {
+          "type": [
+            "count",
+            "count_distinct",
+            "count_distinct_approx",
+            "sum",
+            "avg",
+            "min",
+            "max",
+            "number",
+            "rank",
+            "running_total"
+          ]
+        },
+        "descriptions": {
+          "name": "Identificador da measure, usado nas queries.",
+          "sql": "Coluna ou expressão SQL agregada pela measure.",
+          "type": "Tipo de agregação aplicada (count, sum, avg, etc.).",
+          "public": "Controla se a measure é visível para os usuários da API.",
+          "title": "Título amigável exibido para a measure.",
+          "description": "Descrição textual do que a measure representa.",
+          "format": "Formato de exibição do valor (ex.: currency, percent).",
+          "drill_members": "Lista de dimensions exibidas ao fazer drill-down nesta measure.",
+          "rolling_window": "Define uma janela de agregação móvel (rolling window).",
+          "filters": "Filtros SQL aplicados apenas ao calcular esta measure.",
+          "meta": "Metadados customizados livres."
+        }
+      },
+      "segments": {
+        "newItemLabel": "novo segmento",
+        "keys": ["name", "sql", "title", "description", "public"],
+        "descriptions": {
+          "name": "Identificador do segment, usado nas queries.",
+          "sql": "Condição SQL (WHERE) aplicada quando o segment é usado.",
+          "title": "Título amigável exibido para o segment.",
+          "description": "Descrição textual do que o segment representa.",
+          "public": "Controla se o segment é visível para os usuários da API."
+        }
+      },
+      "pre_aggregations": {
+        "newItemLabel": "nova pré-agregação",
+        "keys": [
+          "name",
+          "type",
+          "measures",
+          "dimensions",
+          "time_dimension",
+          "granularity",
+          "partition_granularity",
+          "refresh_key",
+          "external",
+          "scheduled_refresh",
+          "indexes"
+        ],
+        "values": {
+          "type": ["rollup", "originalSql", "rollupJoin", "rollupLambda"],
+          "granularity": ["minute", "hour", "day", "week", "month", "quarter", "year"],
+          "partition_granularity": ["day", "week", "month", "quarter", "year"]
+        },
+        "descriptions": {
+          "name": "Identificador da pre-agregação.",
+          "type": "Tipo de pre-agregação (rollup, originalSql, rollupJoin ou rollupLambda).",
+          "measures": "Lista de measures incluídas na pre-agregação.",
+          "dimensions": "Lista de dimensions incluídas na pre-agregação.",
+          "time_dimension": "Dimension de tempo usada para particionar/agregar os dados.",
+          "granularity": "Granularidade de tempo da agregação (day, month, etc.).",
+          "partition_granularity": "Granularidade usada para particionar a pre-agregação.",
+          "refresh_key": "Define a frequência/estratégia de atualização da pre-agregação.",
+          "external": "Indica se a pre-agregação é armazenada externamente (Cube Store).",
+          "scheduled_refresh": "Indica se a pre-agregação deve ser atualizada automaticamente em background.",
+          "indexes": "Índices adicionais criados sobre a pre-agregação para acelerar queries."
+        }
+      }
+    }
+  }
+}

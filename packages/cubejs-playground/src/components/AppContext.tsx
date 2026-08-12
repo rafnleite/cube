@@ -23,6 +23,14 @@ export type PlaygroundContext = {
   coreServerVersion: string;
   isCloud: boolean;
   livePreview?: boolean;
+  multiProject?: {
+    enabled: boolean;
+    activeProject: {
+      id: string;
+      name: string;
+      connectionId: string;
+    } | null;
+  };
 };
 
 export type SystemContext = {

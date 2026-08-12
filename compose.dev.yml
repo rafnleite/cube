@@ -1,0 +1,38 @@
+services:
+  cube-dev:
+    image: cube-core-dev:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    working_dir: /workspace
+    env_file:
+      - .env.multi-project
+    ports:
+      - "4000:4000"
+      - "3030:3030"
+    # Build artifacts are produced while creating the development image (or
+    # explicitly with the build command documented in MULTI_PROJECT.md).
+    # Startup should not rebuild the entire Cube monorepo.
+    command: node packages/cubejs-server/bin/dev-server
+    volumes:
+      - .:/workspace
+      - cube_node_modules:/workspace/node_modules
+      - cube_yarn_cache:/usr/local/share/.cache/yarn
+      - cube_cargo_cache:/root/.cargo/registry
+      - cube_target:/workspace/target
+      # Keep the Linux native addon from the image visible when the Windows
+      # source tree is bind-mounted over /workspace.
+      - cube_native:/workspace/packages/cubejs-backend-native/native
+    tmpfs:
+      # Nx creates pseudo-IPC sockets here; a tmpfs prevents stale sockets
+      # from surviving container stop/start cycles.
+      - /tmp
+    tty: true
+    stdin_open: true
+
+volumes:
+  cube_node_modules:
+  cube_yarn_cache:
+  cube_cargo_cache:
+  cube_target:
+  cube_native:

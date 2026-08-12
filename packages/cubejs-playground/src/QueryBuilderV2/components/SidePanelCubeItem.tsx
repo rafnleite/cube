@@ -1,6 +1,7 @@
 import { Cube } from '@cubejs-client/core';
 import { ReactElement, useEffect, useMemo, useRef, useState } from 'react';
-import { Block, Button, Space, tasty, Text, CubeIcon, ViewIcon } from '@cube-dev/ui-kit';
+import { Block, Button, Space, tasty, Text } from '@cube-dev/ui-kit';
+import { CubeIcon, ViewIcon } from '../../shared/icons/FontAwesomeIcons';
 
 import { TCubeHierarchy } from '../types';
 import { useQueryBuilderContext } from '../context';

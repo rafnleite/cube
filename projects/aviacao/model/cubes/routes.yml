@@ -1,0 +1,41 @@
+cubes:
+  - name: routes
+    sql_table: bookings.routes
+    data_source: default
+    dimensions:
+      - name: airplane_code
+        sql: airplane_code
+        type: string
+        title: Código do avião
+      - name: arrival_airport
+        sql: arrival_airport
+        type: string
+        title: Aeroporto de chegada
+      - name: days_of_week
+        sql: days_of_week
+        type: string
+        title: Dias da semana
+      - name: departure_airport
+        sql: departure_airport
+        type: string
+        title: Aeroporto de partida
+      - name: route_no
+        sql: route_no
+        type: string
+        title: Número de rota
+      - name: validity
+        sql: validity
+        type: string
+        title: Validade
+      - name: scheduled_time
+        sql: scheduled_time
+        type: time
+        title: Horário agendado
+    measures:
+      - name: count
+        type: count
+      - name: duration
+        sql: duration
+        type: sum
+        title: Duração
+    title: Rotas

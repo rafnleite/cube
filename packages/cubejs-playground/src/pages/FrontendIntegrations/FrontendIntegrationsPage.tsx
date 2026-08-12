@@ -2,32 +2,34 @@ import { Card, Layout, Space, Tabs, Typography, Table, Col, Row } from 'antd';
 import { CodeSnippet } from '../../atoms';
 import { Content, Header } from '../components/Ui';
 import { CopiableInput } from '../../components/CopiableInput';
+import { usePlaygroundContext } from '../../hooks';
 
 const { Paragraph, Link, Title } = Typography;
 
 export function FrontendIntegrationsPage() {
+  const { basePath = '/cubejs-api' } = usePlaygroundContext();
   const token = 'token';
-  const apiUrl = 'http://localhost:4000/cubejs-api';
+  const apiUrl = `${window.location.origin}${basePath}`;
   const restUrl = `${apiUrl}/v1/load`;
-  const wsUrl = "ws://localhost:4000/";
+  const wsUrl = `${window.location.origin.replace(/^http/, 'ws')}/`;
   const graphqlUrl = `${apiUrl}/graphql`;
 
   const dataSource = [
     {
       key: '1',
-      name: 'REST API Endpoint',
+      name: 'Endpoint da API REST',
       url: restUrl,
       docsUrl: 'https://cube.dev/reference/core-data-apis/rest-api',
     },
     {
       key: '2',
-      name: 'Websockets Endpoint',
+      name: 'Endpoint WebSocket',
       url: wsUrl,
       docsUrl: 'https://cube.dev/recipes/core-data-api/real-time-data-fetch',
     },
     {
       key: '2',
-      name: 'GraphQL Endpoint',
+      name: 'Endpoint GraphQL',
       url: graphqlUrl,
       docsUrl: 'https://cube.dev/reference/core-data-apis/graphql-api',
     },
@@ -35,7 +37,7 @@ export function FrontendIntegrationsPage() {
   
   const columns = [
     {
-      title: 'Name',
+      title: 'Nome',
       dataIndex: 'name',
       key: 'name',
     },
@@ -46,24 +48,24 @@ export function FrontendIntegrationsPage() {
       render: (text) => <CopiableInput wrapperStyle={{ margin: 0 }} value={text} />
     },
     {
-      title: 'Docs',
+      title: 'Documentação',
       dataIndex: 'docsUrl',
       key: 'docsUrl',
-      render: (text) => <a href={text} target="_blank">Docs</a>
+      render: (text) => <a href={text} target="_blank">Documentação</a>
     }
   ];
 
   return (
     <Layout>
       <Header>
-        <Title>Frontend Integrations</Title>
+        <Title>Integrações frontend</Title>
       </Header>
 
       <Content>
           <Row gutter={48}>
             <Col span={12}>
               <Paragraph>
-                You can refer to Cube docs to learn more about{' '}
+                Consulte a documentação do Cube para saber mais sobre as APIs{' '}
                 <Link href="https://cube.dev/reference/core-data-apis/rest-api" target="_blank">
                   REST
                 </Link>
@@ -71,12 +73,12 @@ export function FrontendIntegrationsPage() {
                 <Link href="https://cube.dev/reference/core-data-apis/graphql-api" target="_blank">
                   GraphQL
                 </Link>{' '}
-                APIs and{' '}
+                e{' '}
                 <Link
                   href="https://cube.dev/reference/javascript-sdk"
                   target="_blank"
                 >
-                  integration with frontend frameworks
+                  integração com frameworks frontend
                 </Link>
                 .
               </Paragraph>
@@ -123,7 +125,7 @@ export function FrontendIntegrationsPage() {
             <Tabs.TabPane key="vanilla-js" tab="Vanilla JS">
               <Space direction="vertical" size="large">
                 <div>
-                  <Paragraph>Init Cube API</Paragraph>
+                  <Paragraph>Inicializar a API do Cube</Paragraph>
 
                   <CodeSnippet
                     theme="light"
@@ -136,7 +138,7 @@ const cubeApi = cube(
                 </div>
 
                 <div>
-                  <Paragraph>Get the result set</Paragraph>
+                  <Paragraph>Obter o conjunto de resultados</Paragraph>
 
                   <CodeSnippet
                     theme="light"
@@ -151,7 +153,7 @@ const cubeApi = cube(
             <Tabs.TabPane key="react" tab="React">
               <Space direction="vertical" size="large">
                 <div>
-                  <Paragraph>Init Cube API</Paragraph>
+                  <Paragraph>Inicializar a API do Cube</Paragraph>
 
                   <CodeSnippet
                     theme="light"
@@ -164,7 +166,7 @@ const cubeApi = cube(
                 </div>
 
                 <div>
-                  <Paragraph>Declare CubeProvider</Paragraph>
+                  <Paragraph>Declarar o CubeProvider</Paragraph>
 
                   <CodeSnippet
                     theme="light"
@@ -175,7 +177,7 @@ const cubeApi = cube(
                 </div>
 
                 <div>
-                  <Paragraph>Get the result set</Paragraph>
+                  <Paragraph>Obter o conjunto de resultados</Paragraph>
 
                   <CodeSnippet
                     theme="light"
@@ -192,7 +194,7 @@ const { resultSet, isLoading, error, progress } = useCubeQuery({
             <Tabs.TabPane key="angular" tab="Angular">
               <Space direction="vertical" size="large">
                 <div>
-                  <Paragraph>Set Cube options</Paragraph>
+                  <Paragraph>Configurar as opções do Cube</Paragraph>
 
                   <CodeSnippet
                     theme="light"
@@ -204,12 +206,12 @@ const { resultSet, isLoading, error, progress } = useCubeQuery({
                 </div>
 
                 <Paragraph>
-                  You can find full Angular tutorial and examples in{' '}
+                  Encontre o tutorial completo e exemplos de Angular{' '}
                   <Link
                     href="https://cube.dev/reference/javascript-sdk/angular"
                     target="_blank"
                   >
-                    this documentation guide
+                    neste guia da documentação
                   </Link>
                   .
                 </Paragraph>
@@ -219,7 +221,7 @@ const { resultSet, isLoading, error, progress } = useCubeQuery({
             <Tabs.TabPane key="vue" tab="Vue">
               <Space direction="vertical" size="large">
                 <div>
-                  <Paragraph>Init Cube API</Paragraph>
+                  <Paragraph>Inicializar a API do Cube</Paragraph>
 
                   <CodeSnippet
                     theme="light"
@@ -232,12 +234,12 @@ const cubeApi = cube(
                 </div>
 
                 <Paragraph>
-                  You can find full Angular tutorial and examples in{' '}
+                  Encontre o tutorial completo e exemplos de Vue{' '}
                   <Link
                     href="https://cube.dev/reference/javascript-sdk/angular"
                     target="_blank"
                   >
-                    this documentation guide
+                    neste guia da documentação
                   </Link>
                   .
                 </Paragraph>

@@ -126,7 +126,7 @@ export function QueryBuilder(
       {!meta ? (
         <Block flexGrow={1} padding="2x">
           {!metaError ? (
-            <Card>Loading meta information...</Card>
+            <Card>Carregando metadados...</Card>
           ) : (
             <Alert theme="danger">
               <Title level={5}>Unable to load meta data.</Title>

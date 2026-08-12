@@ -1419,7 +1419,7 @@ export class CubeSymbols implements TranspilerSymbolResolver, CompilerInterface 
     // To distinguish such cases we pass the right now requested property name to
     // cubeReferenceProxy, so later if subProperty is requested we'll have all the required
     // information to construct the response.
-    let cube = this.symbols[this.isCurrentCube(name) ? cubeName : name];
+    let cube: any = this.symbols[this.isCurrentCube(name) ? cubeName : name];
     if (sqlResolveFn) {
       if (cube) {
         cube = this.cubeReferenceProxy(

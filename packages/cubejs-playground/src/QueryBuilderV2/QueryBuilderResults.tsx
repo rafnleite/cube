@@ -15,8 +15,8 @@ import {
   Text,
   Title,
   Panel,
-  CloseIcon,
 } from '@cube-dev/ui-kit';
+import { CloseIcon } from '../shared/icons/FontAwesomeIcons';
 import { Key, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatDistance } from 'date-fns';
 import {

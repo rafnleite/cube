@@ -1,0 +1,59 @@
+cubes:
+  - name: timetable
+    sql_table: bookings.timetable
+    data_source: default
+    joins:
+      - name: flights
+        sql: '{CUBE}.flight_id = {flights}.flight_id'
+        relationship: many_to_one
+    dimensions:
+      - name: id
+        sql: CONCAT({CUBE}.flight_id, '-', {CUBE}.scheduled_departure)
+        type: string
+        primary_key: true
+      - name: flight_id
+        sql: flight_id
+        type: string
+      - name: airplane_code
+        sql: airplane_code
+        type: string
+      - name: arrival_airport
+        sql: arrival_airport
+        type: string
+      - name: departure_airport
+        sql: departure_airport
+        type: string
+      - name: route_no
+        sql: route_no
+        type: string
+      - name: status
+        sql: status
+        type: string
+      - name: actual_arrival
+        sql: actual_arrival
+        type: time
+      - name: actual_arrival_local
+        sql: actual_arrival_local
+        type: time
+      - name: actual_departure
+        sql: actual_departure
+        type: time
+      - name: actual_departure_local
+        sql: actual_departure_local
+        type: time
+      - name: scheduled_arrival
+        sql: scheduled_arrival
+        type: time
+      - name: scheduled_arrival_local
+        sql: scheduled_arrival_local
+        type: time
+      - name: scheduled_departure
+        sql: scheduled_departure
+        type: time
+      - name: scheduled_departure_local
+        sql: scheduled_departure_local
+        type: time
+    measures:
+      - name: count
+        type: count
+    title: Horários

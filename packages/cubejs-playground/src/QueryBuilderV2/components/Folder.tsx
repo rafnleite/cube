@@ -1,5 +1,6 @@
-import { Button, Text, tasty, FolderOpenFilledIcon, FolderFilledIcon } from '@cube-dev/ui-kit';
+import { Button, Text, tasty } from '@cube-dev/ui-kit';
 import { ReactElement } from 'react';
+import { FolderFilledIcon, FolderOpenFilledIcon } from '../../shared/icons/FontAwesomeIcons';
 
 import { FilteredLabel } from './FilteredLabel';
 

@@ -1,5 +1,6 @@
-import { Action, CloseIcon, tasty } from '@cube-dev/ui-kit';
+import { Action, tasty } from '@cube-dev/ui-kit';
 import { TCubeMemberType } from '@cubejs-client/core';
+import { CloseIcon } from '../../shared/icons/FontAwesomeIcons';
 
 import { getTypeIcon } from '../utils';
 import { MemberViewType } from '../types';

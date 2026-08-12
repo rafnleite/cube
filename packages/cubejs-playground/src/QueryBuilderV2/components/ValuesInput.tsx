@@ -1,9 +1,7 @@
 import {
   Button,
-  CaretDownIcon,
   ComboBox,
   Grid,
-  InfoCircleIcon,
   NumberInput,
   Space,
   Tag,
@@ -11,6 +9,7 @@ import {
   TextInput,
   TooltipProvider,
 } from '@cube-dev/ui-kit';
+import { CaretDownIcon, InfoCircleIcon } from '../../shared/icons/FontAwesomeIcons';
 import { Key } from '@react-types/shared';
 import React, { KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { PlusOutlined } from '@ant-design/icons';

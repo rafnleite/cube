@@ -1,5 +1,5 @@
 import { CubeApi, Query, TransformedQuery } from '@cubejs-client/core';
-import { AvailableMembers, useCubeMeta, useDryRun } from '@cubejs-client/react';
+import { AvailableMembers } from '@cubejs-client/react';
 import {
   createContext,
   ReactNode,
@@ -47,6 +47,8 @@ export function RollupDesignerContext({
   const [query, setQuery] = useState<Query | null>(null);
   const [transformedQuery, setTransformedQuery] =
     useState<TransformedQuery | null>(null);
+  const [isMetaLoading, setMetaLoading] = useState<boolean>(false);
+  const [isDryRunLoading, setDryRunLoading] = useState<boolean>(false);
   const [memberTypeCubeMap, setMemberTypeCubeMap] = useState<AvailableMembers>({
     measures: [],
     dimensions: [],
@@ -54,38 +56,78 @@ export function RollupDesignerContext({
     timeDimensions: [],
   });
 
-  const metaResult = useCubeMeta({
-    skip: !isModalOpen,
-    cubeApi,
-  });
-  const dryRunResult = useDryRun(query as Query, {
-    skip: !isModalOpen || !query,
-    cubeApi,
-  });
-
   useEffect(() => {
-    const { isLoading, error, response } = metaResult;
+    let active = true;
 
-    if (!isLoading) {
-      if (response) {
+    if (!isModalOpen || !cubeApi) {
+      return () => {
+        active = false;
+      };
+    }
+
+    setMetaLoading(true);
+    setError(null);
+
+    cubeApi
+      .meta()
+      .then((response: any) => {
+        if (!active) {
+          return;
+        }
+
         setMemberTypeCubeMap(response.membersGroupedByCube());
-      } else if (error) {
-        setError(error);
-      }
-    }
-  }, [metaResult.isLoading]);
+      })
+      .catch((e: Error) => {
+        if (active) {
+          setError(e);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setMetaLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isModalOpen, cubeApi]);
 
   useEffect(() => {
-    const { isLoading, error, response } = dryRunResult;
+    let active = true;
 
-    if (!isLoading) {
-      if (response) {
-        setTransformedQuery(response.transformedQueries[0]);
-      } else if (error) {
-        setError(error);
-      }
+    if (!isModalOpen || !query || !cubeApi) {
+      return () => {
+        active = false;
+      };
     }
-  }, [dryRunResult.isLoading]);
+
+    setDryRunLoading(true);
+
+    cubeApi
+      .dryRun(query)
+      .then((response: any) => {
+        if (!active) {
+          return;
+        }
+
+        setTransformedQuery(response?.transformedQueries?.[0] || null);
+      })
+      .catch((e: Error) => {
+        if (active) {
+          setError(e);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setDryRunLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isModalOpen, query, cubeApi]);
 
   function reset() {
     setTransformedQuery(null);
@@ -95,7 +137,7 @@ export function RollupDesignerContext({
   return (
     <Context.Provider
       value={{
-        isLoading: metaResult.isLoading || dryRunResult.isLoading,
+        isLoading: isMetaLoading || isDryRunLoading,
         isModalOpen,
         toggleModal,
         query,

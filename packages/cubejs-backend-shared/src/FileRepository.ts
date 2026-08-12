@@ -20,6 +20,10 @@ export class FileRepository implements SchemaFileRepository {
   }
 
   public localPath(): string {
+    if (path.isAbsolute(this.repositoryPath)) {
+      return this.repositoryPath;
+    }
+
     return path.join(process.cwd(), this.repositoryPath);
   }
 

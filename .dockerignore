@@ -3,8 +3,13 @@
 !tsconfig.base.json
 !tsconfig.json
 !rollup.config.js
+!jest.base.config.js
+!jest.base-ts.config.js
+!jest.setup.js
 !yarn.lock
 !lerna.json
+!config/
+!MULTI_PROJECT.md
 !packages/
 !rust/cubestore/js-wrapper/
 !rust/cubestore/tsconfig.json
@@ -22,3 +27,13 @@ packages/*/dist/
 packages/*/coverage/
 # Other
 packages/cubejs-server-core/playground/
+
+# The portable development image starts without a bind mount, so it needs the
+# already compiled JavaScript and Playground bundle. Native Linux artifacts
+# remain excluded above and are inherited from the Linux base image.
+!packages/*/dist/
+!packages/*/dist/**
+!packages/cubejs-server-core/playground/
+!packages/cubejs-server-core/playground/**
+!rust/cubestore/dist/
+!rust/cubestore/dist/**

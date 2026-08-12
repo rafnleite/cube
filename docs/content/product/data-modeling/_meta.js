@@ -5,6 +5,7 @@ export default {
   "dynamic": "Dynamic data models",
   "visual-modeler": "Visual Modeler",
   "data-model-ide": "Data Model IDE",
+  "schema-save-validation": "Schema save validation",
   "dev-mode": "Development mode",
   "sql-runner": "SQL Runner",
   "reference": "Reference",

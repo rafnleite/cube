@@ -1,9 +1,18 @@
 /* eslint-disable global-require,no-restricted-syntax */
 import dotenv from '@cubejs-backend/dotenv';
-import { CubePreAggregationConverter, CubeSchemaConverter, ScaffoldingTemplate, SchemaFormat } from '@cubejs-backend/schema-compiler';
+import {
+  CubePreAggregationConverter,
+  CubePrimaryKeyConverter,
+  CubeRelationshipConverter,
+  CubeRelationshipReader,
+  CubeSchemaConverter,
+  ScaffoldingTemplate,
+  SchemaFormat,
+} from '@cubejs-backend/schema-compiler';
 import spawn from 'cross-spawn';
 import path from 'path';
 import fs from 'fs-extra';
+import YAML from 'js-yaml';
 import { getRequestIdFromRequest } from '@cubejs-backend/api-gateway';
 import { LivePreviewWatcher } from '@cubejs-backend/cloud';
 import { AppContainer, DependencyTree, PackageFetcher, DevPackageFetcher } from '@cubejs-backend/templates';
@@ -19,6 +28,7 @@ import type { BaseDriver } from '@cubejs-backend/query-orchestrator';
 import { CubejsServerCore } from './server';
 import { ExternalDbTypeFn, ServerCoreInitializedOptions, DatabaseType } from './types';
 import DriverDependencies from './DriverDependencies';
+import { MultiProjectRuntime } from './multi-project/MultiProjectRuntime';
 
 const repo = {
   owner: 'cube-js',
@@ -29,7 +39,41 @@ type DevServerOptions = {
   externalDbTypeFn: ExternalDbTypeFn;
   isReadyForQueryProcessing: () => boolean;
   dockerVersion?: string;
+  multiProjectRuntime?: MultiProjectRuntime;
 };
+
+const JINJA_SYNTAX = /{%|%}|{{|}}/i;
+
+function validateYamlSyntax(fileName: string, content: string): string | null {
+  // Jinja templates are rendered by the compiler and cannot be parsed as
+  // plain YAML before that step.
+  if (JINJA_SYNTAX.test(content)) {
+    return null;
+  }
+
+  try {
+    const document = YAML.load(content);
+    if (!document || typeof document !== 'object' || Array.isArray(document)) {
+      return `O arquivo '${fileName}' precisa conter um documento YAML com um objeto na raiz.`;
+    }
+  } catch (error: any) {
+    const line = error?.mark?.line == null ? null : error.mark.line + 1;
+    const column = error?.mark?.column == null ? null : error.mark.column + 1;
+    const location = line == null ? '' : ` (linha ${line}, coluna ${column})`;
+    return `Sintaxe YAML inválida${location}: ${error?.reason || error?.message || String(error)}`;
+  }
+
+  return null;
+}
+
+function compilerValidationReason(error: any): string {
+  return String(error?.message || error || 'O schema é inválido')
+    .split('\n')
+    .filter(line => line.trim() && !/^Compile errors:?$|^Errors:?$/i.test(line.trim()))
+    .slice(0, 4)
+    .join('\n')
+    .trim();
+}
 
 export class DevServer {
   protected applyTemplatePackagesPromise: Promise<any> | null = null;
@@ -47,6 +91,7 @@ export class DevServer {
   public initDevEnv(app: ExpressApplication, options: ServerCoreInitializedOptions) {
     const port = process.env.PORT || 4000; // TODO
     const apiUrl = process.env.CUBEJS_API_URL || `http://localhost:${port}`;
+    const multiProject = this.options.multiProjectRuntime;
 
     // todo: empty/default `apiSecret` in dev mode to allow the DB connection wizard
     const cubejsToken = jwt.sign({}, options.apiSecret || 'secret', { expiresIn: '1d' });
@@ -109,12 +154,313 @@ export class DevServer {
       }
     };
 
-    app.get('/playground/context', catchErrors((req, res) => {
+    const pendingProjects = new Map<string, {
+      id: string;
+      name: string;
+      connectionId: string;
+    }>();
+
+    const loadRelationshipDefinitions = async (req: Request) => {
+      const requestId = getRequestIdFromRequest(req);
+      const projectContext = multiProject?.contextFromRequest(req);
+      const context = {
+        authInfo: null,
+        securityContext: null,
+        requestId,
+        ...(projectContext || {}),
+      };
+      const repository = multiProject
+        ? multiProject.repository(projectContext!)
+        : this.cubejsServer.repository;
+      const reader = new CubeRelationshipReader();
+      const schemaConverter = new CubeSchemaConverter(repository, [reader]);
+      await schemaConverter.generate();
+
+      return {
+        requestId,
+        projectContext,
+        context,
+        repository,
+        models: reader.getModels(),
+        relationships: reader.getRelationships(),
+      };
+    };
+
+    const loadRelationshipDiagram = async (
+      req: Request,
+      modelNames?: Set<string>,
+      preparedDefinitions?: Awaited<ReturnType<typeof loadRelationshipDefinitions>>
+    ) => {
+      const definitions = preparedDefinitions || await loadRelationshipDefinitions(req);
+      const {
+        requestId,
+        context,
+        models,
+        relationships,
+      } = definitions;
+
+      const compilerApi = await this.cubejsServer.getCompilerApi(context);
+      const compilers = await compilerApi.getCompilers({ requestId });
+      const metaCubes = compilers.metaTransformer?.cubes || [];
+      const drivers = new Map<string, BaseDriver>();
+
+      try {
+        const cubes: any[] = [];
+        for (const model of models) {
+          if (modelNames && !modelNames.has(model.name)) continue;
+          const evaluatedCube = compilers.cubeEvaluator.cubeFromPath(model.name);
+          if (evaluatedCube?.isView) continue;
+
+          const dataSource = evaluatedCube?.dataSource || model.dataSource || 'default';
+          const metaCube = metaCubes.find(cube => cube.config?.name === model.name)?.config;
+          const primaryKeyNames = compilers.cubeEvaluator.primaryKeys?.[model.name] || [];
+          const diagramCube: any = {
+            ...model,
+            title: metaCube?.title || model.title,
+            dataSource,
+            hasPrimaryKey: Boolean(primaryKeyNames.length),
+            primaryKeyNames,
+            columns: [],
+          };
+
+          try {
+            let driver = drivers.get(dataSource);
+            if (!driver) {
+              driver = await this.cubejsServer.getDriver({
+                ...context,
+                dataSource,
+              });
+              drivers.set(dataSource, driver);
+            }
+
+            const loadCompiledColumns = async (): Promise<{ name: any; type: string }[]> => {
+              const query: any = await compilerApi.createQueryByDataSource(
+                compilers,
+                { requestId } as any,
+                dataSource
+              );
+              const [sql, params] = compilers.compiler.withQuery(query, () => {
+                const sourceSql = query.evaluateSymbolSqlWithContext(
+                  () => query.cubeSql(model.name),
+                  { preAggregationQuery: true, collectOriginalSqlPreAggregations: [] }
+                );
+                return query.paramAllocator.buildSqlAndParams(
+                  `SELECT * FROM ${sourceSql} ${query.asSyntaxTable} ${query.cubeAlias(model.name)} WHERE 1 = 0`
+                );
+              });
+
+              let columns: { name: any; type: string }[] = [];
+              try {
+                columns = await driver.queryColumnTypes(sql, params);
+              } catch (_e) {
+                // Some drivers only expose column metadata through downloadQueryResults.
+              }
+              if (!columns?.length) {
+                const result: any = await driver.downloadQueryResults(sql, params, {
+                  highWaterMark: 1,
+                  streamImport: false,
+                  requestId,
+                } as any);
+                columns = result.types || [];
+              }
+              return columns;
+            };
+
+            let columns: { name: any; type: string }[] = [];
+            if (model.sourceType === 'sql_table' && model.source) {
+              try {
+                columns = await driver.tableColumnTypes(model.source);
+              } catch (_e) {
+                // Dynamic, unqualified, or dialect-specific table names use the compiled probe below.
+              }
+            }
+            if (!columns?.length) {
+              columns = await loadCompiledColumns();
+            }
+            if (!columns?.length) {
+              throw new Error('The database driver did not return column metadata');
+            }
+            diagramCube.columns = (columns || []).map(column => {
+              const name = String(column.name);
+              const normalizedName = name.toLowerCase();
+              return {
+                name,
+                type: column.type ? String(column.type) : undefined,
+                primaryKey: primaryKeyNames.some(primaryKey => (
+                  String(primaryKey).toLowerCase() === normalizedName
+                )),
+              };
+            });
+          } catch (e: any) {
+            diagramCube.columnError = String(e?.message || e || 'Unable to load columns')
+              .split('\n')[0]
+              .slice(0, 300);
+          }
+
+          cubes.push(diagramCube);
+        }
+
+        return {
+          cubes,
+          relationships,
+        };
+      } finally {
+        if (multiProject) {
+          await Promise.allSettled(Array.from(drivers.values()).map(driver => driver.release?.()));
+        }
+      }
+    };
+
+    app.get('/playground/projects', catchErrors(async (_req, res) => {
+      if (!multiProject) return res.status(404).json({ error: 'Multi-project mode is disabled' });
+      const connections = (await multiProject.registry.connections()).map(connection => ({
+        ...connection,
+        fields: (connection.fields || []).filter(field => !connection.defaults?.[field.name]),
+      }));
+      return res.json({
+        projects: await multiProject.registry.list(),
+        connections,
+      });
+    }));
+
+    app.post('/playground/projects', catchErrors(async (req, res) => {
+      if (!multiProject) return res.status(404).json({ error: 'Multi-project mode is disabled' });
+      const { id, name, connectionId, credentials = {} } = req.body || {};
+      if (!id || !name || !connectionId || typeof credentials !== 'object') {
+        return res.status(400).json({ error: 'id, name, connectionId, and credentials are required' });
+      }
+
+      const connection = (await multiProject.registry.connections())
+        .find(item => item.id === connectionId);
+      if (!connection) return res.status(400).json({ error: `Unknown connection preset: ${connectionId}` });
+
+      const missing = (connection.fields || [])
+        .filter(field => field.required && !credentials[field.name] && !connection.defaults?.[field.name])
+        .map(field => field.name);
+      if (missing.length) {
+        pendingProjects.set(id, { id, name, connectionId });
+        const pendingProject = {
+          id,
+          name,
+          connectionId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          pending: true,
+        };
+        return res.status(200).json({
+          ...pendingProject,
+          project: pendingProject,
+        });
+      }
+
+      const fullCredentials = {
+        ...(connection.defaults || {}),
+        ...credentials,
+        CUBEJS_DB_TYPE: connection.dbType || '',
+      };
+
+      try {
+        await multiProject.testConnectionPreset(connection.id, fullCredentials);
+      } catch (e) {
+        let message = (e as Error).message || 'Connection failed';
+        for (const credential of Object.values(credentials)) {
+          if (typeof credential === 'string' && credential) {
+            message = message.split(credential).join('[REDACTED]');
+          }
+        }
+        throw new Error(message);
+      }
+
+      const project = await multiProject.registry.create({ id, name, connectionId });
+      const sessionId = multiProject.sessions.create(project.id, fullCredentials);
+      const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+      res.setHeader('Set-Cookie', `cube_project_session=${sessionId}; Path=/; HttpOnly; SameSite=Strict${secure}`);
+      return res.status(201).json({
+        ...project,
+        project,
+        apiPath: `/cubejs-api/projects/${project.id}/v1`,
+      });
+    }));
+
+    app.post('/playground/projects/:projectId/session', catchErrors(async (req, res) => {
+      if (!multiProject) {
+        return res.status(404).json({ error: 'Multi-project mode is disabled' });
+      }
+      const pendingProject = pendingProjects.get(req.params.projectId);
+      let project = await multiProject.registry.get(req.params.projectId).catch(() => null);
+      if (!project && !pendingProject) {
+        return res.status(404).json({ error: `Unknown project: ${req.params.projectId}` });
+      }
+
+      const projectConnectionId = project?.connectionId || pendingProject?.connectionId || '';
+      const connection = (await multiProject.registry.connections())
+        .find(item => item.id === projectConnectionId);
+      if (!connection) {
+        return res.status(400).json({ error: `Unknown connection preset: ${projectConnectionId}` });
+      }
+      const credentials = req.body?.credentials || {};
+      const missing = (connection?.fields || [])
+        .filter(field => field.required && !credentials[field.name] && !connection?.defaults?.[field.name])
+        .map(field => field.name);
+      if (missing.length) return res.status(400).json({ error: `Missing credentials: ${missing.join(', ')}` });
+
+      const fullCredentials = {
+        ...(connection?.defaults || {}),
+        ...credentials,
+        CUBEJS_DB_TYPE: connection?.dbType || '',
+      };
+
+      try {
+        await multiProject.testConnectionPreset(connection.id, fullCredentials);
+      } catch (e) {
+        let message = (e as Error).message || 'Connection failed';
+        for (const credential of Object.values(credentials)) {
+          if (typeof credential === 'string' && credential) {
+            message = message.split(credential).join('[REDACTED]');
+          }
+        }
+        throw new Error(message);
+      }
+
+      if (!project && pendingProject) {
+        project = await multiProject.registry.create({
+          id: pendingProject.id,
+          name: pendingProject.name,
+          connectionId: pendingProject.connectionId,
+        });
+        pendingProjects.delete(project.id);
+      }
+
+      if (!project) {
+        return res.status(500).json({ error: `Unable to open project: ${req.params.projectId}` });
+      }
+
+      const sessionId = multiProject.sessions.create(project.id, fullCredentials);
+      const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+      res.setHeader('Set-Cookie', `cube_project_session=${sessionId}; Path=/; HttpOnly; SameSite=Strict${secure}`);
+      return res.json({ project, apiPath: `/cubejs-api/projects/${project.id}/v1` });
+    }));
+
+    app.delete('/playground/projects/session', catchErrors((req, res) => {
+      const sessionId = this.cookie(req, 'cube_project_session');
+      if (sessionId) multiProject?.sessions.delete(sessionId);
+      res.setHeader('Set-Cookie', 'cube_project_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0');
+      return res.status(204).end();
+    }));
+
+    app.get('/playground/context', catchErrors(async (req, res) => {
       this.cubejsServer.event('Dev Server Env Open');
+
+      const activeProjectId = multiProject?.activeProject(req) || null;
+      const activeProject = activeProjectId
+        ? await multiProject?.registry.get(activeProjectId).catch(() => null)
+        : null;
 
       res.json({
         cubejsToken,
-        basePath: options.basePath,
+        basePath: activeProject
+          ? `${options.basePath}/projects/${activeProject.id}`
+          : options.basePath,
         anonymousId: getAnonymousId(),
         coreServerVersion: this.cubejsServer.coreServerVersion,
         dockerVersion: this.options.dockerVersion || null,
@@ -126,19 +472,29 @@ export class DevServer {
         telemetry: options.telemetry,
         identifier: this.getIdentifier(options.apiSecret),
         previewFeatures: getEnv('previewFeatures'),
+        multiProject: {
+          enabled: Boolean(multiProject),
+          activeProject,
+        },
       });
     }));
 
     app.get('/playground/db-schema', catchErrors(async (req, res) => {
       this.cubejsServer.event('Dev Server DB Schema Load');
+      const projectContext = multiProject?.contextFromRequest(req);
       const driver = await this.cubejsServer.getDriver({
         dataSource: req.body.dataSource || 'default',
         authInfo: null,
         securityContext: null,
         requestId: getRequestIdFromRequest(req),
+        ...(projectContext || {}),
       });
-
-      const tablesSchema = await driver.tablesSchema();
+      let tablesSchema;
+      try {
+        tablesSchema = await driver.tablesSchema();
+      } finally {
+        if (multiProject) await driver.release?.();
+      }
 
       this.cubejsServer.event('Dev Server DB Schema Load Success');
       if (Object.keys(tablesSchema || {}).length === 0) {
@@ -147,14 +503,387 @@ export class DevServer {
       res.json({ tablesSchema });
     }));
 
+    app.get('/playground/schema/relationships', catchErrors(async (req: Request, res: Response) => {
+      this.cubejsServer.event('Dev Server Relationship Diagram Load');
+      const diagram = await loadRelationshipDiagram(req);
+      res.json(diagram);
+    }));
+
+    app.post('/playground/schema/primary-key', catchErrors(async (req: Request, res: Response) => {
+      this.cubejsServer.event('Dev Server Primary Key Save');
+      const { cubeName, columnName } = req.body || {};
+      if (typeof cubeName !== 'string' || typeof columnName !== 'string' || !cubeName || !columnName) {
+        return res.status(400).json({ error: 'cubeName and columnName are required' });
+      }
+      if (/\r|\n|`|\$\{|\{|\}/.test(columnName)) {
+        return res.status(400).json({ error: 'Unsupported column name' });
+      }
+
+      const definitions = await loadRelationshipDefinitions(req);
+      const model = definitions.models.find(cube => cube.name === cubeName);
+      if (!model) return res.status(404).json({ error: `Cube '${cubeName}' was not found` });
+
+      const diagram = await loadRelationshipDiagram(req, new Set([cubeName]), definitions);
+      const cube = diagram.cubes.find(item => item.name === cubeName);
+      const column = cube?.columns.find(item => item.name === columnName);
+      if (!column) return res.status(404).json({ error: `Column '${columnName}' was not found in '${cubeName}'` });
+      if (column.primaryKey) return res.json({ status: 'ok', alreadyPrimaryKey: true });
+
+      const { repository, context, requestId } = definitions;
+      const originalFile = (await repository.dataSchemaFiles()).find(file => file.fileName === model.fileName);
+      if (!originalFile) return res.status(404).json({ error: `File '${model.fileName}' was not found` });
+
+      const converter = new CubeSchemaConverter(repository, [
+        new CubePrimaryKeyConverter({ cubeName, columnName, columnType: column.type }),
+      ]);
+      await converter.generate(cubeName);
+      const updatedFile = converter.getSourceFiles().find(file => file.cubeName === cubeName);
+      if (!updatedFile) return res.status(404).json({ error: `Cube '${cubeName}' was not found` });
+
+      const currentFile = (await repository.dataSchemaFiles()).find(file => file.fileName === updatedFile.fileName);
+      if (!currentFile || currentFile.content !== originalFile.content) {
+        return res.status(409).json({ error: 'The model file changed while the primary key was being prepared. Reload the diagram and try again.' });
+      }
+
+      repository.writeDataSchemaFile(updatedFile.fileName, updatedFile.source);
+      try {
+        const compilerApi = await this.cubejsServer.getCompilerApi(context);
+        await compilerApi.getCompilers({ requestId });
+      } catch (e: any) {
+        const fileAfterFailure = (await repository.dataSchemaFiles()).find(file => file.fileName === updatedFile.fileName);
+        if (fileAfterFailure?.content === updatedFile.source) {
+          repository.writeDataSchemaFile(originalFile.fileName, originalFile.content);
+          try {
+            const compilerApi = await this.cubejsServer.getCompilerApi(context);
+            await compilerApi.getCompilers({ requestId: `${requestId}-primary-key-rollback` });
+          } catch (_rollbackError) {
+            // Keep the original source when rollback compilation also fails.
+          }
+        }
+        const reason = String(e?.message || e || 'The model would be invalid')
+          .split('\n')
+          .filter(line => line.trim() && !/^Compile errors:?$|^Errors:?$/i.test(line.trim()))[0]
+          ?.trim();
+        return res.status(400).json({
+          error: `The primary key was not saved because the model would be invalid${reason ? `: ${reason}` : ''}`,
+        });
+      }
+
+      return res.json({ status: 'ok', fileName: updatedFile.fileName, content: updatedFile.source });
+    }));
+
+    app.post('/playground/schema/relationship', catchErrors(async (req: Request, res: Response) => {
+      this.cubejsServer.event('Dev Server Relationship Save');
+      const {
+        sourceCube,
+        targetCube,
+        sourceColumn,
+        targetColumn,
+        relationship,
+        operation = 'create',
+        replaceCustom = false,
+      } = req.body || {};
+      const validOperations = new Set(['create', 'update', 'delete']);
+      const validRelationships = new Set(['one_to_one', 'one_to_many', 'many_to_one']);
+
+      if (typeof sourceCube !== 'string' || typeof targetCube !== 'string') {
+        return res.status(400).json({ error: 'sourceCube and targetCube are required' });
+      }
+      if (!validOperations.has(operation)) {
+        return res.status(400).json({ error: 'Unknown relationship operation' });
+      }
+      if (sourceCube === targetCube) {
+        return res.status(400).json({ error: 'Self relationships are not supported by the diagram' });
+      }
+
+      const definitions = await loadRelationshipDefinitions(req);
+      const sourceModel = definitions.models.find(cube => cube.name === sourceCube);
+      const targetModel = definitions.models.find(cube => cube.name === targetCube);
+      const existing = definitions.relationships.find(join => (
+        join.sourceCube === sourceCube && join.targetCube === targetCube
+      ));
+      const reverseExisting = definitions.relationships.find(join => (
+        join.sourceCube === targetCube && join.targetCube === sourceCube
+      ));
+      if (!sourceModel || !targetModel) {
+        return res.status(404).json({ error: 'Source or target cube was not found' });
+      }
+
+      const diagram = operation === 'delete'
+        ? null
+        : await loadRelationshipDiagram(req, new Set([sourceCube, targetCube]), definitions);
+      const source = diagram?.cubes.find(cube => cube.name === sourceCube);
+      const target = diagram?.cubes.find(cube => cube.name === targetCube);
+      if (!source || !target) {
+        if (operation !== 'delete') {
+          return res.status(404).json({ error: 'Source or target cube was not found' });
+        }
+      }
+
+      if (operation === 'create' && existing) {
+        return res.status(409).json({ error: 'This relationship already exists' });
+      }
+      if (operation === 'create' && reverseExisting) {
+        return res.status(409).json({
+          error: `A relationship between '${sourceCube}' and '${targetCube}' already exists in the opposite direction`,
+        });
+      }
+      if (operation === 'update' && !existing) {
+        return res.status(404).json({ error: 'This relationship does not exist' });
+      }
+
+      if (operation !== 'delete') {
+        if (
+          typeof sourceColumn !== 'string' ||
+          typeof targetColumn !== 'string' ||
+          !validRelationships.has(relationship)
+        ) {
+          return res.status(400).json({
+            error: 'sourceColumn, targetColumn, and a valid relationship are required',
+          });
+        }
+        if (/\r|\n|`|\$\{|\{|\}/.test(sourceColumn) || /\r|\n|`|\$\{|\{|\}/.test(targetColumn)) {
+          return res.status(400).json({ error: 'Unsupported column name' });
+        }
+        if (!source!.columns.some(column => column.name === sourceColumn)) {
+          return res.status(400).json({ error: `Column '${sourceColumn}' was not found in '${sourceCube}'` });
+        }
+        if (!target!.columns.some(column => column.name === targetColumn)) {
+          return res.status(400).json({ error: `Column '${targetColumn}' was not found in '${targetCube}'` });
+        }
+        if (operation === 'update' && existing && (!existing.sourceColumn || !existing.targetColumn) && !replaceCustom) {
+          return res.status(409).json({
+            error: 'This relationship has a custom SQL condition and requires explicit replacement',
+            customRelationship: true,
+          });
+        }
+      }
+
+      const { repository, context, requestId } = definitions;
+      const originalFile = (await repository.dataSchemaFiles())
+        .find(file => file.fileName === sourceModel.fileName);
+      if (!originalFile) {
+        return res.status(404).json({ error: `File '${sourceModel.fileName}' was not found` });
+      }
+
+      const converter = new CubeSchemaConverter(repository, [
+        new CubeRelationshipConverter({
+          sourceCube,
+          targetCube,
+          sourceColumn,
+          targetColumn,
+          relationship,
+          operation,
+        }),
+      ]);
+      await converter.generate(sourceCube);
+      const updatedFile = converter.getSourceFiles().find(file => file.cubeName === sourceCube);
+      if (!updatedFile) {
+        return res.status(404).json({ error: `Cube '${sourceCube}' was not found` });
+      }
+
+      const currentFile = (await repository.dataSchemaFiles())
+        .find(file => file.fileName === updatedFile.fileName);
+      if (!currentFile) {
+        return res.status(404).json({ error: `File '${updatedFile.fileName}' was not found` });
+      }
+      if (currentFile.content !== originalFile.content) {
+        return res.status(409).json({
+          error: 'The model file changed while the relationship was being prepared. Reload the diagram and try again.',
+        });
+      }
+
+      repository.writeDataSchemaFile(updatedFile.fileName, updatedFile.source);
+      try {
+        const compilerApi = await this.cubejsServer.getCompilerApi(context);
+        await compilerApi.getCompilers({ requestId });
+      } catch (e: any) {
+        const fileAfterFailure = (await repository.dataSchemaFiles())
+          .find(file => file.fileName === updatedFile.fileName);
+        if (fileAfterFailure?.content === updatedFile.source) {
+          repository.writeDataSchemaFile(originalFile.fileName, originalFile.content);
+          try {
+            const compilerApi = await this.cubejsServer.getCompilerApi(context);
+            await compilerApi.getCompilers({ requestId: `${requestId}-relationship-rollback` });
+          } catch (_rollbackError) {
+            // The original model may already be invalid. The source file was still restored.
+          }
+        } else {
+          return res.status(409).json({
+            error: 'The model file changed while the relationship was being validated. Reload the diagram before editing it again.',
+          });
+        }
+        const reason = String(e?.message || e || 'The model would be invalid')
+          .split('\n')
+          .filter(line => line.trim() && !/^Compile errors:?$|^Errors:?$/i.test(line.trim()))[0]
+          ?.trim();
+        return res.status(400).json({
+          error: `The relationship was not saved because the model would be invalid${reason ? `: ${reason}` : ''}`,
+        });
+      }
+
+      const savedFile = (await repository.dataSchemaFiles())
+        .find(file => file.fileName === updatedFile.fileName);
+      if (savedFile?.content !== updatedFile.source) {
+        return res.status(409).json({
+          error: 'The model file changed while the relationship was being validated. Reload the diagram to see the current version.',
+        });
+      }
+
+      return res.json({
+        status: 'ok',
+        fileName: updatedFile.fileName,
+        content: updatedFile.source,
+      });
+    }));
+
     app.get('/playground/files', catchErrors(async (req, res) => {
       this.cubejsServer.event('Dev Server Files Load');
-      const files = await this.cubejsServer.repository.dataSchemaFiles();
+      const repository = multiProject
+        ? multiProject.repository(multiProject.contextFromRequest(req))
+        : this.cubejsServer.repository;
+      const files = await repository.dataSchemaFiles();
       res.json({
         files: files.map(f => ({
           ...f,
-          absPath: path.resolve(path.join(this.cubejsServer.repository.localPath(), f.fileName))
+          absPath: path.resolve(path.join(repository.localPath(), f.fileName))
         }))
+      });
+    }));
+
+    app.post('/playground/files', catchErrors(async (req, res) => {
+      this.cubejsServer.event('Dev Server File Save');
+
+      if (!req.body) {
+        throw new Error('Request body is required');
+      }
+
+      const { fileName, content } = req.body;
+
+      if (typeof fileName !== 'string' || typeof content !== 'string') {
+        return res.status(400).json({
+          error: 'Both fileName and content must be strings'
+        });
+      }
+
+      if (path.isAbsolute(fileName) || fileName.includes('..') || fileName.includes('\\')) {
+        return res.status(400).json({
+          error: 'Invalid fileName'
+        });
+      }
+
+      const repository = multiProject
+        ? multiProject.repository(multiProject.contextFromRequest(req))
+        : this.cubejsServer.repository;
+      const files = await repository.dataSchemaFiles();
+
+      const originalFile = files.find((f) => f.fileName === fileName);
+      if (!originalFile) {
+        return res.status(404).json({
+          error: `File '${fileName}' was not found`
+        });
+      }
+
+      if (fileName.endsWith('.yml') || fileName.endsWith('.yaml')) {
+        const syntaxError = validateYamlSyntax(fileName, content);
+        if (syntaxError) {
+          return res.status(400).json({
+            error: 'O arquivo não foi salvo porque o YAML é inválido',
+            details: syntaxError,
+          });
+        }
+      }
+
+      repository.writeDataSchemaFile(fileName, content);
+
+      const requestId = getRequestIdFromRequest(req);
+      const projectContext = multiProject?.contextFromRequest(req);
+      const compilerContext = {
+        authInfo: null,
+        securityContext: null,
+        requestId,
+        ...(projectContext || {}),
+      };
+      try {
+        const compilerApi = await this.cubejsServer.getCompilerApi(compilerContext);
+        await compilerApi.getCompilers({ requestId });
+      } catch (error: any) {
+        const fileAfterFailure = (await repository.dataSchemaFiles())
+          .find((file) => file.fileName === fileName);
+        if (fileAfterFailure?.content === content) {
+          repository.writeDataSchemaFile(fileName, originalFile.content);
+          try {
+            const compilerApi = await this.cubejsServer.getCompilerApi({
+              ...compilerContext,
+              requestId: `${requestId}-file-rollback`,
+            });
+            await compilerApi.getCompilers({ requestId: `${requestId}-file-rollback` });
+          } catch (_rollbackError) {
+            // The previous source is restored even if the rollback compiler also fails.
+          }
+        } else {
+          return res.status(409).json({
+            error: 'O arquivo mudou durante a validação. Recarregue o arquivo e tente novamente.',
+          });
+        }
+
+        return res.status(400).json({
+          error: 'O arquivo não foi salvo porque a validação do schema falhou',
+          details: compilerValidationReason(error),
+        });
+      }
+
+      return res.json({
+        status: 'ok',
+        fileName
+      });
+    }));
+
+    app.delete('/playground/files', catchErrors(async (req, res) => {
+      this.cubejsServer.event('Dev Server File Delete');
+
+      if (!req.body) {
+        throw new Error('Request body is required');
+      }
+
+      const { fileName } = req.body;
+
+      if (typeof fileName !== 'string') {
+        return res.status(400).json({
+          error: 'fileName must be a string'
+        });
+      }
+
+      if (path.isAbsolute(fileName) || fileName.includes('..') || fileName.includes('\\')) {
+        return res.status(400).json({
+          error: 'Invalid fileName'
+        });
+      }
+
+      const repository = multiProject
+        ? multiProject.repository(multiProject.contextFromRequest(req))
+        : this.cubejsServer.repository;
+      const files = await repository.dataSchemaFiles();
+
+      if (!files.find((f) => f.fileName === fileName)) {
+        return res.status(404).json({
+          error: `File '${fileName}' was not found`
+        });
+      }
+
+      const repositoryPath = path.resolve(repository.localPath());
+      const filePath = path.resolve(repositoryPath, fileName);
+      if (!filePath.startsWith(`${repositoryPath}${path.sep}`)) {
+        return res.status(400).json({
+          error: 'Invalid fileName'
+        });
+      }
+
+      await fs.remove(filePath);
+
+      return res.json({
+        status: 'ok',
+        fileName
       });
     }));
 
@@ -169,12 +898,14 @@ export class DevServer {
       }
 
       const dataSource = req.body.dataSource || 'default';
+      const projectContext = multiProject?.contextFromRequest(req);
 
       const driver = await this.cubejsServer.getDriver({
         dataSource,
         authInfo: null,
         securityContext: null,
         requestId: getRequestIdFromRequest(req),
+        ...(projectContext || {}),
       });
       const tablesSchema = req.body.tablesSchema || (await driver.tablesSchema());
 
@@ -188,10 +919,13 @@ export class DevServer {
       });
       const files = scaffoldingTemplate.generateFilesByTableNames(req.body.tables, { dataSource });
 
-      await fs.emptyDir(path.join(options.schemaPath, 'cubes'));
-      await fs.emptyDir(path.join(options.schemaPath, 'views'));
+      const schemaPath = multiProject
+        ? multiProject.registry.modelPath(projectContext!.projectId)
+        : options.schemaPath;
+      await fs.emptyDir(path.join(schemaPath, 'cubes'));
+      await fs.emptyDir(path.join(schemaPath, 'views'));
 
-      await fs.writeFile(path.join(options.schemaPath, 'views', 'example_view.yml'), `# In Cube, views are used to expose slices of your data graph and act as data marts.
+      await fs.writeFile(path.join(schemaPath, 'views', 'example_view.yml'), `# In Cube, views are used to expose slices of your data graph and act as data marts.
 # You can control which measures and dimensions are exposed to BIs or data apps,
 # as well as the direction of joins between the exposed cubes.
 # You can learn more about views in documentation here - https://cube.dev/docs/schema/reference/view
@@ -220,7 +954,9 @@ export class DevServer {
 #         prefix: true
 #         includes:
 #           - city`);
-      await Promise.all(files.map(file => fs.writeFile(path.join(options.schemaPath, 'cubes', file.fileName), file.content)));
+      await Promise.all(files.map(file => fs.writeFile(path.join(schemaPath, 'cubes', file.fileName), file.content)));
+
+      if (multiProject) await driver.release?.();
 
       res.json({ files });
     }));
@@ -494,6 +1230,11 @@ export class DevServer {
 
     app.post('/playground/test-connection', catchErrors(
       async (req: TestConnectionRequest, res) => {
+        if (multiProject) {
+          return res.status(409).json({
+            error: 'Use the project session endpoint to test connections in multi-project mode',
+          });
+        }
         const { dataSource, variables } = req.body || {};
 
         // With multiple data sources enabled, we need to use
@@ -556,6 +1297,11 @@ export class DevServer {
     ));
 
     app.post('/playground/env', catchErrors(async (req, res) => {
+      if (multiProject) {
+        return res.status(409).json({
+          error: 'The /playground/env endpoint is disabled in multi-project mode because it writes credentials to disk',
+        });
+      }
       let { variables = {} } = req.body || {};
 
       if (!variables.CUBEJS_API_SECRET) {
@@ -606,7 +1352,7 @@ export class DevServer {
 
     app.post('/playground/token', catchErrors(async (req, res) => {
       const { payload = {} } = req.body;
-      const jwtOptions = typeof payload.exp != null ? {} : { expiresIn: '1d' };
+      const jwtOptions: jwt.SignOptions = payload.exp != null ? {} : { expiresIn: '1d' };
 
       const token = jwt.sign(payload, options.apiSecret, jwtOptions);
 
@@ -615,6 +1361,9 @@ export class DevServer {
 
     app.post('/playground/schema/pre-aggregation', catchErrors(async (req: Request, res: Response) => {
       const { cubeName, preAggregationName, code } = req.body;
+      const repository = multiProject
+        ? multiProject.repository(multiProject.contextFromRequest(req))
+        : this.cubejsServer.repository;
 
       /**
        * Important note:
@@ -622,7 +1371,7 @@ export class DevServer {
        * without name, which is passed as preAggregationName.
        * While yaml code for pre-agg includes whole yaml object including name.
        */
-      const schemaConverter = new CubeSchemaConverter(this.cubejsServer.repository, [
+      const schemaConverter = new CubeSchemaConverter(repository, [
         new CubePreAggregationConverter({
           cubeName,
           preAggregationName,
@@ -644,7 +1393,7 @@ export class DevServer {
         return res.status(400).json({ error: `The schema file for "${cubeName}" cube was not found or could not be updated. Only JS and non-templated YAML files are supported.` });
       }
 
-      this.cubejsServer.repository.writeDataSchemaFile(file.fileName, file.source);
+      repository.writeDataSchemaFile(file.fileName, file.source);
       return res.json('ok');
     }));
   }
@@ -655,5 +1404,14 @@ export class DevServer {
       .digest('hex')
       .replace(/[^\d]/g, '')
       .slice(0, 10);
+  }
+
+  protected cookie(req: Request, name: string): string | undefined {
+    const cookies = req.headers.cookie?.split(';') || [];
+    for (const cookie of cookies) {
+      const [key, ...value] = cookie.trim().split('=');
+      if (key === name) return decodeURIComponent(value.join('='));
+    }
+    return undefined;
   }
 }

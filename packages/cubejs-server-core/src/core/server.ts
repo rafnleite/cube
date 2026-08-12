@@ -37,6 +37,7 @@ import { agentCollect } from './agentCollect';
 import { OrchestratorStorage } from './OrchestratorStorage';
 import { createLogger } from './logger';
 import { OptsHandler } from './OptsHandler';
+import { MultiProjectRuntime } from './multi-project/MultiProjectRuntime';
 import {
   driverDependencies,
   lookupDriverClass,
@@ -169,6 +170,8 @@ export class CubejsServerCore {
 
   protected apiGatewayInstance: ApiGateway | null = null;
 
+  protected readonly multiProjectRuntime?: MultiProjectRuntime;
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public readonly event: (name: string, props?: object) => Promise<void>;
 
@@ -188,6 +191,27 @@ export class CubejsServerCore {
       process.env.NODE_ENV === 'production',
       getEnv('logLevel'),
     );
+
+    this.multiProjectRuntime = MultiProjectRuntime.fromEnv();
+    if (this.multiProjectRuntime) {
+      const originalExtendContext = opts.extendContext;
+      const runtime = this.multiProjectRuntime;
+      opts = {
+        ...opts,
+        // The default refresh context is null. In multi-project mode that
+        // cannot select an isolated repository or credentials, so background
+        // refresh must be opt-in with project-aware contexts.
+        scheduledRefreshTimer: opts.scheduledRefreshTimer ?? false,
+        extendContext: async (req) => ({
+          ...(originalExtendContext ? await originalExtendContext(req) : {}),
+          ...runtime.contextFromRequest(req),
+        }),
+        contextToAppId: context => `PROJECT_${runtime.projectId(context)}`,
+        contextToOrchestratorId: context => `PROJECT_${runtime.projectId(context)}`,
+        repositoryFactory: context => runtime.repository(context),
+        driverFactory: context => runtime.driver(context),
+      };
+    }
 
     this.optsHandler = new OptsHandler(this, opts, systemOptions);
     this.options = this.optsHandler.getCoreInitializedOptions();
@@ -276,7 +300,8 @@ export class CubejsServerCore {
       this.devServer = new DevServer(this, {
         dockerVersion: getEnv('dockerImageVersion'),
         externalDbTypeFn: this.contextToExternalDbType,
-        isReadyForQueryProcessing: this.isReadyForQueryProcessing.bind(this)
+        isReadyForQueryProcessing: this.isReadyForQueryProcessing.bind(this),
+        multiProjectRuntime: this.multiProjectRuntime,
       });
       const oldLogger = this.logger;
       this.logger = ((msg, params) => {
@@ -438,6 +463,24 @@ export class CubejsServerCore {
   }
 
   public async initApp(app: ExpressApplication) {
+    if (this.multiProjectRuntime) {
+      const basePath = this.options.basePath.replace(/\/$/, '');
+      app.use((req, res, next) => {
+        const [pathname, query] = req.url.split('?', 2);
+        const match = pathname.match(new RegExp(`^${basePath}/projects/([a-z0-9-]+)(/.*)$`));
+        if (match) {
+          req.headers['x-cube-project-id'] = match[1];
+          try {
+            this.multiProjectRuntime!.contextFromRequest(req);
+          } catch (e) {
+            res.status(401).json({ error: (e as Error).message });
+            return;
+          }
+          req.url = `${basePath}${match[2]}${query ? `?${query}` : ''}`;
+        }
+        next();
+      });
+    }
     const apiGateway = this.apiGateway();
     apiGateway.initApp(app);
 
@@ -861,6 +904,11 @@ export class CubejsServerCore {
     context: DriverContext,
     options?: OrchestratorInitedOptions,
   ): Promise<BaseDriver> {
+    if (this.multiProjectRuntime) {
+      const driver = await this.resolveDriver(context, options);
+      await driver.testConnection();
+      return driver;
+    }
     // TODO (buntarb): this works fine without multiple data sources.
     if (!this.driver) {
       const driver = await this.resolveDriver(context, options);

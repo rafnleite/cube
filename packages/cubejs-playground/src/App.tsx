@@ -20,6 +20,7 @@ import {
 } from './events';
 import { useAppContext } from './hooks';
 import { QUERY_BUILDER_COLOR_TOKENS } from './QueryBuilderV2';
+import { ProjectSelector } from './components/ProjectSelector/ProjectSelector';
 
 const StyledLayoutContent = styled(Layout.Content)`
   height: 100%;
@@ -51,18 +52,7 @@ class App extends Component<PropsWithChildren<RouteComponentProps>, AppState> {
     isAppContextSet: false,
   };
 
-  async componentDidMount() {
-    setTimeout(() => this.setState({ showLoader: true }), 700);
-
-    window.addEventListener('unhandledrejection', (promiseRejectionEvent) => {
-      const error = promiseRejectionEvent.reason;
-      console.log(error);
-      const e = (error.stack || error).toString();
-      event('Playground Error', {
-        error: e,
-      });
-    });
-
+  async loadContext() {
     const res = await fetch('playground/context');
     const context = await res.json();
 
@@ -75,7 +65,22 @@ class App extends Component<PropsWithChildren<RouteComponentProps>, AppState> {
       dockerVersion: context.dockerVersion,
     });
 
-    this.setState({ context });
+    this.setState({ context, isAppContextSet: false });
+  }
+
+  async componentDidMount() {
+    setTimeout(() => this.setState({ showLoader: true }), 700);
+
+    window.addEventListener('unhandledrejection', (promiseRejectionEvent) => {
+      const error = promiseRejectionEvent.reason;
+      console.log(error);
+      const e = (error.stack || error).toString();
+      event('Playground Error', {
+        error: e,
+      });
+    });
+
+    await this.loadContext();
   }
 
   componentDidCatch(error, info) {
@@ -88,6 +93,10 @@ class App extends Component<PropsWithChildren<RouteComponentProps>, AppState> {
   render() {
     const { location, children } = this.props;
     const { context, fatalError, isAppContextSet, showLoader } = this.state;
+
+    if (context?.multiProject?.enabled && !context.multiProject.activeProject) {
+      return <ProjectSelector onReady={() => this.loadContext()} />;
+    }
 
     if (context != null && !isAppContextSet) {
       return (
@@ -120,7 +129,7 @@ class App extends Component<PropsWithChildren<RouteComponentProps>, AppState> {
           <StyledLayoutContent>
             {fatalError ? (
               <Alert
-                message="Error occured while rendering"
+                message="Ocorreu um erro ao renderizar a página"
                 description={fatalError.stack || ''}
                 type="error"
               />

@@ -1,0 +1,6 @@
+FROM cube-core-dev:base
+
+WORKDIR /workspace
+COPY . .
+
+CMD ["node", "packages/cubejs-server/bin/dev-server"]
