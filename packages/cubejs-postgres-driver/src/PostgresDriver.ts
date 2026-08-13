@@ -328,7 +328,15 @@ export class PostgresDriver<Config extends PostgresDriverConfiguration = Postgre
       executionTimeout: this.config.executionTimeout ? <number>(this.config.executionTimeout) * 1000 : 600000
     }
   ) {
-    await conn.query(`SET TIME ZONE '${this.config.storeTimezone || 'UTC'}'`);
+    const configuredTimezone = typeof this.config.storeTimezone === 'string'
+      ? this.config.storeTimezone.trim()
+      : '';
+    const storeTimezone = configuredTimezone
+      && !/^(undefined|null)$/i.test(configuredTimezone)
+      ? configuredTimezone
+      : 'UTC';
+
+    await conn.query(`SET TIME ZONE '${storeTimezone.replace(/'/g, "''")}'`);
     await conn.query(`SET statement_timeout TO ${options.executionTimeout}`);
 
     await this.loadUserDefinedTypes(conn);

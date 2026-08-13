@@ -44,6 +44,7 @@ import {
   FaPen,
   FaPlus,
   FaQuestion,
+  FaReadme,
   FaRegCircleCheck,
   FaRegCirclePlay,
   FaRegCircleQuestion,
@@ -56,6 +57,7 @@ import {
   FaTable,
   FaTableList,
   FaToggleOn,
+  FaTrash,
   FaTriangleExclamation,
   FaUpload,
   FaXmark,
@@ -170,6 +172,7 @@ export const PlusOutlined = makeIcon(FaPlus);
 export const QuestionCircleFilled = makeIcon(FaCircleQuestion);
 export const QuestionCircleOutlined = makeIcon(FaRegCircleQuestion);
 export const QuestionOutlined = makeIcon(FaQuestion);
+export const ReadmeOutlined = makeIcon(FaReadme);
 export const ReloadOutlined = makeIcon(FaArrowsRotate);
 export const RightOutlined = makeIcon(FaChevronRight);
 export const SearchOutlined = makeIcon(FaMagnifyingGlass);
@@ -181,6 +184,7 @@ export const TableOutlined = makeIcon(FaTable);
 export const TableListOutlined = makeIcon(FaTableList);
 export const ThunderboltFilled = makeIcon(FaBolt);
 export const ThunderboltOutlined = makeIcon(FaBolt);
+export const TrashOutlined = makeIcon(FaTrash);
 export const UploadOutlined = makeIcon(FaUpload);
 export const WarningFilled = makeIcon(FaTriangleExclamation);
 

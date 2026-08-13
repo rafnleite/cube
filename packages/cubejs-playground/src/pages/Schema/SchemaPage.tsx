@@ -1,22 +1,27 @@
 import React, { Component } from 'react';
-import { Layout, Modal, Empty, Typography, Button, Space, Popconfirm, message, notification } from 'antd';
+import { Layout, Modal, Empty, Typography, Button, Space, Popconfirm, message, notification, Input } from 'antd';
 import { RouterProps } from 'react-router-dom';
 import {
   ApartmentOutlined,
   CodeOutlined,
+  CopyOutlined,
+  EditOutlined,
+  SearchOutlined,
   TableListOutlined,
+  TrashOutlined,
 } from '../../shared/icons/FontAwesomeIcons';
 
 import { playgroundAction } from '../../events';
 import { Menu, Tabs, Tree } from '../../components';
 import { Alert, CubeLoader } from '../../atoms';
-import { playgroundFetch } from '../../shared/helpers';
+import { playgroundFetch, responseErrorMessage } from '../../shared/helpers';
 import { AppContext, AppContextConsumer } from '../../components/AppContext';
 import { ButtonDropdown } from '../../QueryBuilder/ButtonDropdown';
 import { SchemaFormat } from '../../types';
 import { SchemaFileEditor } from './SchemaFileEditor';
 import { CubeVisualEditor } from './CubeVisualEditor';
 import { CubeRelationshipDiagram } from './CubeRelationshipDiagram';
+import { CubeSampleDataModal } from './CubeSampleDataModal';
 import styled, { createGlobalStyle } from 'styled-components';
 
 const { Content, Sider } = Layout;
@@ -26,14 +31,14 @@ const { TabPane } = Tabs;
 
 const SCHEMA_EDITOR_DRAFT_KEY = 'cube-schema-editor-draft';
 
-async function responseErrorMessage(response: Response): Promise<string> {
-  const body = await response.text();
-  try {
-    const payload = JSON.parse(body);
-    return [payload.error, payload.details].filter(Boolean).join('\n') || body;
-  } catch (_e) {
-    return body || `Erro HTTP ${response.status}`;
+function cubeNameFromFileContent(fileName: string, content?: string): string | null {
+  if (!content) return null;
+  if (fileName.endsWith('.yml') || fileName.endsWith('.yaml')) {
+    const match = content.match(/^\s*-\s+name:\s*["']?([^\s"'#]+)["']?\s*$/m);
+    return match?.[1] || null;
   }
+  const match = content.match(/\bcube\s*\(\s*[`'\"]([^`'\"]+)[`'\"]/);
+  return match?.[1] || null;
 }
 
 const TablesPaneContent = styled.div`
@@ -110,7 +115,11 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
       editingContent: '',
       savingFile: false,
       deletingFile: false,
+      fileDialog: null,
+      fileDialogName: '',
+      fileDialogLoading: false,
       visualEditorFileName: null,
+      sampleCubeName: null,
       relationshipDiagramVisible: false
     };
   }
@@ -295,6 +304,17 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
     });
   }
 
+  openSampleData() {
+    const file = this.selectedFile();
+    if (!file) return;
+    const cubeName = cubeNameFromFileContent(file.fileName, file.content);
+    if (!cubeName) {
+      message.error('Não foi possível identificar o cubo neste arquivo');
+      return;
+    }
+    this.setState({ sampleCubeName: cubeName });
+  }
+
   recoverFromExpiredProjectSession(fileName: string, content: string, error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (!/Project session is missing or expired|Project credentials are required/i.test(errorMessage)) {
@@ -354,6 +374,93 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
       message.error(e?.message || 'Não foi possível salvar o arquivo');
       playgroundAction('Save File Fail', { fileName: visualEditorFileName, error: e?.toString?.() || String(e) });
       throw e;
+    }
+  }
+
+  cubeFileName(fileName: string) {
+    const separator = fileName.lastIndexOf('/');
+    return separator >= 0 ? fileName.slice(separator + 1) : fileName;
+  }
+
+  copyFileName(fileName: string) {
+    const baseName = this.cubeFileName(fileName);
+    const extensionMatch = baseName.match(/\.(yml|yaml|js)$/i);
+    const extension = extensionMatch ? extensionMatch[0] : '';
+    const stem = extension ? baseName.slice(0, -extension.length) : baseName;
+    const { files } = this.state;
+    let candidate = `${stem}_copy${extension}`;
+    let suffix = 2;
+    while (files.some((file) => file.fileName === `cubes/${candidate}`)) {
+      candidate = `${stem}_copy_${suffix}${extension}`;
+      suffix += 1;
+    }
+    return candidate;
+  }
+
+  openFileDialog(type: 'copy' | 'rename') {
+    const { selectedFile } = this.state;
+    if (!selectedFile) return;
+    this.setState({
+      fileDialog: type,
+      fileDialogName: type === 'copy' ? this.copyFileName(selectedFile) : this.cubeFileName(selectedFile),
+    });
+  }
+
+  closeFileDialog() {
+    if (this.state.fileDialogLoading) return;
+    this.setState({ fileDialog: null, fileDialogName: '' });
+  }
+
+  async submitFileDialog() {
+    const { selectedFile, fileDialog, fileDialogName } = this.state;
+    if (!selectedFile || !fileDialog) return;
+
+    const targetBaseName = fileDialogName.trim();
+    if (!targetBaseName || targetBaseName.includes('..') || targetBaseName.includes('/') || targetBaseName.includes('\\')) {
+      message.error('Informe um nome de arquivo válido');
+      return;
+    }
+    const targetFileName = `cubes/${targetBaseName}`;
+    if (targetFileName === selectedFile) {
+      message.error('O novo nome precisa ser diferente do atual');
+      return;
+    }
+    if (this.state.files.some((file) => file.fileName === targetFileName)) {
+      message.error('Já existe um arquivo com esse nome');
+      return;
+    }
+    if ((selectedFile.endsWith('.yml') || selectedFile.endsWith('.yaml'))
+      && !targetBaseName.endsWith('.yml') && !targetBaseName.endsWith('.yaml')) {
+      message.error('O arquivo YAML precisa manter a extensão .yml ou .yaml');
+      return;
+    }
+
+    this.setState({ fileDialogLoading: true });
+    try {
+      const endpoint = fileDialog === 'copy' ? 'playground/files/copy' : 'playground/files/rename';
+      const response = await playgroundFetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceFileName: selectedFile, targetFileName: targetBaseName }),
+      });
+      if (response.status !== 200) {
+        throw new Error(await responseErrorMessage(response));
+      }
+
+      await this.loadFiles();
+      this.setState({
+        selectedFile: targetFileName,
+        editingFileName: null,
+        editingContent: '',
+        visualEditorFileName: null,
+        fileDialog: null,
+        fileDialogName: '',
+      });
+      message.success(fileDialog === 'copy' ? 'Cubo copiado' : 'Arquivo renomeado');
+    } catch (e: any) {
+      message.error(e?.message || 'Não foi possível concluir a operação');
+    } finally {
+      this.setState({ fileDialogLoading: false });
     }
   }
 
@@ -451,7 +558,11 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
       editingContent,
       savingFile,
       deletingFile,
+      fileDialog,
+      fileDialogName,
+      fileDialogLoading,
       visualEditorFileName,
+      sampleCubeName,
       relationshipDiagramVisible,
     } = this.state;
 
@@ -579,7 +690,8 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
         >
           {selectedFile ? (
             <>
-              <Space style={{ marginTop: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, width: '100%' }}>
+                <Space>
                 {editingFileName === selectedFile ? (
                   <>
                     <Button
@@ -610,23 +722,80 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
                     Editor visual
                   </Button>
                 )}
-                <Popconfirm
-                  title="Excluir este cubo?"
-                  overlayClassName="cube-remove-popconfirm"
-                  okText="Excluir"
-                  cancelText="Cancelar"
-                  okButtonProps={{ danger: true, loading: deletingFile }}
-                  onConfirm={() => this.deleteSelectedFile()}
-                  disabled={deletingFile || savingFile}
-                >
-                  <Button danger loading={deletingFile} disabled={savingFile}>
-                    Excluir cubo
+                  <Button
+                    icon={<CopyOutlined />}
+                    disabled={Boolean(editingFileName) || deletingFile || fileDialogLoading}
+                    onClick={() => this.openFileDialog('copy')}
+                  >
+                    Copiar cubo
                   </Button>
-                </Popconfirm>
-              </Space>
+                  {(selectedFile.endsWith('.yml') || selectedFile.endsWith('.yaml')) && (
+                    <Button
+                      icon={<EditOutlined />}
+                      disabled={Boolean(editingFileName) || deletingFile || fileDialogLoading}
+                      onClick={() => this.openFileDialog('rename')}
+                    >
+                      Renomear arquivo
+                    </Button>
+                  )}
+                </Space>
+                <Space style={{ marginLeft: 'auto' }}>
+                  <Button
+                    icon={<SearchOutlined />}
+                    disabled={Boolean(editingFileName) || deletingFile || fileDialogLoading}
+                    onClick={() => this.openSampleData()}
+                  >
+                    Ver amostra de dados
+                  </Button>
+                  <Popconfirm
+                    title="Excluir este cubo?"
+                    overlayClassName="cube-remove-popconfirm"
+                    okText="Excluir"
+                    cancelText="Cancelar"
+                    okButtonProps={{ danger: true, loading: deletingFile }}
+                    onConfirm={() => this.deleteSelectedFile()}
+                    disabled={deletingFile || savingFile || fileDialogLoading}
+                  >
+                    <Button
+                      danger
+                      icon={<TrashOutlined />}
+                      loading={deletingFile}
+                      disabled={savingFile || fileDialogLoading}
+                    >
+                      Excluir cubo
+                    </Button>
+                  </Popconfirm>
+                </Space>
+              </div>
+
+              <Modal
+                title={fileDialog === 'copy' ? 'Copiar cubo' : 'Renomear arquivo do cubo'}
+                visible={Boolean(fileDialog)}
+                onCancel={() => this.closeFileDialog()}
+                onOk={() => this.submitFileDialog()}
+                okText={fileDialog === 'copy' ? 'Copiar' : 'Renomear'}
+                cancelText="Cancelar"
+                confirmLoading={fileDialogLoading}
+                destroyOnClose
+              >
+                <Input
+                  autoFocus
+                  value={fileDialogName}
+                  onChange={(event) => this.setState({ fileDialogName: event.target.value })}
+                  onPressEnter={() => this.submitFileDialog()}
+                />
+              </Modal>
+
+              <CubeSampleDataModal
+                visible={Boolean(sampleCubeName)}
+                cubeName={sampleCubeName}
+                title={selectedFile}
+                onClose={() => this.setState({ sampleCubeName: null })}
+              />
 
               <div style={{ marginTop: 16 }}>
                 <SchemaFileEditor
+                  key={selectedFile}
                   fileName={selectedFile}
                   value={editingFileName === selectedFile ? editingContent : this.selectedFileContent()}
                   readOnly={editingFileName !== selectedFile}
@@ -636,6 +805,7 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
                       this.setState({ editingContent: value });
                     }
                   }}
+                  onSave={() => this.saveEditing()}
                 />
               </div>
 

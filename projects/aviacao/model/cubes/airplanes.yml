@@ -16,3 +16,7 @@ cubes:
       - name: count
         type: count
     title: Aviões
+    joins:
+      - name: seats
+        sql: "{CUBE}.airplane_code = {seats}.airplane_code"
+        relationship: one_to_many

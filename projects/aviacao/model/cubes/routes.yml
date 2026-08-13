@@ -22,7 +22,8 @@ cubes:
       - name: route_no
         sql: route_no
         type: string
-        title: Número de rota
+        title: Número da rota
+        primary_key: true
       - name: validity
         sql: validity
         type: string
@@ -38,4 +39,5 @@ cubes:
         sql: duration
         type: sum
         title: Duração
+        drill_members: []
     title: Rotas

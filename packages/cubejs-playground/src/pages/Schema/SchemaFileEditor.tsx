@@ -279,11 +279,12 @@ type Props = {
   fileName: string;
   value: string;
   onChange: (value: string) => void;
+  onSave?: () => void | Promise<void>;
   readOnly?: boolean;
   tablesSchema?: TablesSchema;
 };
 
-export function SchemaFileEditor({ fileName, value, onChange, readOnly = false, tablesSchema }: Props) {
+export function SchemaFileEditor({ fileName, value, onChange, onSave, readOnly = false, tablesSchema }: Props) {
   const language = useMemo(() => languageFromFileName(fileName), [fileName]);
 
   // `onMount` only runs once, so the latest `tablesSchema` must be read from a
@@ -293,7 +294,18 @@ export function SchemaFileEditor({ fileName, value, onChange, readOnly = false, 
     tablesSchemaRef.current = tablesSchema;
   }, [tablesSchema]);
 
+  const onSaveRef = useRef(onSave);
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
+
   const onMount = useCallback<OnMount>((editor, monaco) => {
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+      if (!editor.getOption(monaco.editor.EditorOption.readOnly)) {
+        void onSaveRef.current?.();
+      }
+    });
+
     // Preserves the bundled YAML config (comments/brackets/folding) and adds the
     // missing rule to indent after a populated "- " list item line.
     const languageConfig = language === 'yaml'

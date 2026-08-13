@@ -6,6 +6,17 @@ export function ucfirst(s: string): string {
   return s[0].toUpperCase() + s.slice(1);
 }
 
+export async function responseErrorMessage(response: Response, includeDetails = true): Promise<string> {
+  const body = await response.text();
+  try {
+    const payload = JSON.parse(body);
+    const messages = includeDetails ? [payload.error, payload.details] : [payload.error];
+    return messages.filter(Boolean).join('\n') || body;
+  } catch (_e) {
+    return body || `Erro HTTP ${response.status}`;
+  }
+}
+
 export function playgroundFetch(url, options: any = {}) {
   const { retries = 0, ...restOptions } = options;
 

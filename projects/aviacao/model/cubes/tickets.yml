@@ -3,6 +3,11 @@ cubes:
     sql_table: bookings.tickets
     data_source: default
     dimensions:
+      - name: ticket_no
+        sql: ticket_no
+        type: string
+        primary_key: true
+        title: Número do bilhete
       - name: book_ref
         sql: book_ref
         type: string
@@ -10,6 +15,7 @@ cubes:
       - name: outbound
         sql: outbound
         type: boolean
+        title: Ida
       - name: passenger_id
         sql: passenger_id
         type: string
@@ -18,12 +24,11 @@ cubes:
         sql: passenger_name
         type: string
         title: Nome do passageiro
-      - name: ticket_no
-        sql: ticket_no
-        type: string
-        primary_key: true
-        title: Número do bilhete
     measures:
       - name: count
         type: count
     title: Bilhetes
+    joins:
+      - name: segments
+        sql: '{CUBE}.ticket_no = {segments}.ticket_no'
+        relationship: one_to_many

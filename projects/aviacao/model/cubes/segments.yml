@@ -3,14 +3,18 @@ cubes:
     sql_table: bookings.segments
     data_source: default
     joins:
-      - name: flights
-        sql: '{CUBE}.flight_id = {flights}.flight_id'
+      - name: boarding_passes
+        sql: "{CUBE}.segment_id = {boarding_passes}.segment_id"
+        relationship: one_to_one
+      - name: timetable
+        sql: "{CUBE}.flight_id = {timetable}.flight_id"
         relationship: many_to_one
     dimensions:
-      - name: id
+      - name: segment_id
         sql: CONCAT({CUBE}.ticket_no, '-', {CUBE}.flight_id)
         type: string
         primary_key: true
+        title: ID do segmento
       - name: fare_conditions
         sql: fare_conditions
         type: string
@@ -23,9 +27,6 @@ cubes:
         sql: ticket_no
         type: string
         title: Número do bilhete
-      - name: flight_id
-        sql: flight_id
-        type: string
     measures:
       - name: count
         type: count

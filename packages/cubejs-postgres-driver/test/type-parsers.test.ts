@@ -13,14 +13,14 @@ describe('type parsers', () => {
 
   test('timestampTypeParser (OID 1114)', () => {
     // no fractional seconds
-    expect(timestampTypeParser('2020-01-01 12:34:56')).toBe('2020-01-01T12:34:56.000');
+    expect(timestampTypeParser('2020-01-01 12:34:56')).toBe('2020-01-01T12:34:56.000Z');
     // millisecond precision
-    expect(timestampTypeParser('2020-01-01 12:34:56.789')).toBe('2020-01-01T12:34:56.789');
+    expect(timestampTypeParser('2020-01-01 12:34:56.789')).toBe('2020-01-01T12:34:56.789Z');
     // microsecond precision is truncated to ms
-    expect(timestampTypeParser('2020-01-01 12:34:56.123456')).toBe('2020-01-01T12:34:56.123');
+    expect(timestampTypeParser('2020-01-01 12:34:56.123456')).toBe('2020-01-01T12:34:56.123Z');
     // sub-millisecond precision is padded
-    expect(timestampTypeParser('2020-01-01 12:34:56.5')).toBe('2020-01-01T12:34:56.500');
-    expect(timestampTypeParser('2020-01-01 12:34:56.05')).toBe('2020-01-01T12:34:56.050');
+    expect(timestampTypeParser('2020-01-01 12:34:56.5')).toBe('2020-01-01T12:34:56.500Z');
+    expect(timestampTypeParser('2020-01-01 12:34:56.05')).toBe('2020-01-01T12:34:56.050Z');
   });
 
   test('timestampTzTypeParser (OID 1184)', () => {

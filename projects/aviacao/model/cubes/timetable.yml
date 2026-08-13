@@ -3,8 +3,11 @@ cubes:
     sql_table: bookings.timetable
     data_source: default
     joins:
-      - name: flights
-        sql: '{CUBE}.flight_id = {flights}.flight_id'
+      - name: airplanes
+        sql: '{CUBE}.airplane_code = {airplanes}.airplane_code'
+        relationship: many_to_one
+      - name: airports_arrival
+        sql: '{CUBE}.arrival_airport = {airports_arrival}.airport_code'
         relationship: many_to_one
     dimensions:
       - name: id
@@ -14,45 +17,59 @@ cubes:
       - name: flight_id
         sql: flight_id
         type: string
+        title: ID do voo
       - name: airplane_code
         sql: airplane_code
         type: string
+        title: Código do avião
       - name: arrival_airport
         sql: arrival_airport
         type: string
+        title: Aeroporto de chegada
       - name: departure_airport
         sql: departure_airport
         type: string
+        title: Aeroporto de saída
       - name: route_no
         sql: route_no
         type: string
+        title: Número da rota
       - name: status
         sql: status
         type: string
+        title: Status
       - name: actual_arrival
         sql: actual_arrival
         type: time
+        title: Horário de chegada UTC real
       - name: actual_arrival_local
         sql: actual_arrival_local
         type: time
+        title: Horário de chegada local real
       - name: actual_departure
         sql: actual_departure
         type: time
+        title: Horário de partida UTC real
       - name: actual_departure_local
         sql: actual_departure_local
         type: time
+        title: Horário de partida local real
       - name: scheduled_arrival
         sql: scheduled_arrival
         type: time
+        title: Horário de chegada UTC agendado
       - name: scheduled_arrival_local
         sql: scheduled_arrival_local
         type: time
+        title: Horário de chegada local agendado
       - name: scheduled_departure
         sql: scheduled_departure
         type: time
+        title: Horário de partida UTC agendado
       - name: scheduled_departure_local
         sql: scheduled_departure_local
         type: time
+        title: Horário de partida local agendado
     measures:
       - name: count
         type: count

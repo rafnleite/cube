@@ -3,12 +3,9 @@ cubes:
     title: Cartões de embarque
     sql_table: bookings.boarding_passes
     data_source: default
-    joins:
-      - name: flights
-        sql: '{CUBE}.flight_id = {flights}.flight_id'
-        relationship: many_to_one
+    joins: []
     dimensions:
-      - name: id
+      - name: segment_id
         sql: CONCAT({CUBE}.ticket_no, '-', {CUBE}.flight_id)
         type: string
         primary_key: true
@@ -21,9 +18,6 @@ cubes:
         sql: ticket_no
         type: string
         title: Número do bilhete
-      - name: flight_id
-        sql: flight_id
-        type: string
       - name: boarding_time
         sql: boarding_time
         type: time

@@ -32,6 +32,14 @@ export type CubeDiagramRelationship = {
   sql: string;
 };
 
+export type CubeDiagramMember = {
+  name: string;
+  title?: string;
+  sql?: string;
+  type?: string;
+  primaryKey?: boolean;
+};
+
 export type CubeDiagramModel = {
   name: string;
   title?: string;
@@ -40,6 +48,8 @@ export type CubeDiagramModel = {
   dataSource: string;
   sourceType: 'sql_table' | 'sql' | 'unknown';
   source?: string;
+  dimensions?: CubeDiagramMember[];
+  measures?: CubeDiagramMember[];
 };
 
 function jsPropertyName(property: t.ObjectMethod | t.ObjectProperty | t.SpreadElement): string | null {
@@ -91,6 +101,62 @@ function yamlStaticString(pair: Pair | undefined): string | undefined {
   return pair && isScalar(pair.value) && pair.value.value != null
     ? String(pair.value.value)
     : undefined;
+}
+
+function jsStaticBoolean(node: t.Node | null | undefined): boolean | undefined {
+  return t.isBooleanLiteral(node) ? node.value : undefined;
+}
+
+function readJsMembers(cubeDefinition: t.ObjectExpression, section: string): CubeDiagramMember[] {
+  const sectionProperty = jsProperty(cubeDefinition, [section]);
+  if (!sectionProperty || !t.isObjectExpression(sectionProperty.value) && !t.isArrayExpression(sectionProperty.value)) {
+    return [];
+  }
+
+  const members: CubeDiagramMember[] = [];
+  const readMember = (name: string | undefined, value: t.Node | null | undefined) => {
+    if (!name || !t.isObjectExpression(value)) return;
+    const primaryKey = jsStaticBoolean(jsProperty(value, ['primaryKey', 'primary_key'])?.value);
+    members.push({
+      name,
+      title: jsStaticString(jsProperty(value, ['title'])?.value),
+      sql: jsStaticString(jsProperty(value, ['sql'])?.value),
+      type: jsStaticString(jsProperty(value, ['type'])?.value),
+      ...(primaryKey === undefined ? {} : { primaryKey }),
+    });
+  };
+
+  if (t.isObjectExpression(sectionProperty.value)) {
+    sectionProperty.value.properties.forEach(property => {
+      if (t.isObjectProperty(property)) readMember(jsPropertyName(property) || undefined, property.value);
+    });
+  } else {
+    sectionProperty.value.elements.forEach(element => {
+      if (!t.isObjectExpression(element)) return;
+      readMember(jsStaticString(jsProperty(element, ['name'])?.value), element);
+    });
+  }
+  return members;
+}
+
+function readYamlMembers(cubeDefinition: YAMLMap, section: string): CubeDiagramMember[] {
+  const sectionPair = yamlPair(cubeDefinition, [section]);
+  if (!sectionPair || !isSeq(sectionPair.value)) return [];
+
+  return sectionPair.value.items.flatMap((item) => {
+    if (!isMap(item)) return [];
+    const primaryKeyPair = yamlPair(item, ['primary_key', 'primaryKey']);
+    const primaryKey = primaryKeyPair && isScalar(primaryKeyPair.value)
+      ? Boolean(primaryKeyPair.value.value)
+      : undefined;
+    return [{
+      name: yamlStaticString(yamlPair(item, ['name'])) || '',
+      title: yamlStaticString(yamlPair(item, ['title'])),
+      sql: yamlStaticString(yamlPair(item, ['sql'])),
+      type: yamlStaticString(yamlPair(item, ['type'])),
+      ...(primaryKey === undefined ? {} : { primaryKey }),
+    }].filter(member => member.name);
+  });
 }
 
 function setYamlScalar(object: YAMLMap, name: string, value: string): void {
@@ -491,6 +557,8 @@ export class CubeRelationshipReader implements CubeConverterInterface {
       dataSource,
       sourceType: sqlTable ? 'sql_table' : sql ? 'sql' : 'unknown',
       source,
+      dimensions: readJsMembers(cubeDefinition, 'dimensions'),
+      measures: readJsMembers(cubeDefinition, 'measures'),
     });
 
     const joinsProperty = jsProperty(cubeDefinition, ['joins']);
@@ -555,6 +623,8 @@ export class CubeRelationshipReader implements CubeConverterInterface {
       dataSource,
       sourceType: sqlTable ? 'sql_table' : sql ? 'sql' : 'unknown',
       source: yamlStaticString(sqlTable || sql),
+      dimensions: readYamlMembers(cubeDefinition, 'dimensions'),
+      measures: readYamlMembers(cubeDefinition, 'measures'),
     });
 
     const joinsPair = yamlPair(cubeDefinition, ['joins']);

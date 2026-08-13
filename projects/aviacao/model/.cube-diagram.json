@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "cubes": {
+    "cubes/airplanes.yml": {
+      "name": "airplanes",
+      "source": "bookings.airplanes",
+      "position": {
+        "x": 1149.1635259545687,
+        "y": 762.2917040323473
+      }
+    },
+    "cubes/airports_arrival.yml": {
+      "name": "airports_arrival",
+      "source": "bookings.airports",
+      "position": {
+        "x": 1082.6031977039672,
+        "y": 1284.661790706214
+      }
+    },
+    "cubes/airports_departure.yml": {
+      "name": "airports_departure",
+      "source": "bookings.airports",
+      "position": {
+        "x": -39.71835649347082,
+        "y": 1240.417721047984
+      }
+    },
+    "cubes/boarding_passes.yml": {
+      "name": "boarding_passes",
+      "source": "bookings.boarding_passes",
+      "position": {
+        "x": 415.95611200593225,
+        "y": 226.90980971651504
+      }
+    },
+    "cubes/bookings.yml": {
+      "name": "bookings",
+      "source": "bookings.bookings",
+      "position": {
+        "x": -1239.4806023981243,
+        "y": 231.9274584731392
+      }
+    },
+    "cubes/flights.yml": {
+      "name": "flights",
+      "source": "bookings.flights",
+      "position": {
+        "x": 1209.091930839892,
+        "y": -447.80860362089635
+      }
+    },
+    "cubes/routes.yml": {
+      "name": "routes",
+      "source": "bookings.routes",
+      "position": {
+        "x": 2061.590055844089,
+        "y": -78.1173409974368
+      }
+    },
+    "cubes/seats.yml": {
+      "name": "seats",
+      "source": "bookings.seats",
+      "position": {
+        "x": 1731.9694016919445,
+        "y": 965.2119830058884
+      }
+    },
+    "cubes/segments.yml": {
+      "name": "segments",
+      "source": "bookings.segments",
+      "position": {
+        "x": -51.08875095276673,
+        "y": 436.8623491230695
+      }
+    },
+    "cubes/tickets.yml": {
+      "name": "tickets",
+      "source": "bookings.tickets",
+      "position": {
+        "x": -680.7474198866823,
+        "y": 350.36988250462275
+      }
+    },
+    "cubes/timetable.yml": {
+      "name": "timetable",
+      "source": "bookings.timetable",
+      "position": {
+        "x": 544.6783175888246,
+        "y": 883.1649839834982
+      }
+    }
+  }
+}

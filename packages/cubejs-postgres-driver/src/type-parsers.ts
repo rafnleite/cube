@@ -6,12 +6,12 @@ export const dateTypeParser = (val: string): string => `${val}T00:00:00.000`;
 /** OID 1114 — `YYYY-MM-DD HH:mm:ss` or `YYYY-MM-DD HH:mm:ss.f{1,6}`, no TZ. */
 export const timestampTypeParser = (val: string): string => {
   if (val.length === 19) {
-    return `${val.slice(0, 10)}T${val.slice(11, 19)}.000`;
+    return `${val.slice(0, 10)}T${val.slice(11, 19)}.000Z`;
   }
 
   // val[19] is '.'; pad / truncate fractional digits to exactly 3.
   const ms = `${val.slice(20, 23)}00`.slice(0, 3);
-  return `${val.slice(0, 10)}T${val.slice(11, 19)}.${ms}`;
+  return `${val.slice(0, 10)}T${val.slice(11, 19)}.${ms}Z`;
 };
 
 /**

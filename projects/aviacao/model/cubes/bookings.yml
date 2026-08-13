@@ -8,14 +8,16 @@ cubes:
         type: string
         title: Referência
         primary_key: true
-      - name: total_amount
-        sql: total_amount
-        type: string
       - name: book_date
         sql: book_date
         type: time
         title: Data de reserva
     measures:
+      - name: total_amoun
+        sql: "{CUBE}.total_amount"
+        type: sum
+        drill_members: []
+        title: Valor total
       - name: count
         type: count
     title: Reserva

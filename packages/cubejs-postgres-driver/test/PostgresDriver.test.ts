@@ -49,7 +49,7 @@ describe('PostgresDriver', () => {
       {
         // Date in UTC
         date: '2020-01-01T00:00:00.000',
-        timestamp: '2020-01-01T00:00:00.000',
+        timestamp: '2020-01-01T00:00:00.000Z',
         // converted to utc
         timestamptz: '2019-12-31T22:00:00.000',
         // Numerics as string

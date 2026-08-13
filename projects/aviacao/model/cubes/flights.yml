@@ -35,3 +35,7 @@ cubes:
       - name: count
         type: count
     title: Voos
+    joins:
+      - name: routes
+        sql: "{CUBE}.route_no = {routes}.route_no"
+        relationship: many_to_one

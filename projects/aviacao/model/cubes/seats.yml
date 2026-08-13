@@ -19,6 +19,7 @@ cubes:
         sql: "CONCAT({CUBE}.airplane_code, '-', {CUBE}.seat_no)"
         type: string
         primary_key: true
+        title: ID do assento do avião
     measures:
       - name: count
         type: count

@@ -1,12 +1,13 @@
 cubes:
-  - name: airports
+  - name: airports_departure
     sql_table: bookings.airports
     data_source: default
     dimensions:
       - name: airport_code
         sql: airport_code
         type: string
-        title: Código
+        title: Código do aeroporto
+        primary_key: true
       - name: airport_name
         sql: airport_name
         type: string
@@ -26,4 +27,8 @@ cubes:
     measures:
       - name: count
         type: count
-    title: Aeroportos
+    title: Aeroportos partida
+    joins:
+      - name: timetable
+        sql: "{CUBE}.airport_code = {timetable}.departure_airport"
+        relationship: one_to_many

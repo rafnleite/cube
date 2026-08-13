@@ -2,10 +2,12 @@
 import dotenv from '@cubejs-backend/dotenv';
 import {
   CubePreAggregationConverter,
+  CubeDimensionConverter,
   CubePrimaryKeyConverter,
   CubeRelationshipConverter,
   CubeRelationshipReader,
   CubeSchemaConverter,
+  CubeSchemaItemConverter,
   ScaffoldingTemplate,
   SchemaFormat,
 } from '@cubejs-backend/schema-compiler';
@@ -42,6 +44,15 @@ type DevServerOptions = {
   multiProjectRuntime?: MultiProjectRuntime;
 };
 
+class SchemaMutationError extends Error {
+  public readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 const JINJA_SYNTAX = /{%|%}|{{|}}/i;
 
 function validateYamlSyntax(fileName: string, content: string): string | null {
@@ -73,6 +84,213 @@ function compilerValidationReason(error: any): string {
     .slice(0, 4)
     .join('\n')
     .trim();
+}
+
+function isSafeSchemaFileName(fileName: unknown): fileName is string {
+  return typeof fileName === 'string'
+    && fileName.length > 0
+    && !path.isAbsolute(fileName)
+    && !fileName.includes('..')
+    && !fileName.includes('\\');
+}
+
+function isSafeCubeFileName(fileName: unknown): fileName is string {
+  return isSafeSchemaFileName(fileName)
+    && path.dirname(fileName) === 'cubes';
+}
+
+function isSafeCubeFileBaseName(fileName: unknown): fileName is string {
+  return isSafeSchemaFileName(fileName)
+    && path.basename(fileName) === fileName
+    && !fileName.includes('/');
+}
+
+const DIAGRAM_STATE_FILE = '.cube-diagram.json';
+
+function diagramStatePath(repository: { localPath(): string }): string {
+  return path.resolve(repository.localPath(), DIAGRAM_STATE_FILE);
+}
+
+function sanitizeDiagramState(input: any): any {
+  const cubes: Record<string, any> = {};
+  if (input?.cubes && typeof input.cubes === 'object' && !Array.isArray(input.cubes)) {
+    for (const [key, value] of Object.entries(input.cubes)) {
+      const item = value as any;
+      if (!key || !item || typeof item !== 'object') continue;
+      const position = item.position;
+      if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.y)) continue;
+      cubes[key] = {
+        name: typeof item.name === 'string' ? item.name : undefined,
+        source: typeof item.source === 'string' ? item.source : undefined,
+        position: { x: position.x, y: position.y },
+      };
+    }
+  }
+
+  return {
+    version: 1,
+    cubes,
+  };
+}
+
+function copiedCubeName(fileName: string): string {
+  const baseName = path.basename(fileName).replace(/\.(yml|yaml)$/i, '');
+  const normalized = baseName.replace(/[^A-Za-z0-9_]/g, '_');
+  return normalized.match(/^\d/) ? `cube_${normalized}` : normalized || 'cube_copy';
+}
+
+function renameYamlCubeInSource(source: string, currentName: unknown, nextName: string): string | null {
+  const cubeNameLine = /^(\s*-\s+name:\s*)(?:(['"])(.*?)\2|([^\r\n#]+?))(\s*(?:#.*)?)$/m;
+  const match = source.match(cubeNameLine);
+  if (!match) return null;
+
+  const parsedName = match[3] ?? match[4]?.trim();
+  if (parsedName !== String(currentName)) return null;
+
+  const replacementName = match[2] ? `${match[2]}${nextName}${match[2]}` : nextName;
+  return source.replace(match[0], `${match[1]}${replacementName}${match[5]}`);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function quoteIdentifier(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function postgresSampleCastType(type: unknown): string {
+  const normalized = String(type || '').trim().toLowerCase();
+  const aliases: Record<string, string> = {
+    bpchar: 'char',
+    float4: 'real',
+    float8: 'double precision',
+    int2: 'smallint',
+    int4: 'integer',
+    int8: 'bigint',
+    timestamptz: 'timestamp with time zone',
+    timestamp: 'timestamp without time zone',
+    timetz: 'time with time zone',
+  };
+  const canonical = aliases[normalized] || normalized;
+  const allowedTypes = new Set([
+    'bigint', 'boolean', 'char', 'character', 'character varying', 'date',
+    'double precision', 'integer', 'numeric', 'real', 'smallint', 'text',
+    'time', 'time without time zone', 'time with time zone', 'timestamp',
+    'timestamp without time zone', 'timestamp with time zone', 'uuid', 'varchar',
+  ]);
+  return allowedTypes.has(canonical) ? canonical : 'text';
+}
+
+async function postgresSampleRows(
+  driver: BaseDriver,
+  source: string,
+  projection: string,
+  limit: number,
+  requestId: string,
+): Promise<Record<string, unknown>[]> {
+  let canUseTableSample = false;
+  let estimatedRows: number | null = null;
+  const sourceParts = source.split('.').map(part => part.replace(/^"|"$/g, ''));
+
+  if (sourceParts.length === 2) {
+    const relationInfo = await driver.query<{ relkind: string; reltuples: number | string }>(
+      `SELECT c.relkind, c.reltuples
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = $1 AND c.relname = $2`,
+      [sourceParts[0], sourceParts[1]],
+      { requestId } as any
+    );
+    const relation = relationInfo.find(row => ['r', 'm', 'p'].includes(String(row.relkind)));
+    canUseTableSample = Boolean(relation);
+    const relationEstimate = relation ? Number(relation.reltuples) : NaN;
+    if (Number.isFinite(relationEstimate) && relationEstimate >= 0) {
+      estimatedRows = relationEstimate;
+    }
+  }
+
+  let rows: Record<string, unknown>[] = [];
+  if (canUseTableSample && (estimatedRows === null || estimatedRows > limit)) {
+    for (const percentage of [1, 5, 10]) {
+      try {
+        rows = await driver.query<Record<string, unknown>>(
+          `SELECT ${projection} FROM ${source} TABLESAMPLE SYSTEM (${percentage}) LIMIT ${limit}`,
+          [],
+          { requestId } as any
+        );
+        if (rows.length >= limit) break;
+      } catch {
+        // Views and PostgreSQL-compatible sources can reject TABLESAMPLE.
+        rows = [];
+        break;
+      }
+    }
+  }
+
+  if (rows.length < limit) {
+    rows = await driver.query<Record<string, unknown>>(
+      `SELECT ${projection} FROM ${source} LIMIT ${limit}`,
+      [],
+      { requestId } as any
+    );
+  }
+
+  return rows;
+}
+
+function cubeExpressionColumns(sql: unknown): string[] {
+  if (typeof sql !== 'string') return [];
+  return [...sql.matchAll(/\{CUBE\}\.([A-Za-z_][A-Za-z0-9_]*)/g)]
+    .map(match => match[1])
+    .filter((column, index, columns) => columns.indexOf(column) === index);
+}
+
+function injectSampleKeyJoin(
+  sql: string,
+  source: string,
+  cubeName: string,
+  keyColumns: string[],
+  keyRows: unknown[][],
+  params: unknown[],
+  columnTypes: Map<string, string>,
+): [string, unknown[]] | null {
+  if (!keyRows.length || !keyColumns.length) return null;
+
+  const relationPattern = source
+    .replace(/"/g, '')
+    .split('.')
+    .map(part => `"?${escapeRegExp(part)}"?`)
+    .join('\\s*\\.\\s*');
+  const aliasPattern = `(?:AS\\s+)?"?${escapeRegExp(cubeName)}"?`;
+  const fromPattern = new RegExp(`FROM\\s+${relationPattern}\\s+${aliasPattern}`, 'i');
+  const fromMatch = sql.match(fromPattern);
+  if (!fromMatch || fromMatch.index == null) return null;
+
+  let nextParameter = params.length;
+  const valuesSql = keyRows.map(row => (
+    `(${keyColumns.map(column => `$${++nextParameter}::${postgresSampleCastType(columnTypes.get(column.toLowerCase()))}`).join(', ')})`
+  )).join(', ');
+  const sampleAlias = '__cube_sample_keys';
+  const keyList = keyColumns.map(quoteIdentifier).join(', ');
+  const cubeAlias = quoteIdentifier(cubeName);
+  const joinConditions = keyColumns.map(column => (
+    `${cubeAlias}.${quoteIdentifier(column)} = ${sampleAlias}.${quoteIdentifier(column)}`
+  )).join(' AND ');
+  const sampleJoin = ` JOIN (VALUES ${valuesSql}) AS ${sampleAlias} (${keyList}) ON ${joinConditions}`;
+  const insertionPoint = fromMatch.index + fromMatch[0].length;
+  const updatedSql = `${sql.slice(0, insertionPoint)}${sampleJoin}${sql.slice(insertionPoint)}`;
+  return [updatedSql, [...params, ...keyRows.flatMap(row => row)]];
+}
+
+function renameYamlCubeReferences(source: string, currentName: string, nextName: string): string {
+  const escapedName = escapeRegExp(currentName);
+  return source
+    .replace(
+      new RegExp(`^(\\s*-\\s+name:\\s*)${escapedName}(\\s*(?:#.*)?)$`, 'gm'),
+      `$1${nextName}$2`,
+    )
+    .replace(new RegExp(`\\{${escapedName}\\}`, 'g'), `{${nextName}}`);
 }
 
 export class DevServer {
@@ -214,12 +432,41 @@ export class DevServer {
           const dataSource = evaluatedCube?.dataSource || model.dataSource || 'default';
           const metaCube = metaCubes.find(cube => cube.config?.name === model.name)?.config;
           const primaryKeyNames = compilers.cubeEvaluator.primaryKeys?.[model.name] || [];
+          const configuredDimensions = Array.isArray(model.dimensions) && model.dimensions.length
+            ? model.dimensions
+            : Array.isArray(metaCube?.dimensions)
+            ? metaCube.dimensions
+            : Object.entries(evaluatedCube?.dimensions || {}).map(([name, dimension]) => ({ name, ...(dimension as any) }));
+          const configuredMeasures = Array.isArray(model.measures) && model.measures.length
+            ? model.measures
+            : Array.isArray(metaCube?.measures)
+            ? metaCube.measures
+            : Object.entries(evaluatedCube?.measures || {}).map(([name, measure]) => ({ name, ...(measure as any) }));
           const diagramCube: any = {
             ...model,
             title: metaCube?.title || model.title,
             dataSource,
             hasPrimaryKey: Boolean(primaryKeyNames.length),
             primaryKeyNames,
+            dimensions: configuredDimensions.map((dimension: any) => ({
+              name: String(dimension?.name || ''),
+              title: typeof dimension?.title === 'string' ? dimension.title : undefined,
+              sql: typeof dimension?.sql === 'string' ? dimension.sql : undefined,
+              type: typeof dimension?.type === 'string' ? dimension.type : undefined,
+              latitude: dimension?.latitude && typeof dimension.latitude === 'object'
+                ? { sql: typeof dimension.latitude.sql === 'string' ? dimension.latitude.sql : undefined }
+                : undefined,
+              longitude: dimension?.longitude && typeof dimension.longitude === 'object'
+                ? { sql: typeof dimension.longitude.sql === 'string' ? dimension.longitude.sql : undefined }
+                : undefined,
+              primaryKey: Boolean(dimension?.primaryKey || dimension?.primary_key),
+            })).filter(dimension => dimension.name),
+            measures: configuredMeasures.map((measure: any) => ({
+              name: String(measure?.name || ''),
+              title: typeof measure?.title === 'string' ? measure.title : undefined,
+              sql: typeof measure?.sql === 'string' ? measure.sql : undefined,
+              type: typeof measure?.type === 'string' ? measure.type : undefined,
+            })).filter(measure => measure.name),
             columns: [],
           };
 
@@ -277,20 +524,34 @@ export class DevServer {
             if (!columns?.length) {
               columns = await loadCompiledColumns();
             }
-            const dimensionColumns = Object.entries(evaluatedCube?.dimensions || {}).map(([name, dimension]: [string, any]) => ({
-              name,
-              type: dimension?.type ? String(dimension.type) : undefined,
-            }));
-            const columnNames = new Set((columns || []).map(column => String(column.name).toLowerCase()));
-            const allColumns = [
-              ...(columns || []),
-              ...dimensionColumns.filter(column => !columnNames.has(column.name.toLowerCase())),
-            ];
+            const physicalColumnsByName = new Map(
+              (columns || []).map(column => [String(column.name).toLowerCase(), column])
+            );
+            const dimensionNames = new Set<string>();
+            const dimensionColumns = Object.entries(evaluatedCube?.dimensions || {}).map(([name, dimension]: [string, any]) => {
+              const normalizedName = name.toLowerCase();
+              const physicalColumn = physicalColumnsByName.get(normalizedName);
+              dimensionNames.add(normalizedName);
 
-            if (!allColumns.length) {
+              return physicalColumn || {
+                name,
+                type: dimension?.type ? String(dimension.type) : undefined,
+              };
+            });
+            const allColumns = [
+              ...dimensionColumns,
+              ...(columns || []).filter(column => !dimensionNames.has(String(column.name).toLowerCase())),
+            ];
+            const uniqueColumns = allColumns.filter((column, index, sourceColumns) => (
+              sourceColumns.findIndex(candidate => (
+                String(candidate.name).toLowerCase() === String(column.name).toLowerCase()
+              )) === index
+            ));
+
+            if (!uniqueColumns.length) {
               throw new Error('The database driver did not return column metadata');
             }
-            diagramCube.columns = allColumns.map(column => {
+            diagramCube.columns = uniqueColumns.map(column => {
               const name = String(column.name);
               const normalizedName = name.toLowerCase();
               return {
@@ -319,6 +580,71 @@ export class DevServer {
           await Promise.allSettled(Array.from(drivers.values()).map(driver => driver.release?.()));
         }
       }
+    };
+
+    const saveValidatedSchemaChange = async (options: {
+      definitions: Awaited<ReturnType<typeof loadRelationshipDefinitions>>;
+      cubeName: string;
+      originalFile: any;
+      converter: CubeSchemaConverter;
+      invalidMessage: (error: any) => string;
+      rollbackRequestId: string;
+      changedDuringValidationMessage?: string;
+    }) => {
+      const {
+        definitions,
+        cubeName,
+        originalFile,
+        converter,
+        invalidMessage,
+        rollbackRequestId,
+      } = options;
+      const { repository, context, requestId } = definitions;
+
+      await converter.generate(cubeName);
+      const updatedFile = converter.getSourceFiles().find(file => file.cubeName === cubeName);
+      if (!updatedFile) {
+        throw new SchemaMutationError(404, `Cube '${cubeName}' was not found`);
+      }
+
+      const currentFile = (await repository.dataSchemaFiles())
+        .find(file => file.fileName === updatedFile.fileName);
+      if (!currentFile || currentFile.content !== originalFile.content) {
+        throw new SchemaMutationError(409, 'O arquivo mudou enquanto a alteração era preparada. Recarregue o diagrama e tente novamente.');
+      }
+
+      repository.writeDataSchemaFile(updatedFile.fileName, updatedFile.source);
+      try {
+        const compilerApi = await this.cubejsServer.getCompilerApi(context);
+        await compilerApi.getCompilers({ requestId });
+      } catch (error: any) {
+        const fileAfterFailure = (await repository.dataSchemaFiles())
+          .find(file => file.fileName === updatedFile.fileName);
+        if (fileAfterFailure?.content === updatedFile.source) {
+          repository.writeDataSchemaFile(originalFile.fileName, originalFile.content);
+          try {
+            const compilerApi = await this.cubejsServer.getCompilerApi(context);
+            await compilerApi.getCompilers({ requestId: rollbackRequestId });
+          } catch (_rollbackError) {
+            // Preserve the original source even if rollback compilation fails.
+          }
+        } else {
+          throw new SchemaMutationError(
+            409,
+            options.changedDuringValidationMessage
+              || 'O arquivo mudou enquanto a alteração era validada. Recarregue o diagrama e tente novamente.'
+          );
+        }
+        throw new SchemaMutationError(400, invalidMessage(error));
+      }
+
+      const savedFile = (await repository.dataSchemaFiles())
+        .find(file => file.fileName === updatedFile.fileName);
+      if (savedFile?.content !== updatedFile.source) {
+        throw new SchemaMutationError(409, 'O arquivo mudou enquanto a alteração era validada. Recarregue o diagrama para ver a versão atual.');
+      }
+
+      return updatedFile;
     };
 
     app.get('/playground/projects', catchErrors(async (_req, res) => {
@@ -519,6 +845,282 @@ export class DevServer {
       res.json(diagram);
     }));
 
+    app.post('/playground/schema/sample/count', catchErrors(async (req: Request, res: Response) => {
+      this.cubejsServer.event('Dev Server Schema Sample Count Load');
+      const { cubeName, mode = 'raw' } = req.body || {};
+      if (typeof cubeName !== 'string' || !cubeName) {
+        return res.status(400).json({ error: 'cubeName is required' });
+      }
+      if (mode !== 'raw' && mode !== 'cube') {
+        return res.status(400).json({ error: 'mode must be raw or cube' });
+      }
+
+      const definitions = await loadRelationshipDefinitions(req);
+      const model = definitions.models.find(cube => cube.name === cubeName);
+      if (!model) return res.status(404).json({ error: `Cube '${cubeName}' was not found` });
+      if (mode === 'raw' && !model.source) {
+        return res.status(400).json({ error: `Cube '${cubeName}' has no SQL source` });
+      }
+
+      const dataSource = model.dataSource || 'default';
+      const driver = await this.cubejsServer.getDriver({
+        ...definitions.context,
+        dataSource,
+      });
+      try {
+        const compilerApi = await this.cubejsServer.getCompilerApi(definitions.context);
+        let countSql: string;
+        let countParams: unknown[] = [];
+
+        if (mode === 'raw') {
+          const source = model.source!.trim().replace(/;$/, '');
+          const from = model.sourceType === 'sql' ? `(${source}) AS cube_sample_count` : source;
+          countSql = `SELECT COUNT(*)::bigint AS total_count FROM ${from}`;
+        } else {
+          const dimensions = (model.dimensions || []).map(dimension => `${cubeName}.${dimension.name}`);
+          const measures = (model.measures || []).map(measure => `${cubeName}.${measure.name}`);
+          if (!dimensions.length && !measures.length) {
+            return res.status(400).json({ error: `Cube '${cubeName}' has no dimensions or measures` });
+          }
+          const compilers = await compilerApi.getCompilers({ requestId: definitions.requestId });
+          const query = await compilerApi.createQueryByDataSource(compilers, {
+            cube: cubeName,
+            dimensions,
+            measures,
+            timezone: 'UTC',
+            requestId: definitions.requestId,
+          } as any, dataSource);
+          let cubeSql: string;
+          [cubeSql, countParams] = compilers.compiler.withQuery(query, () => query.buildSqlAndParams());
+          // The count must be applied after Cube's GROUP BY, so it represents
+          // the number of configured cube rows rather than source records.
+          countSql = `SELECT COUNT(*)::bigint AS total_count FROM (${cubeSql}) AS cube_sample_count`;
+        }
+
+        const result = await driver.query<{ total_count: string | number }>(
+          countSql,
+          countParams,
+          { requestId: definitions.requestId } as any
+        );
+        return res.json({ total: result[0]?.total_count == null ? '0' : String(result[0].total_count) });
+      } finally {
+        if (multiProject) await driver.release?.();
+      }
+    }));
+
+    app.post('/playground/schema/sample', catchErrors(async (req: Request, res: Response) => {
+      this.cubejsServer.event('Dev Server Schema Sample Load');
+      const { cubeName, mode = 'raw' } = req.body || {};
+      if (typeof cubeName !== 'string' || !cubeName) {
+        return res.status(400).json({ error: 'cubeName is required' });
+      }
+      if (mode !== 'raw' && mode !== 'cube') {
+        return res.status(400).json({ error: 'mode must be raw or cube' });
+      }
+
+      const definitions = await loadRelationshipDefinitions(req);
+      const model = definitions.models.find(cube => cube.name === cubeName);
+      if (!model) return res.status(404).json({ error: `Cube '${cubeName}' was not found` });
+      if (mode === 'raw' && !model.source) {
+        return res.status(400).json({ error: `Cube '${cubeName}' has no SQL source` });
+      }
+
+      const dataSource = model.dataSource || 'default';
+      const driver = await this.cubejsServer.getDriver({
+        ...definitions.context,
+        dataSource,
+      });
+      try {
+        const compilerApi = await this.cubejsServer.getCompilerApi(definitions.context);
+        const dbType = await compilerApi.getDbType(dataSource);
+        const isPostgres = ['postgres', 'postgresql'].includes(dbType.toLowerCase());
+        const dimensionSampleLimit = 1000;
+        const modelSource = model.source?.trim().replace(/;$/, '');
+        let sql: string;
+        let params: unknown[] = [];
+        let columnLabels: Record<string, string> = {};
+
+        if (mode === 'cube') {
+          const compilers = await compilerApi.getCompilers({ requestId: definitions.requestId });
+          const dimensions = (model.dimensions || []).map(dimension => `${cubeName}.${dimension.name}`);
+          const measures = (model.measures || []).map(measure => `${cubeName}.${measure.name}`);
+          if (!dimensions.length && !measures.length) {
+            return res.status(400).json({ error: `Cube '${cubeName}' has no dimensions or measures` });
+          }
+          [...(model.dimensions || []), ...(model.measures || [])].forEach(member => {
+            const label = member.title || member.name;
+            columnLabels[`${cubeName}.${member.name}`.toLowerCase()] = label;
+            columnLabels[`${cubeName}__${member.name}`.toLowerCase()] = label;
+            columnLabels[member.name.toLowerCase()] = label;
+          });
+
+          const primaryKeyNames = compilers.cubeEvaluator.primaryKeys?.[cubeName] || [];
+          const normalizedPrimaryKeyNames = new Set(
+            primaryKeyNames.map((name: string) => name.split('.').pop()!.toLowerCase())
+          );
+          const primaryKeyDimension = (model.dimensions || []).find(dimension => (
+            normalizedPrimaryKeyNames.has(dimension.name.toLowerCase()) || dimension.primaryKey
+          ));
+          const expressionColumns = cubeExpressionColumns(primaryKeyDimension?.sql);
+          let usedPhysicalCompositeKey = false;
+
+          if (isPostgres && model.sourceType === 'sql_table' && modelSource && expressionColumns.length >= 2) {
+            const source = modelSource;
+            const quotedColumns = expressionColumns.map(quoteIdentifier).join(', ');
+            const sourceParts = source.split('.').map(part => part.replace(/^"|"$/g, ''));
+            const physicalColumnTypes = new Map<string, string>();
+            if (sourceParts.length === 2) {
+              const physicalColumns = await driver.query<{ column_name: string; udt_name: string }>(
+                'SELECT column_name, udt_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2',
+                [sourceParts[0], sourceParts[1]],
+                { requestId: definitions.requestId } as any
+              );
+              physicalColumns.forEach(column => physicalColumnTypes.set(
+                column.column_name.toLowerCase(),
+                column.udt_name,
+              ));
+            }
+            if (!physicalColumnTypes.size) {
+              (await driver.tableColumnTypes(source)).forEach(column => physicalColumnTypes.set(
+                String(column.name).toLowerCase(),
+                String(column.type),
+              ));
+            }
+            const sampledRows = await postgresSampleRows(
+              driver,
+              source,
+              quotedColumns,
+              dimensionSampleLimit,
+              definitions.requestId,
+            );
+            const keyRows = sampledRows.map(row => expressionColumns.map(column => row[column]));
+
+            const uniqueKeyRows = [...new Map(
+              keyRows.map(row => [JSON.stringify(row), row])
+            ).values()];
+            const query = await compilerApi.createQueryByDataSource(compilers, {
+              cube: cubeName,
+              dimensions,
+              measures,
+              timezone: 'UTC',
+              limit: 25,
+              requestId: definitions.requestId,
+            } as any, dataSource);
+            [sql, params] = compilers.compiler.withQuery(query, () => query.buildSqlAndParams());
+            const joinedQuery = injectSampleKeyJoin(
+              sql,
+              source,
+              cubeName,
+              expressionColumns,
+              uniqueKeyRows,
+              params,
+              physicalColumnTypes,
+            );
+            if (joinedQuery) {
+              [sql, params] = joinedQuery;
+              usedPhysicalCompositeKey = true;
+            }
+          }
+
+          if (!usedPhysicalCompositeKey) {
+            const sampleQuery = await compilerApi.createQueryByDataSource(compilers, {
+              cube: cubeName,
+              dimensions,
+              measures: [],
+              timezone: 'UTC',
+              ungrouped: true,
+              allowUngroupedWithoutPrimaryKey: true,
+              limit: dimensionSampleLimit,
+              requestId: definitions.requestId,
+            } as any, dataSource);
+
+            const [sampleSql, sampleParams] = compilers.compiler.withQuery(sampleQuery, () => (
+              sampleQuery.buildSqlAndParams()
+            ));
+            const dimensionSampleRows = await driver.query<Record<string, unknown>>(
+              `SELECT * FROM (${sampleSql}) AS dimension_sample LIMIT ${dimensionSampleLimit}`,
+              sampleParams,
+              { requestId: definitions.requestId } as any
+            );
+            const filterDimensions = normalizedPrimaryKeyNames.size
+              ? dimensions.filter(dimension => normalizedPrimaryKeyNames.has(dimension.split('.').pop()!.toLowerCase()))
+              : dimensions;
+            const dimensionSampleFilters = dimensionSampleRows
+              .map(row => {
+                const conditions = filterDimensions.map(member => {
+                  const memberName = member.split('.').pop()!;
+                  const aliases = [
+                    `${cubeName}__${memberName}`,
+                    `${cubeName}_${memberName}`,
+                    member,
+                    memberName,
+                  ].map(alias => alias.toLowerCase());
+                  const entry = Object.entries(row).find(([key]) => aliases.includes(key.toLowerCase()));
+                  return entry ? { member, value: entry[1] } : null;
+                });
+                if (conditions.some(condition => !condition)) return null;
+
+                return {
+                  and: conditions.map(condition => condition!.value == null
+                    ? { member: condition!.member, operator: 'not_set' }
+                    : { member: condition!.member, operator: 'equals', values: [String(condition!.value)] }),
+                };
+              })
+              .filter(Boolean);
+            const filters = dimensionSampleFilters.length
+              ? [{ or: dimensionSampleFilters }]
+              : [];
+            if (dimensions.length && !dimensionSampleFilters.length) {
+              return res.json({ columns: [], columnLabels, rows: [] });
+            }
+            const query = await compilerApi.createQueryByDataSource(compilers, {
+              cube: cubeName,
+              dimensions,
+              measures,
+              filters,
+              timezone: 'UTC',
+              limit: 25,
+              requestId: definitions.requestId,
+            } as any, dataSource);
+            [sql, params] = compilers.compiler.withQuery(query, () => query.buildSqlAndParams());
+          }
+        } else {
+          const source = model.source!.trim().replace(/;$/, '');
+          const from = model.sourceType === 'sql' ? `(${source}) AS cube_sample` : source;
+          sql = `SELECT * FROM ${from}`;
+        }
+
+        let rows: Record<string, unknown>[];
+        const source = modelSource;
+        if (mode === 'raw' && model.sourceType === 'sql_table' && isPostgres && source) {
+          rows = await postgresSampleRows(
+            driver,
+            source,
+            '*',
+            dimensionSampleLimit,
+            definitions.requestId,
+          );
+
+        } else {
+          rows = await driver.query<Record<string, unknown>>(
+            `SELECT * FROM (${sql}) AS sample_rows LIMIT 25`,
+            params,
+            { requestId: definitions.requestId } as any
+          );
+        }
+        const sampleRows = (rows || []).slice(0, 25);
+        const columns = sampleRows.length
+          ? Object.keys(sampleRows[0])
+          : mode === 'raw'
+            ? (await driver.tableColumnTypes(model.source!)).map(column => String(column.name))
+            : [];
+
+        return res.json({ columns, columnLabels, rows: sampleRows });
+      } finally {
+        if (multiProject) await driver.release?.();
+      }
+    }));
+
     app.post('/playground/schema/primary-key', catchErrors(async (req: Request, res: Response) => {
       this.cubejsServer.event('Dev Server Primary Key Save');
       const { cubeName, columnName } = req.body || {};
@@ -546,37 +1148,135 @@ export class DevServer {
       const converter = new CubeSchemaConverter(repository, [
         new CubePrimaryKeyConverter({ cubeName, columnName, columnType: column.type }),
       ]);
-      await converter.generate(cubeName);
-      const updatedFile = converter.getSourceFiles().find(file => file.cubeName === cubeName);
-      if (!updatedFile) return res.status(404).json({ error: `Cube '${cubeName}' was not found` });
-
-      const currentFile = (await repository.dataSchemaFiles()).find(file => file.fileName === updatedFile.fileName);
-      if (!currentFile || currentFile.content !== originalFile.content) {
-        return res.status(409).json({ error: 'The model file changed while the primary key was being prepared. Reload the diagram and try again.' });
+      let updatedFile;
+      try {
+        updatedFile = await saveValidatedSchemaChange({
+          definitions,
+          cubeName,
+          originalFile,
+          converter,
+          rollbackRequestId: `${requestId}-primary-key-rollback`,
+          invalidMessage: error => {
+            const reason = compilerValidationReason(error);
+            return `The primary key was not saved because the model would be invalid${reason ? `: ${reason}` : ''}`;
+          },
+        });
+      } catch (error: any) {
+        if (error?.status) return res.status(error.status).json({ error: error.message });
+        throw error;
       }
 
-      repository.writeDataSchemaFile(updatedFile.fileName, updatedFile.source);
+      return res.json({ status: 'ok', fileName: updatedFile.fileName, content: updatedFile.source });
+    }));
+
+    app.post('/playground/schema/dimension', catchErrors(async (req: Request, res: Response) => {
+      this.cubejsServer.event('Dev Server Dimension Save');
+      const {
+        cubeName,
+        dimensionName,
+        name,
+        sql,
+        type,
+        title,
+        primaryKey = false,
+      } = req.body || {};
+
+      if (typeof cubeName !== 'string' || !cubeName
+        || (dimensionName !== undefined && typeof dimensionName !== 'string')
+        || typeof name !== 'string' || !name
+        || typeof sql !== 'string' || !sql) {
+        return res.status(400).json({ error: 'cubeName, name, and sql are required' });
+      }
+      if (/\r|\n/.test(cubeName) || /\r|\n/.test(name) || (dimensionName && /\r|\n/.test(dimensionName))) {
+        return res.status(400).json({ error: 'Invalid cube or dimension name' });
+      }
+      if (typeof primaryKey !== 'boolean') {
+        return res.status(400).json({ error: 'primaryKey must be boolean' });
+      }
+
+      const definitions = await loadRelationshipDefinitions(req);
+      const model = definitions.models.find(cube => cube.name === cubeName);
+      if (!model) return res.status(404).json({ error: `Cube '${cubeName}' was not found` });
+
+      const { repository, context, requestId } = definitions;
+      const originalFile = (await repository.dataSchemaFiles()).find(file => file.fileName === model.fileName);
+      if (!originalFile) return res.status(404).json({ error: `File '${model.fileName}' was not found` });
+
+      const converter = new CubeSchemaConverter(repository, [
+        new CubeDimensionConverter({
+          cubeName,
+          dimensionName: dimensionName || undefined,
+          name,
+          sql,
+          type: typeof type === 'string' && type ? type : undefined,
+          title: typeof title === 'string' && title ? title : undefined,
+          primaryKey,
+        }),
+      ]);
+      let updatedFile;
       try {
-        const compilerApi = await this.cubejsServer.getCompilerApi(context);
-        await compilerApi.getCompilers({ requestId });
-      } catch (e: any) {
-        const fileAfterFailure = (await repository.dataSchemaFiles()).find(file => file.fileName === updatedFile.fileName);
-        if (fileAfterFailure?.content === updatedFile.source) {
-          repository.writeDataSchemaFile(originalFile.fileName, originalFile.content);
-          try {
-            const compilerApi = await this.cubejsServer.getCompilerApi(context);
-            await compilerApi.getCompilers({ requestId: `${requestId}-primary-key-rollback` });
-          } catch (_rollbackError) {
-            // Keep the original source when rollback compilation also fails.
-          }
-        }
-        const reason = String(e?.message || e || 'The model would be invalid')
-          .split('\n')
-          .filter(line => line.trim() && !/^Compile errors:?$|^Errors:?$/i.test(line.trim()))[0]
-          ?.trim();
-        return res.status(400).json({
-          error: `The primary key was not saved because the model would be invalid${reason ? `: ${reason}` : ''}`,
+        updatedFile = await saveValidatedSchemaChange({
+          definitions,
+          cubeName,
+          originalFile,
+          converter,
+          rollbackRequestId: `${requestId}-dimension-rollback`,
+          invalidMessage: error => `A dimensão não foi salva porque o schema é inválido: ${compilerValidationReason(error)}`,
         });
+      } catch (error: any) {
+        if (error?.status) return res.status(error.status).json({ error: error.message });
+        throw error;
+      }
+
+      return res.json({ status: 'ok', fileName: updatedFile.fileName, content: updatedFile.source });
+    }));
+
+    app.post('/playground/schema/item', catchErrors(async (req: Request, res: Response) => {
+      this.cubejsServer.event('Dev Server Schema Item Save');
+      const { cubeName, section, itemName, values = {}, operation = 'upsert' } = req.body || {};
+      const validSections = new Set(['dimensions', 'measures', 'segments', 'hierarchies', 'pre_aggregations', 'cube']);
+      if (typeof cubeName !== 'string' || !cubeName
+        || typeof section !== 'string' || !validSections.has(section)
+        || !['upsert', 'delete'].includes(operation)
+        || (operation === 'delete' && (!itemName || section === 'cube'))
+        || (itemName !== undefined && typeof itemName !== 'string')
+        || !values || typeof values !== 'object' || Array.isArray(values)) {
+        return res.status(400).json({ error: 'cubeName, section, operation, and values are required' });
+      }
+      if (/\r|\n/.test(cubeName) || (itemName && /\r|\n/.test(itemName))) {
+        return res.status(400).json({ error: 'Invalid cube or item name' });
+      }
+
+      const definitions = await loadRelationshipDefinitions(req);
+      const model = definitions.models.find(cube => cube.name === cubeName);
+      if (!model) return res.status(404).json({ error: `Cube '${cubeName}' was not found` });
+
+      const { repository, context, requestId } = definitions;
+      const originalFile = (await repository.dataSchemaFiles()).find(file => file.fileName === model.fileName);
+      if (!originalFile) return res.status(404).json({ error: `File '${model.fileName}' was not found` });
+
+      const converter = new CubeSchemaConverter(repository, [
+        new CubeSchemaItemConverter({
+          cubeName,
+          section: section as any,
+          itemName: itemName || undefined,
+          values,
+          operation,
+        }),
+      ]);
+      let updatedFile;
+      try {
+        updatedFile = await saveValidatedSchemaChange({
+          definitions,
+          cubeName,
+          originalFile,
+          converter,
+          rollbackRequestId: `${requestId}-schema-item-rollback`,
+          invalidMessage: error => `O item não foi salvo porque o schema é inválido: ${compilerValidationReason(error)}`,
+        });
+      } catch (error: any) {
+        if (error?.status) return res.status(error.status).json({ error: error.message });
+        throw error;
       }
 
       return res.json({ status: 'ok', fileName: updatedFile.fileName, content: updatedFile.source });
@@ -686,58 +1386,23 @@ export class DevServer {
           operation,
         }),
       ]);
-      await converter.generate(sourceCube);
-      const updatedFile = converter.getSourceFiles().find(file => file.cubeName === sourceCube);
-      if (!updatedFile) {
-        return res.status(404).json({ error: `Cube '${sourceCube}' was not found` });
-      }
-
-      const currentFile = (await repository.dataSchemaFiles())
-        .find(file => file.fileName === updatedFile.fileName);
-      if (!currentFile) {
-        return res.status(404).json({ error: `File '${updatedFile.fileName}' was not found` });
-      }
-      if (currentFile.content !== originalFile.content) {
-        return res.status(409).json({
-          error: 'The model file changed while the relationship was being prepared. Reload the diagram and try again.',
-        });
-      }
-
-      repository.writeDataSchemaFile(updatedFile.fileName, updatedFile.source);
+      let updatedFile;
       try {
-        const compilerApi = await this.cubejsServer.getCompilerApi(context);
-        await compilerApi.getCompilers({ requestId });
-      } catch (e: any) {
-        const fileAfterFailure = (await repository.dataSchemaFiles())
-          .find(file => file.fileName === updatedFile.fileName);
-        if (fileAfterFailure?.content === updatedFile.source) {
-          repository.writeDataSchemaFile(originalFile.fileName, originalFile.content);
-          try {
-            const compilerApi = await this.cubejsServer.getCompilerApi(context);
-            await compilerApi.getCompilers({ requestId: `${requestId}-relationship-rollback` });
-          } catch (_rollbackError) {
-            // The original model may already be invalid. The source file was still restored.
-          }
-        } else {
-          return res.status(409).json({
-            error: 'The model file changed while the relationship was being validated. Reload the diagram before editing it again.',
-          });
-        }
-        const reason = String(e?.message || e || 'The model would be invalid')
-          .split('\n')
-          .filter(line => line.trim() && !/^Compile errors:?$|^Errors:?$/i.test(line.trim()))[0]
-          ?.trim();
-        return res.status(400).json({
-          error: `The relationship was not saved because the model would be invalid${reason ? `: ${reason}` : ''}`,
+        updatedFile = await saveValidatedSchemaChange({
+          definitions,
+          cubeName: sourceCube,
+          originalFile,
+          converter,
+          rollbackRequestId: `${requestId}-relationship-rollback`,
+          changedDuringValidationMessage: 'The model file changed while the relationship was being validated. Reload the diagram before editing it again.',
+          invalidMessage: error => {
+            const reason = compilerValidationReason(error);
+            return `The relationship was not saved because the model would be invalid${reason ? `: ${reason}` : ''}`;
+          },
         });
-      }
-
-      const savedFile = (await repository.dataSchemaFiles())
-        .find(file => file.fileName === updatedFile.fileName);
-      if (savedFile?.content !== updatedFile.source) {
-        return res.status(409).json({
-          error: 'The model file changed while the relationship was being validated. Reload the diagram to see the current version.',
-        });
+      } catch (error: any) {
+        if (error?.status) return res.status(error.status).json({ error: error.message });
+        throw error;
       }
 
       return res.json({
@@ -745,6 +1410,31 @@ export class DevServer {
         fileName: updatedFile.fileName,
         content: updatedFile.source,
       });
+    }));
+
+    app.get('/playground/schema/diagram-state', catchErrors(async (req, res) => {
+      const repository = multiProject
+        ? multiProject.repository(multiProject.contextFromRequest(req))
+        : this.cubejsServer.repository;
+      const statePath = diagramStatePath(repository);
+
+      try {
+        const state = await fs.readJson(statePath);
+        return res.json(sanitizeDiagramState(state));
+      } catch (error: any) {
+        if (error?.code !== 'ENOENT') throw error;
+        return res.json({ version: 1, cubes: {} });
+      }
+    }));
+
+    app.put('/playground/schema/diagram-state', catchErrors(async (req, res) => {
+      const repository = multiProject
+        ? multiProject.repository(multiProject.contextFromRequest(req))
+        : this.cubejsServer.repository;
+      const statePath = diagramStatePath(repository);
+      const state = sanitizeDiagramState(req.body || {});
+      await fs.writeJson(statePath, state, { spaces: 2 });
+      return res.json({ status: 'ok', fileName: DIAGRAM_STATE_FILE });
     }));
 
     app.get('/playground/files', catchErrors(async (req, res) => {
@@ -759,6 +1449,181 @@ export class DevServer {
           absPath: path.resolve(path.join(repository.localPath(), f.fileName))
         }))
       });
+    }));
+
+    app.post('/playground/files/copy', catchErrors(async (req, res) => {
+      this.cubejsServer.event('Dev Server File Copy');
+
+      const { sourceFileName, targetFileName } = req.body || {};
+      if (!isSafeCubeFileName(sourceFileName) || !isSafeCubeFileBaseName(targetFileName)) {
+        return res.status(400).json({ error: 'Invalid file name' });
+      }
+      const cubeTargetFileName = path.join('cubes', targetFileName);
+
+      const repository = multiProject
+        ? multiProject.repository(multiProject.contextFromRequest(req))
+        : this.cubejsServer.repository;
+      const files = await repository.dataSchemaFiles();
+      const sourceFile = files.find(file => file.fileName === sourceFileName);
+      if (!sourceFile) {
+        return res.status(404).json({ error: `File '${sourceFileName}' was not found` });
+      }
+      if (files.some(file => file.fileName === cubeTargetFileName)) {
+        return res.status(409).json({ error: `File '${cubeTargetFileName}' already exists` });
+      }
+
+      const repositoryPath = path.resolve(repository.localPath());
+      const sourcePath = path.resolve(repositoryPath, sourceFileName);
+      const targetPath = path.resolve(repositoryPath, cubeTargetFileName);
+      if (![sourcePath, targetPath].every(filePath => filePath.startsWith(`${repositoryPath}${path.sep}`))) {
+        return res.status(400).json({ error: 'Invalid file name' });
+      }
+
+      let copiedContent = sourceFile.content;
+      if ((targetFileName.endsWith('.yml') || targetFileName.endsWith('.yaml'))
+        && !JINJA_SYNTAX.test(sourceFile.content)) {
+        try {
+          const document = YAML.load(sourceFile.content) as any;
+          if (document && Array.isArray(document.cubes) && document.cubes.length === 1) {
+            const nextCubeName = copiedCubeName(targetFileName);
+            copiedContent = renameYamlCubeInSource(
+              sourceFile.content,
+              document.cubes[0].name,
+              nextCubeName,
+            ) || YAML.dump({
+              ...document,
+              cubes: [{ ...document.cubes[0], name: nextCubeName }, ...document.cubes.slice(1)],
+            }, { lineWidth: -1, noRefs: true, sortKeys: false });
+          }
+        } catch (_error) {
+          // The compiler below will return the useful validation error.
+        }
+      }
+
+      await fs.ensureDir(path.dirname(targetPath));
+      await fs.writeFile(targetPath, copiedContent, 'utf-8');
+
+      try {
+        const requestId = getRequestIdFromRequest(req);
+        const projectContext = multiProject?.contextFromRequest(req);
+        const compilerApi = await this.cubejsServer.getCompilerApi({
+          authInfo: null,
+          securityContext: null,
+          requestId,
+          ...(projectContext || {}),
+        });
+        await compilerApi.getCompilers({ requestId });
+      } catch (error: any) {
+        await fs.remove(targetPath);
+        return res.status(400).json({
+          error: 'A cópia não foi criada porque o schema é inválido',
+          details: compilerValidationReason(error),
+        });
+      }
+
+      return res.json({ status: 'ok', sourceFileName, targetFileName: cubeTargetFileName });
+    }));
+
+    app.post('/playground/files/rename', catchErrors(async (req, res) => {
+      this.cubejsServer.event('Dev Server File Rename');
+
+      const { sourceFileName, targetFileName } = req.body || {};
+      if (!isSafeCubeFileName(sourceFileName) || !isSafeCubeFileBaseName(targetFileName)) {
+        return res.status(400).json({ error: 'Invalid file name' });
+      }
+      const cubeTargetFileName = path.join('cubes', targetFileName);
+      if (sourceFileName === cubeTargetFileName) {
+        return res.status(400).json({ error: 'The new file name must be different' });
+      }
+
+      const repository = multiProject
+        ? multiProject.repository(multiProject.contextFromRequest(req))
+        : this.cubejsServer.repository;
+      const files = await repository.dataSchemaFiles();
+      const sourceFile = files.find(file => file.fileName === sourceFileName);
+      if (!sourceFile) {
+        return res.status(404).json({ error: `File '${sourceFileName}' was not found` });
+      }
+      if (files.some(file => file.fileName === cubeTargetFileName)) {
+        return res.status(409).json({ error: `File '${cubeTargetFileName}' already exists` });
+      }
+
+      const repositoryPath = path.resolve(repository.localPath());
+      const sourcePath = path.resolve(repositoryPath, sourceFileName);
+      const targetPath = path.resolve(repositoryPath, cubeTargetFileName);
+      if (![sourcePath, targetPath].every(filePath => filePath.startsWith(`${repositoryPath}${path.sep}`))) {
+        return res.status(400).json({ error: 'Invalid file name' });
+      }
+
+      const originalContents = new Map<string, string>();
+      let renamedSourceContent = sourceFile.content;
+      let currentCubeName: string | null = null;
+      let nextCubeName: string | null = null;
+
+      if ((sourceFileName.endsWith('.yml') || sourceFileName.endsWith('.yaml'))
+        && !JINJA_SYNTAX.test(sourceFile.content)) {
+        try {
+          const document = YAML.load(sourceFile.content) as any;
+          if (document && Array.isArray(document.cubes) && document.cubes.length === 1
+            && typeof document.cubes[0].name === 'string') {
+            currentCubeName = document.cubes[0].name;
+            nextCubeName = copiedCubeName(cubeTargetFileName);
+            renamedSourceContent = renameYamlCubeInSource(
+              sourceFile.content,
+              currentCubeName,
+              nextCubeName,
+            ) || sourceFile.content;
+          }
+        } catch (_error) {
+          // The compiler below will return the useful validation error.
+        }
+      }
+
+      const allFiles = await repository.dataSchemaFiles();
+      if (currentCubeName && nextCubeName) {
+        for (const file of allFiles) {
+          if (file.fileName === sourceFileName
+            || (!file.fileName.endsWith('.yml') && !file.fileName.endsWith('.yaml'))
+            || JINJA_SYNTAX.test(file.content)) {
+            continue;
+          }
+          const updatedContent = renameYamlCubeReferences(file.content, currentCubeName, nextCubeName);
+          if (updatedContent !== file.content) {
+            originalContents.set(file.fileName, file.content);
+            repository.writeDataSchemaFile(file.fileName, updatedContent);
+          }
+        }
+      }
+
+      await fs.ensureDir(path.dirname(targetPath));
+      await fs.move(sourcePath, targetPath);
+      if (renamedSourceContent !== sourceFile.content) {
+        originalContents.set(sourceFileName, sourceFile.content);
+        await fs.writeFile(targetPath, renamedSourceContent, 'utf-8');
+      }
+
+      try {
+        const requestId = getRequestIdFromRequest(req);
+        const projectContext = multiProject?.contextFromRequest(req);
+        const compilerApi = await this.cubejsServer.getCompilerApi({
+          authInfo: null,
+          securityContext: null,
+          requestId,
+          ...(projectContext || {}),
+        });
+        await compilerApi.getCompilers({ requestId });
+      } catch (error: any) {
+        await fs.move(targetPath, sourcePath);
+        for (const [fileName, content] of originalContents) {
+          repository.writeDataSchemaFile(fileName, content);
+        }
+        return res.status(400).json({
+          error: 'O arquivo não foi renomeado porque o schema é inválido',
+          details: compilerValidationReason(error),
+        });
+      }
+
+      return res.json({ status: 'ok', sourceFileName, targetFileName: cubeTargetFileName });
     }));
 
     app.post('/playground/files', catchErrors(async (req, res) => {

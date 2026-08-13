@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Tabs, Collapse, Select, Input, Button, Popconfirm, AutoComplete, Empty, Typography, Tooltip, message, Dropdown, Menu } from 'antd';
+import { Modal, Tabs, Select, Input, Button, Empty, Typography, Tooltip, message, Dropdown, Menu, Checkbox } from 'antd';
 import { load, dump } from 'js-yaml';
 import styled, { createGlobalStyle } from 'styled-components';
 import autocompleteConfig from '../../config/schema-autocomplete.json';
@@ -8,97 +8,36 @@ import {
   PlusOutlined,
   PrimaryKeyFontAwesomeIcon,
   QuestionOutlined,
+  ReadmeOutlined,
   RulerCombinedIcon,
 } from '../../shared/icons/FontAwesomeIcons';
-import { TableColumn, TablesSchema, resolveColumnsForTable } from './cubeSchemaUtils';
+import {
+  expressionReferencesColumn,
+  inferDimensionType,
+  TableColumn,
+  TablesSchema,
+  resolveColumnsForTable,
+} from './cubeSchemaUtils';
+import {
+  SchemaFieldCell as FieldCell,
+  SchemaFieldHelp as FieldHelp,
+  SchemaFieldInputCell as FieldInputCell,
+  SchemaFieldLabel as FieldLabel,
+  SchemaFieldRow as FieldRow,
+} from './SchemaFieldComponents';
+import {
+  CubeForm,
+  DimensionForm,
+  HierarchyForm,
+  JoinForm,
+  MeasureForm,
+  PreAggregationForm,
+  SegmentForm,
+} from './SchemaEntityForms';
+import { SchemaItemList } from './SchemaItemList';
 
 const { TabPane } = Tabs;
-const { Panel } = Collapse;
 const { Text } = Typography;
-const FIELD_LABEL_WIDTH = 180;
-
-const FieldTable = styled.div`
-  width: 100%;
-`;
-
-const FieldRow = styled.div`
-  display: grid;
-  grid-template-columns: ${FIELD_LABEL_WIDTH}px minmax(0, 1fr) 36px;
-  width: 100%;
-  margin-top: -1px;
-`;
-
-const FieldCell = styled.div`
-  position: relative;
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  min-height: 32px;
-  border: 1px solid #d9d9d9;
-  margin-left: -1px;
-  background: #fff;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-
-  &:focus-within {
-    z-index: 2;
-    border-color: #7568d8;
-    box-shadow: 0 0 0 1px #7568d8, 0 3px 10px rgba(75, 70, 119, 0.16);
-  }
-`;
-
-const FieldLabel = styled(FieldCell)`
-  margin-left: 0;
-  padding: 5px 11px;
-  color: rgba(0, 0, 0, 0.65);
-  background: #fafafa;
-  font-size: 13px;
-`;
-
-const FieldInputCell = styled(FieldCell)`
-  align-items: stretch;
-  padding: 0;
-
-  & > .ant-input,
-  & > .ant-input-affix-wrapper,
-  & > .ant-input-number,
-  & > .ant-select,
-  & > .ant-auto-complete {
-    flex: 1;
-    width: 100%;
-  }
-
-  & .ant-input,
-  & .ant-input-affix-wrapper,
-  & .ant-input-number,
-  & .ant-select-selector,
-  & .ant-auto-complete .ant-input {
-    height: 100%;
-    border: 0 !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-  }
-
-  & .ant-select-selection-item,
-  & .ant-select-selection-placeholder {
-    color: rgba(0, 0, 0, 0.65) !important;
-    font-size: 13px;
-  }
-
-  & > .ant-select .ant-select-selector {
-    background: inherit !important;
-  }
-
-  & .ant-select-arrow {
-    color: rgba(0, 0, 0, 0.45);
-  }
-`;
-
-const FieldHelp = styled(FieldCell)`
-  justify-content: center;
-  align-items: center;
-  color: rgba(0, 0, 0, 0.45);
-  cursor: help;
-`;
 
 const ColumnUsageIcons = styled.span`
   display: inline-flex;
@@ -159,6 +98,7 @@ const schemaAutocomplete = autocompleteConfig as SchemaAutocompleteConfig;
 
 const LIST_SECTIONS = ['joins', 'dimensions', 'hierarchies', 'measures', 'segments', 'pre_aggregations'] as const;
 type ListSection = typeof LIST_SECTIONS[number];
+const VISUAL_EDITOR_ID = '__visualEditorId';
 
 const SECTION_TITLES: Record<ListSection, string> = {
   hierarchies: 'Hierarquias',
@@ -169,131 +109,36 @@ const SECTION_TITLES: Record<ListSection, string> = {
   pre_aggregations: 'Pré-agregações',
 };
 
-const PROPERTY_LABELS: Record<string, string> = {
-  hierarchies: 'Hierarquias',
-  name: 'Nome',
-  sql: 'SQL',
-  sql_table: 'Tabela SQL',
-  extends: 'Herda de',
-  data_source: 'Fonte de dados',
-  public: 'Público',
-  shown: 'Exibido',
-  title: 'Título',
-  description: 'Descrição',
-  type: 'Tipo',
-  format: 'Formato',
-  meta: 'Metadados',
-  refresh_key: 'Chave de autorização',
-  cubes: 'Cubos',
-  joins: 'Junções',
-  dimensions: 'Dimensões',
-  measures: 'Medidas',
-  segments: 'Segmentos',
-  pre_aggregations: 'Pré-agregações',
-  includes: 'Inclui',
-  excludes: 'Exclui',
-  relationship: 'Relacionamento',
-  primary_key: 'Chave primária',
-  case: 'Condição',
-  sub_query: 'Subconsulta',
-  drill_members: 'Membros de detalhamento',
-  rolling_window: 'Janela móvel',
-  filters: 'Filtros',
-  time_dimension: 'Dimensão temporal',
-  granularity: 'Granularidade',
-  partition_granularity: 'Granularidade de particionamento',
-  external: 'Externa',
-  scheduled_refresh: 'Atualização agendada',
-  indexes: 'Índices',
-};
-
-const SQL_COLUMN_SECTIONS = new Set(['dimensions', 'measures', 'segments']);
-
-const FIELD_EXAMPLES: Record<string, Record<string, string>> = {
-  cubes: {
-    title: 'Cartoes de embarque',
-    name: 'boarding_passes',
-    description: 'Cartoes emitidos para cada voo.',
-    sql_table: 'bookings.boarding_passes',
-    sql: 'SELECT * FROM bookings.boarding_passes',
-    extends: 'base_cube',
-    data_source: 'default',
-    public: 'true',
-    refresh_key: 'every: 1 hour',
+const VISUAL_EDITOR_DOCUMENTATION: Record<string, { label: string; url: string }> = {
+  cube: {
+    label: 'Documentação de cubos',
+    url: 'https://docs.cube.dev/reference/data-modeling/cube',
   },
   joins: {
-    name: 'flights',
-    sql: '{CUBE}.flight_id = {flights}.flight_id',
-    relationship: 'many_to_one',
-  },
-  hierarchies: {
-    name: 'location',
-    title: 'Localizacao',
-    public: 'true',
-    levels: 'country, state, city',
+    label: 'Documentação de junções',
+    url: 'https://docs.cube.dev/reference/data-modeling/joins',
   },
   dimensions: {
-    title: 'Horario de embarque',
-    name: 'boarding_time',
-    description: 'Horario programado para o embarque.',
-    sql: '{CUBE}.boarding_time',
-    type: 'time',
-    primary_key: 'true',
-    public: 'true',
-    shown: 'true',
-    case: 'WHEN {CUBE}.status = \'cancelled\' THEN \'Cancelado\'',
-    sub_query: 'true',
-    format: 'currency',
-    meta: '{ source: ERP }',
+    label: 'Documentação de dimensões',
+    url: 'https://docs.cube.dev/reference/data-modeling/dimensions',
+  },
+  hierarchies: {
+    label: 'Documentação de hierarquias',
+    url: 'https://docs.cube.dev/docs/data-modeling/dimensions#hierarchies',
   },
   measures: {
-    name: 'revenue',
-    sql: '{CUBE}.amount',
-    type: 'sum',
-    public: 'true',
-    title: 'Receita',
-    description: 'Valor total das vendas.',
-    format: 'currency',
-    drill_members: 'id, customer_name',
-    rolling_window: 'trailing: 7 day',
-    filters: "{CUBE}.status = 'confirmed'",
-    meta: '{ source: ERP }',
+    label: 'Documentação de medidas',
+    url: 'https://docs.cube.dev/reference/data-modeling/measures',
   },
   segments: {
-    name: 'active',
-    sql: "{CUBE}.status = 'active'",
-    title: 'Ativos',
-    description: 'Registros ativos.',
-    public: 'true',
+    label: 'Documentação de segmentos',
+    url: 'https://docs.cube.dev/reference/data-modeling/segments',
   },
   pre_aggregations: {
-    name: 'daily_rollup',
-    type: 'rollup',
-    measures: 'count, revenue',
-    dimensions: 'status, airport_code',
-    time_dimension: 'boarding_time',
-    granularity: 'day',
-    partition_granularity: 'month',
-    refresh_key: 'every: 1 hour',
-    external: 'true',
-    scheduled_refresh: 'true',
-    indexes: 'status, airport_code',
+    label: 'Documentação de pré-agregações',
+    url: 'https://docs.cube.dev/docs/pre-aggregations/getting-started-pre-aggregations',
   },
 };
-
-function inferDimensionType(columnType?: string): string {
-  const normalizedType = String(columnType || '').toLowerCase();
-  if (/timestamp|date|time/.test(normalizedType)) {
-    return 'time';
-  }
-  if (/bool/.test(normalizedType)) {
-    return 'boolean';
-  }
-  if (/int|numeric|decimal|real|double|float|number/.test(normalizedType)) {
-    return 'number';
-  }
-  return 'string';
-}
 
 type CubeItem = Record<string, any>;
 type CubeDoc = { cubes?: CubeItem[]; [key: string]: any };
@@ -306,23 +151,12 @@ type ColumnUsage = {
   measure: boolean;
 };
 
-function expressionReferencesColumn(expression: unknown, columnName: string): boolean {
-  if (typeof expression !== 'string' || !expression.trim()) {
-    return false;
-  }
-
-  const escapedColumnName = columnName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const localReference = new RegExp(
-    `(?:\\{\\s*CUBE\\s*\\}|\\$\\{\\s*CUBE\\s*\\}|\\bCUBE)\\s*\\.\\s*${escapedColumnName}(?=$|[^A-Za-z0-9_$])`,
-    'i'
-  );
-  const bareReference = new RegExp(
-    `(?:^|[^A-Za-z0-9_$])${escapedColumnName}(?=$|[^A-Za-z0-9_$])`,
-    'i'
-  );
-
-  return localReference.test(expression) || bareReference.test(expression);
-}
+type PrimaryKeyDraft = {
+  name: string;
+  selectedColumns: string[];
+  customSql: boolean;
+  sql: string;
+};
 
 type Props = {
   visible: boolean;
@@ -340,7 +174,30 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
   const [dataSourceMode, setDataSourceMode] = useState<'sql_table' | 'sql'>('sql_table');
   const [activeTab, setActiveTab] = useState('cube');
   const [expandedItems, setExpandedItems] = useState<Partial<Record<ListSection, string[]>>>({});
+  const [primaryKeyDraft, setPrimaryKeyDraft] = useState<PrimaryKeyDraft | null>(null);
+  const editorIdCounter = useRef(0);
   const scrollTarget = useRef<string | null>(null);
+
+  function ensureEditorIds(next: CubeDoc) {
+    const firstCube = next.cubes?.[0];
+    if (!firstCube) {
+      return;
+    }
+
+    LIST_SECTIONS.forEach((section) => {
+      const items = firstCube[section];
+      if (!Array.isArray(items)) {
+        return;
+      }
+
+      items.forEach((item: CubeItem) => {
+        if (!item[VISUAL_EDITOR_ID]) {
+          item[VISUAL_EDITOR_ID] = `${section}-${editorIdCounter.current}`;
+          editorIdCounter.current += 1;
+        }
+      });
+    });
+  }
 
   useEffect(() => {
     if (!visible) {
@@ -350,6 +207,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
     try {
       const parsed = load(yamlContent) as CubeDoc;
       if (parsed && typeof parsed === 'object' && Array.isArray(parsed.cubes) && parsed.cubes.length) {
+        ensureEditorIds(parsed);
         setDoc(parsed);
         setDataSourceMode(parsed.cubes[0]?.sql !== undefined ? 'sql' : 'sql_table');
         setActiveTab('cube');
@@ -444,6 +302,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
       }
       const next = structuredClone(prev);
       mutate(next);
+      ensureEditorIds(next);
       return next;
     });
   }
@@ -498,10 +357,54 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
     });
   }
 
+  function reorderItem(section: ListSection, fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex) {
+      return;
+    }
+
+    updateDoc((next) => {
+      const items = next.cubes![0][section] as CubeItem[];
+      const [item] = items.splice(fromIndex, 1);
+      items.splice(toIndex, 0, item);
+    });
+
+    setExpandedItems((previous) => {
+      const expanded = previous[section] || [];
+      const remapped = expanded.map((key) => {
+        const index = Number(key);
+        if (index === fromIndex) return String(toIndex);
+        if (fromIndex < toIndex && index > fromIndex && index <= toIndex) return String(index - 1);
+        if (fromIndex > toIndex && index >= toIndex && index < fromIndex) return String(index + 1);
+        return key;
+      });
+      return { ...previous, [section]: remapped };
+    });
+  }
+
+  function toggleItem(section: ListSection, index: number) {
+    setExpandedItems((previous) => {
+      const key = String(index);
+      const expanded = previous[section] || [];
+      return {
+        ...previous,
+        [section]: expanded.includes(key)
+          ? expanded.filter((itemKey) => itemKey !== key)
+          : [...expanded, key],
+      };
+    });
+  }
+
   function renderColumnActions(column: TableColumn) {
     const menu = (
-      <Menu onClick={({ key }) => addColumnItem(key as 'dimensions' | 'joins' | 'measures', column)}>
+      <Menu onClick={({ key }) => {
+        if (key === 'primary-key') {
+          openPrimaryKeyModal([column.name]);
+          return;
+        }
+        addColumnItem(key as 'dimensions' | 'joins' | 'measures', column);
+      }}>
         <Menu.Item key="dimensions">Nova dimensão</Menu.Item>
+        <Menu.Item key="primary-key">Nova chave primária</Menu.Item>
         <Menu.Item key="joins">Nova junção</Menu.Item>
         <Menu.Item key="measures">Nova medida</Menu.Item>
       </Menu>
@@ -521,29 +424,13 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
     );
   }
 
-  function renderHelp(sectionName: string, key: string) {
-    const description = schemaAutocomplete.yaml.sections[sectionName]?.descriptions?.[key];
-    const example = FIELD_EXAMPLES[sectionName]?.[key];
-    const tooltip = description || example ? (
-      <div>
-        {description ? <div>{description}</div> : null}
-        {example ? <div style={{ marginTop: 6 }}><strong>Exemplo:</strong> {example}</div> : null}
-      </div>
-    ) : undefined;
-
-    return (
-      <Tooltip title={tooltip}>
-        <FieldHelp>
-          <QuestionOutlined />
-        </FieldHelp>
-      </Tooltip>
-    );
-  }
-
   function addColumnItem(section: Extract<ListSection, 'dimensions' | 'joins' | 'measures'>, column: TableColumn) {
     const columnReference = `{CUBE}.${column.name}`;
     const usage = columnUsages[column.name];
-    const newIndex = Array.isArray(cube?.[section]) ? cube[section].length : 0;
+    const isPrimaryKeyDimension = section === 'dimensions' && Boolean(usage?.primaryKey);
+    const newIndex = isPrimaryKeyDimension
+      ? 0
+      : (Array.isArray(cube?.[section]) ? cube[section].length : 0);
 
     updateDoc((next) => {
       const c = next.cubes![0];
@@ -575,105 +462,93 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
             relationship: 'many_to_one',
           };
 
-      items.push(item);
+      if (section === 'dimensions' && item.primary_key) {
+        items.unshift(item);
+      } else {
+        items.push(item);
+      }
     });
 
     setExpandedItems((previous) => ({
       ...previous,
-      [section]: [...(previous[section] || []), String(newIndex)],
+      [section]: isPrimaryKeyDimension
+        ? ['0', ...(previous[section] || []).map((index) => String(Number(index) + 1))]
+        : [...(previous[section] || []), String(newIndex)],
     }));
     scrollTarget.current = `visual-editor-item-${section}-${newIndex}`;
     setActiveTab(section);
   }
 
-  function renderFieldRow(
-    sectionName: string,
-    key: string,
-    item: CubeItem,
-    onChange: (value: any) => void,
-  ) {
-    return (
-      <FieldRow key={key}>
-        <FieldLabel>{PROPERTY_LABELS[key] || key}</FieldLabel>
-        <FieldInputCell>{renderField(sectionName, key, item, onChange)}</FieldInputCell>
-        {renderHelp(sectionName, key)}
-      </FieldRow>
-    );
+  function defaultPrimaryKeySql(selectedColumns: string[]) {
+    if (selectedColumns.length === 0) {
+      return '';
+    }
+    if (selectedColumns.length === 1) {
+      return `{CUBE}.${selectedColumns[0]}`;
+    }
+    return `CONCAT(${selectedColumns.map((column, index) => (
+      index === 0 ? `{CUBE}.${column}` : `'-', {CUBE}.${column}`
+    )).join(', ')})`;
   }
 
-  function renderField(sectionName: string, key: string, item: CubeItem, onChange: (value: any) => void) {
-    const sectionConfig = schemaAutocomplete.yaml.sections[sectionName];
-    const enumValues = sectionConfig?.values?.[key];
-    const isBoolean = schemaAutocomplete.yaml.booleanKeys.includes(key);
-    const isSqlColumn = key === 'sql' && SQL_COLUMN_SECTIONS.has(sectionName);
-    const value = item[key];
+  function openPrimaryKeyModal(selectedColumns: string[] = []) {
+    setPrimaryKeyDraft({
+      name: selectedColumns.length === 1 ? selectedColumns[0] : 'primary_key',
+      selectedColumns,
+      customSql: false,
+      sql: '',
+    });
+  }
 
-    if (key === 'description') {
-      return (
-        <Input.TextArea
-          rows={2}
-          value={value ?? ''}
-          placeholder="(vazio)"
-          onChange={(e) => onChange(e.target.value)}
-        />
-      );
+  function createPrimaryKeyDimension() {
+    if (!primaryKeyDraft || !cube) {
+      return;
     }
 
-    if (key === 'levels') {
-      return (
-        <Input
-          value={Array.isArray(value) ? value.join(', ') : value ?? ''}
-          placeholder="dimensao 1, dimensao 2"
-          onChange={(e) => {
-            const levels = e.target.value.split(',').map((level) => level.trim()).filter(Boolean);
-            onChange(levels.length ? levels : undefined);
-          }}
-        />
-      );
+    const selectedColumns = primaryKeyDraft.selectedColumns;
+    const sql = primaryKeyDraft.customSql ? primaryKeyDraft.sql.trim() : defaultPrimaryKeySql(selectedColumns);
+    if (selectedColumns.length === 0) {
+      message.error('Selecione pelo menos uma coluna para a chave primária.');
+      return;
+    }
+    if (!sql) {
+      message.error('Informe o SQL da chave primária.');
+      return;
+    }
+    if (!primaryKeyDraft.name.trim()) {
+      message.error('Informe o nome da dimensão da chave primária.');
+      return;
     }
 
-    if (enumValues) {
-      return (
-        <Select allowClear style={{ width: '100%' }} value={value} placeholder="(vazio)" onChange={onChange}>
-          {enumValues.map((option) => <Select.Option key={option} value={option}>{option}</Select.Option>)}
-        </Select>
-      );
-    }
+    const requestedName = primaryKeyDraft.name.trim();
+    updateDoc((next) => {
+      const c = next.cubes![0];
+      const dimensions = Array.isArray(c.dimensions) ? c.dimensions as CubeItem[] : [];
+      let name = requestedName;
+      let suffix = 2;
+      while (dimensions.some((dimension) => dimension.name === name)) {
+        name = `${requestedName}_${suffix}`;
+        suffix += 1;
+      }
 
-    if (isBoolean) {
-      return (
-        <Select
-          allowClear
-          style={{ width: '100%' }}
-          value={value === undefined ? undefined : String(value)}
-          placeholder="(vazio)"
-          onChange={(next) => onChange(next === undefined ? undefined : next === 'true')}
-        >
-          <Select.Option value="true">true</Select.Option>
-          <Select.Option value="false">false</Select.Option>
-        </Select>
-      );
-    }
+      dimensions.unshift({
+        name,
+        sql,
+        type: selectedColumns.length > 1
+          ? 'string'
+          : inferDimensionType(columns.find((column) => column.name === selectedColumns[0])?.type),
+        primary_key: true,
+      });
+      c.dimensions = dimensions;
+    });
 
-    if (isSqlColumn) {
-      return (
-        <AutoComplete
-          style={{ width: '100%' }}
-          value={value}
-          placeholder="coluna ou expressão sql"
-          onChange={onChange}
-          options={columns.map((column) => ({
-            value: column.name,
-            label: column.type ? `${column.name} (${column.type})` : column.name,
-          }))}
-          filterOption={(inputValue, option) =>
-            String(option?.value || '').toLowerCase().includes(inputValue.toLowerCase())
-          }
-        />
-      );
-    }
-
-    return <Input value={value ?? ''} placeholder="(vazio)" onChange={(e) => onChange(e.target.value)} />;
+    setExpandedItems((previous) => ({
+      ...previous,
+      dimensions: ['0', ...(previous.dimensions || []).map((index) => String(Number(index) + 1))],
+    }));
+    scrollTarget.current = 'visual-editor-item-dimensions-0';
+    setActiveTab('dimensions');
+    setPrimaryKeyDraft(null);
   }
 
   function renderListSection(section: ListSection) {
@@ -682,59 +557,58 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
 
     return (
       <div>
-        <Button type="dashed" style={{ marginBottom: 12 }} onClick={() => addItem(section)}>
-          + {sectionConfig?.newItemLabel || 'novo item'}
-        </Button>
-        {items.length === 0 ? (
-          <Empty description={`Nenhum item em ${SECTION_TITLES[section]}`} />
-        ) : (
-          <Collapse
-            activeKey={expandedItems[section] || []}
-            onChange={(keys) => setExpandedItems((previous) => ({
-              ...previous,
-              [section]: Array.isArray(keys) ? keys : [keys],
-            }))}
-          >
-            {items.map((item, idx) => (
-              <Panel
-                key={String(idx)}
-                className={`visual-editor-item-${section}-${idx}`}
-                header={(section === 'dimensions' ? item.title || item.name : item.name) || '(sem nome)'}
-                extra={(
-                  <Popconfirm
-                    title="Remover este item?"
-                    overlayClassName="cube-remove-popconfirm"
-                    onConfirm={() => removeItem(section, idx)}
-                  >
-                    <Button danger size="small" onClick={(e) => e.stopPropagation()}>Remover</Button>
-                  </Popconfirm>
-                )}
-              >
-                <FieldTable>
-                  {(sectionConfig?.keys || []).map((key) => renderFieldRow(
-                    section,
-                    key,
-                    item,
-                    (value) => updateItemField(section, idx, key, value),
-                  ))}
-                </FieldTable>
-              </Panel>
-            ))}
-          </Collapse>
-        )}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <Button type="dashed" onClick={() => addItem(section)}>
+            + {sectionConfig?.newItemLabel || 'novo item'}
+          </Button>
+          {section === 'dimensions' ? (
+            <Button type="dashed" onClick={() => openPrimaryKeyModal()} disabled={columns.length === 0}>
+              + Nova chave primária
+            </Button>
+          ) : null}
+          <span style={{ marginLeft: 'auto' }}>{renderDocumentationLink(section)}</span>
+        </div>
+        <SchemaItemList
+          section={section}
+          items={items}
+          expandedKeys={expandedItems[section] || []}
+          droppableId={`visual-editor-${section}`}
+          emptyDescription={`Nenhum item em ${SECTION_TITLES[section]}`}
+          getItemKey={(item) => String(item[VISUAL_EDITOR_ID])}
+          getItemTitle={(item) => section === 'dimensions' ? item.title || item.name : item.name}
+          isPrimaryKey={(item) => section === 'dimensions' && Boolean(item.primary_key || item.primaryKey)}
+          onToggle={(index) => toggleItem(section, index)}
+          onRemove={(index) => removeItem(section, index)}
+          onReorder={(fromIndex, toIndex) => reorderItem(section, fromIndex, toIndex)}
+          renderItemForm={(item, index) => {
+            const formProps = {
+              values: item,
+              columns,
+              onChange: (key: string, value: any) => updateItemField(section, index, key, value),
+            };
+            if (section === 'dimensions') return <DimensionForm {...formProps} />;
+            if (section === 'measures') return <MeasureForm {...formProps} />;
+            if (section === 'hierarchies') return <HierarchyForm {...formProps} />;
+            if (section === 'joins') return <JoinForm {...formProps} />;
+            if (section === 'segments') return <SegmentForm {...formProps} />;
+            return <PreAggregationForm {...formProps} />;
+          }}
+        />
       </div>
     );
   }
 
-  const cubeScalarKeys = [
-    'title',
-    'name',
-    'description',
-    'extends',
-    'data_source',
-    'public',
-    'refresh_key',
-  ];
+  function renderDocumentationLink(section: string) {
+    const documentation = VISUAL_EDITOR_DOCUMENTATION[section];
+    if (!documentation) return null;
+
+    return (
+      <Typography.Link href={documentation.url} target="_blank" rel="noreferrer">
+        <ReadmeOutlined style={{ marginRight: 6 }} />
+        Ver documentação
+      </Typography.Link>
+    );
+  }
 
   async function handleSave() {
     if (!doc || !cube) {
@@ -754,7 +628,12 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
     for (const section of LIST_SECTIONS) {
       if (!Array.isArray(cleanCube[section]) || cleanCube[section].length === 0) {
         delete cleanCube[section];
+        continue;
       }
+
+      cleanCube[section].forEach((item: CubeItem) => {
+        delete item[VISUAL_EDITOR_ID];
+      });
     }
 
     const content = dump(cleanDoc, { lineWidth: -1, noRefs: true, sortKeys: false });
@@ -776,6 +655,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
   }
 
   return (
+    <>
     <Modal
       title={`Editor visual — ${fileName}`}
       visible={visible}
@@ -855,50 +735,15 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
           <div style={{ flex: 1, minWidth: 0 }}>
             <Tabs activeKey={activeTab} onChange={setActiveTab}>
               <TabPane tab="Cubo" key="cube">
-                <FieldTable>
-                  {cubeScalarKeys.slice(0, 3).map((key) => renderFieldRow(
-                    'cubes',
-                    key,
-                    cube,
-                    (value) => updateScalar(key, value),
-                  ))}
-
-                  <FieldRow>
-                    <FieldInputCell style={{ marginLeft: 0, background: '#fafafa' }}>
-                      <Select
-                        value={dataSourceMode}
-                        onChange={(mode) => updateDataSourceMode(mode as 'sql_table' | 'sql')}
-                      >
-                        <Select.Option value="sql_table">Tabela SQL</Select.Option>
-                        <Select.Option value="sql">SQL</Select.Option>
-                      </Select>
-                    </FieldInputCell>
-                    <FieldInputCell>
-                      {dataSourceMode === 'sql' ? (
-                        <Input.TextArea
-                          rows={3}
-                          value={cube.sql ?? ''}
-                          placeholder="Consulta SQL"
-                          onChange={(e) => updateScalar('sql', e.target.value)}
-                        />
-                      ) : (
-                        <Input
-                          value={cube.sql_table ?? ''}
-                          placeholder="schema.tabela"
-                          onChange={(e) => updateScalar('sql_table', e.target.value)}
-                        />
-                      )}
-                    </FieldInputCell>
-                    {renderHelp('cubes', dataSourceMode)}
-                  </FieldRow>
-
-                  {cubeScalarKeys.slice(3).map((key) => renderFieldRow(
-                    'cubes',
-                    key,
-                    cube,
-                    (value) => updateScalar(key, value),
-                  ))}
-                </FieldTable>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                  {renderDocumentationLink('cube')}
+                </div>
+                <CubeForm
+                  values={cube}
+                  columns={columns}
+                  onChange={(key, value) => updateScalar(key, value)}
+                  source={{ mode: dataSourceMode, onModeChange: updateDataSourceMode }}
+                />
               </TabPane>
               {LIST_SECTIONS.map((section) => (
                 <TabPane tab={SECTION_TITLES[section]} key={section}>
@@ -911,5 +756,77 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
         )}
       </div>
     </Modal>
+    <Modal
+      title="Nova chave primária"
+      visible={Boolean(primaryKeyDraft)}
+      onCancel={() => setPrimaryKeyDraft(null)}
+      maskClosable={false}
+      destroyOnClose
+      width={620}
+      footer={[
+        <Button key="cancel" onClick={() => setPrimaryKeyDraft(null)}>Cancelar</Button>,
+        <Button key="create" type="primary" onClick={createPrimaryKeyDimension}>Criar dimensão</Button>,
+      ]}
+    >
+      {primaryKeyDraft ? (
+        <div>
+          <FieldRow>
+            <FieldLabel>Nome da dimensão</FieldLabel>
+            <FieldInputCell>
+              <Input
+                value={primaryKeyDraft.name}
+                placeholder="primary_key"
+                onChange={(event) => setPrimaryKeyDraft({ ...primaryKeyDraft, name: event.target.value })}
+              />
+            </FieldInputCell>
+            <FieldHelp>
+              <Tooltip title="A dimensão será criada com primary_key: true.">
+                <QuestionOutlined />
+              </Tooltip>
+            </FieldHelp>
+          </FieldRow>
+          <FieldRow>
+            <FieldLabel>Colunas da chave</FieldLabel>
+            <FieldInputCell>
+              <Select
+                mode="multiple"
+                style={{ width: '100%' }}
+                value={primaryKeyDraft.selectedColumns}
+                placeholder="Selecione uma ou mais colunas"
+                onChange={(selected) => setPrimaryKeyDraft({
+                  ...primaryKeyDraft,
+                  selectedColumns: selected as string[],
+                })}
+                options={columns.map((column) => ({
+                  value: column.name,
+                  label: column.type ? `${column.name} (${column.type})` : column.name,
+                }))}
+              />
+            </FieldInputCell>
+            <FieldHelp />
+          </FieldRow>
+          <div style={{ marginTop: 14 }}>
+            <Checkbox
+              checked={primaryKeyDraft.customSql}
+              onChange={(event) => setPrimaryKeyDraft({ ...primaryKeyDraft, customSql: event.target.checked })}
+            >
+              Escrever meu próprio SQL
+            </Checkbox>
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <Text strong>{primaryKeyDraft.customSql ? 'SQL da dimensão' : 'SQL gerado'}</Text>
+            <Input.TextArea
+              rows={3}
+              value={primaryKeyDraft.customSql ? primaryKeyDraft.sql : defaultPrimaryKeySql(primaryKeyDraft.selectedColumns)}
+              readOnly={!primaryKeyDraft.customSql}
+              placeholder={primaryKeyDraft.customSql ? 'Ex.: CONCAT({CUBE}.airplane_code, \'-\', {CUBE}.seat_no)' : 'Selecione as colunas para visualizar o SQL'}
+              onChange={(event) => setPrimaryKeyDraft({ ...primaryKeyDraft, sql: event.target.value })}
+              style={{ marginTop: 6, fontFamily: 'monospace' }}
+            />
+          </div>
+        </div>
+      ) : null}
+    </Modal>
+    </>
   );
 }
