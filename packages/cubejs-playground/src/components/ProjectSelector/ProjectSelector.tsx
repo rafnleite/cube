@@ -39,6 +39,7 @@ const Panel = styled(Card)`
 const ConnectionCard = styled(Card)`
   background: #e6f7ff;
   border-color: #91d5ff;
+  margin-bottom: 16px;
 
   .ant-descriptions-row > th,
   .ant-descriptions-row > td {
@@ -53,6 +54,8 @@ const ConnectionCard = styled(Card)`
 
 function ConnectionSummary({ connection }: { connection?: ConnectionPreset }) {
   if (!connection?.defaults) return null;
+  const dsn = connection.defaults.CUBEJS_DB_NETEZZA_DSN;
+  const isDsnConnection = connection.dbType === 'odbc' || Boolean(dsn);
 
   return (
     <ConnectionCard
@@ -65,15 +68,23 @@ function ConnectionSummary({ connection }: { connection?: ConnectionPreset }) {
       )}
     >
       <Descriptions column={1} size="small" colon>
-        <Descriptions.Item label="Host">
-          {connection.defaults.CUBEJS_DB_HOST || '—'}
-        </Descriptions.Item>
-        <Descriptions.Item label="Porta">
-          {connection.defaults.CUBEJS_DB_PORT || '—'}
-        </Descriptions.Item>
-        <Descriptions.Item label="Banco">
-          {connection.defaults.CUBEJS_DB_NAME || '—'}
-        </Descriptions.Item>
+        {isDsnConnection ? (
+          <Descriptions.Item label="DSN">
+            {dsn || 'Configurado no backend'}
+          </Descriptions.Item>
+        ) : (
+          <>
+            <Descriptions.Item label="Host">
+              {connection.defaults.CUBEJS_DB_HOST || '—'}
+            </Descriptions.Item>
+            <Descriptions.Item label="Porta">
+              {connection.defaults.CUBEJS_DB_PORT || '—'}
+            </Descriptions.Item>
+            <Descriptions.Item label="Banco">
+              {connection.defaults.CUBEJS_DB_NAME || '—'}
+            </Descriptions.Item>
+          </>
+        )}
       </Descriptions>
     </ConnectionCard>
   );
@@ -244,7 +255,7 @@ export function ProjectSelector({ onReady }: { onReady: () => void }) {
                         : []
                     }
                   >
-                    {field.secret ? <Input.Password autoComplete="new-password" /> : <Input autoComplete="off" />}
+                    {field.secret ? <Input.Password autoComplete="current-password" /> : <Input autoComplete="off" />}
                   </Form.Item>
                 ))}
                 <Space>
@@ -269,6 +280,7 @@ export function ProjectSelector({ onReady }: { onReady: () => void }) {
                 <Form
                   form={createProjectForm}
                   layout="vertical"
+                  autoComplete="off"
                   onFinish={createProject}
                   onValuesChange={(changedValues) => {
                     if ('connectionId' in changedValues) {
@@ -276,18 +288,18 @@ export function ProjectSelector({ onReady }: { onReady: () => void }) {
                     }
                   }}
                 >
-                  <Form.Item name="name" label="Nome" rules={[{ required: true }]}>
-                    <Input placeholder="Financeiro" />
+                  <Form.Item name="name" label="Nome" rules={[{ required: true }]}> 
+                    <Input autoComplete="off" placeholder="Financeiro" />
                   </Form.Item>
                   <Form.Item
                     name="id"
                     label="Identificador"
                     rules={[
                       { required: true },
-                      { pattern: /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/, message: 'Use letras minúsculas, números e hífens' },
+                      { pattern: /^[a-z0-9_-]{1,63}$/, message: 'Use letras minúsculas, números, hífens e sublinhados' },
                     ]}
                   >
-                    <Input placeholder="financeiro" />
+                    <Input autoComplete="off" placeholder="financeiro" />
                   </Form.Item>
                   <Form.Item name="connectionId" label="Conexão" rules={[{ required: true }]}>
                     <Select options={connections.map(item => ({ value: item.id, label: item.label }))} />
@@ -309,7 +321,7 @@ export function ProjectSelector({ onReady }: { onReady: () => void }) {
                       }
                     hidden={!createConnection}
                     >
-                      {field.secret ? <Input.Password autoComplete="new-password" /> : <Input autoComplete="off" />}
+                      {field.secret ? <Input.Password autoComplete="current-password" /> : <Input autoComplete="off" />}
                     </Form.Item>
                   ))}
 

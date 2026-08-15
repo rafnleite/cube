@@ -30,7 +30,8 @@
           "hierarchies",
           "measures",
           "segments",
-          "pre_aggregations"
+          "pre_aggregations",
+          "access_policy"
         ],
         "descriptions": {
           "name": "Identificador único do cube, usado para referenciá-lo em outros cubes e nas queries.",
@@ -56,7 +57,7 @@
         ]
       },
       "joins": {
-        "newItemLabel": "nova junção",
+        "newItemLabel": "Nova junção",
         "keys": ["name", "sql", "relationship"],
         "values": {
           "relationship": ["one_to_one", "one_to_many", "many_to_one"]
@@ -68,7 +69,7 @@
         }
       },
       "hierarchies": {
-        "newItemLabel": "nova hierarquia",
+        "newItemLabel": "Nova hierarquia",
         "keys": ["name", "title", "public", "levels"],
         "descriptions": {
           "name": "Nome da hierarquia, usado nas queries.",
@@ -78,7 +79,7 @@
         }
       },
       "dimensions": {
-        "newItemLabel": "nova dimensão",
+        "newItemLabel": "Nova dimensão",
         "keys": [
           "title",
           "name",
@@ -112,7 +113,7 @@
         }
       },
       "measures": {
-        "newItemLabel": "nova medida",
+        "newItemLabel": "Nova medida",
         "keys": [
           "name",
           "sql",
@@ -124,6 +125,7 @@
           "drill_members",
           "rolling_window",
           "filters",
+          "case",
           "meta"
         ],
         "values": {
@@ -155,7 +157,7 @@
         }
       },
       "segments": {
-        "newItemLabel": "novo segmento",
+        "newItemLabel": "Novo segmento",
         "keys": ["name", "sql", "title", "description", "public"],
         "descriptions": {
           "name": "Identificador do segment, usado nas queries.",
@@ -166,7 +168,7 @@
         }
       },
       "pre_aggregations": {
-        "newItemLabel": "nova pré-agregação",
+        "newItemLabel": "Nova pré-agregação",
         "keys": [
           "name",
           "type",
@@ -197,6 +199,18 @@
           "external": "Indica se a pre-agregação é armazenada externamente (Cube Store).",
           "scheduled_refresh": "Indica se a pre-agregação deve ser atualizada automaticamente em background.",
           "indexes": "Índices adicionais criados sobre a pre-agregação para acelerar queries."
+        }
+      },
+      "access_policy": {
+        "newItemLabel": "Nova política de acesso",
+        "keys": ["group", "groups", "conditions", "member_level", "row_level", "member_masking"],
+        "descriptions": {
+          "group": "Grupo ao qual a política se aplica. Use * para todos os grupos.",
+          "groups": "Lista de grupos aos quais a mesma política se aplica.",
+          "conditions": "Condições que determinam quando a política será aplicada.",
+          "member_level": "Membros permitidos ou bloqueados, usando includes ou excludes.",
+          "row_level": "Filtros de linha aplicados aos dados retornados.",
+          "member_masking": "Regras de mascaramento para membros não permitidos."
         }
       }
     }

@@ -1,4 +1,4 @@
-import { CubePreAggregationConverter, CubeSchemaConverter } from '../../src';
+import { CubePreAggregationConverter, CubeSchemaConverter, CubeSchemaItemConverter } from '../../src';
 import {
   createCubeSchema,
   createCubeSchemaWithCustomGranularitiesAndTimeShift,
@@ -35,6 +35,35 @@ describe('CubeSchemaConverter', () => {
     regeneratedFiles.forEach((regeneratedFile) => {
       expect(regeneratedFile.source).toMatchSnapshot(regeneratedFile.fileName);
     });
+  });
+
+  it('serializes geo SQL entered without YAML quotes', async () => {
+    const geoRepository = {
+      localPath: () => __dirname,
+      dataSchemaFiles: () => Promise.resolve([{
+        fileName: 'locations.yml',
+        content: `cubes:
+  - name: locations
+    sql_table: public.locations
+`
+      }])
+    };
+    const schemaConverter = new CubeSchemaConverter(geoRepository, [new CubeSchemaItemConverter({
+      cubeName: 'locations',
+      section: 'dimensions',
+      values: {
+        name: 'coordinates',
+        type: 'geo',
+        latitude: { sql: '{CUBE}.latitude' },
+        longitude: { sql: '({CUBE}.coordinates)[0]' },
+      },
+    })]);
+
+    await schemaConverter.generate('locations');
+
+    const source = schemaConverter.getSourceFiles()[0].source;
+    expect(source).toContain('sql: "{CUBE}.latitude"');
+    expect(source).toContain('sql: ({CUBE}.coordinates)[0]');
   });
 
   it('throws error if can not parse source schema js file (syntax error)', async () => {

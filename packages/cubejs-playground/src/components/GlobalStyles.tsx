@@ -266,6 +266,14 @@ const GlobalStyles = createGlobalStyle`
     padding: 24px;
   }
 
+  /* Shared dimensions for the large schema modals. */
+  .cube-modal-wide.ant-modal {
+    top: 16px;
+    width: calc(100vw - 32px) !important;
+    max-width: none;
+    padding-bottom: 0;
+  }
+
   // Fix close tab button styles
   .ant-tabs-dropdown {
     & .ant-tabs-dropdown-menu-item {

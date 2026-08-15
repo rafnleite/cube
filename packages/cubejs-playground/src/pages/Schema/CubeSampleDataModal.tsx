@@ -5,11 +5,12 @@ import { ReloadOutlined } from '../../shared/icons/FontAwesomeIcons';
 import { playgroundFetch, responseErrorMessage } from '../../shared/helpers';
 
 const { Text } = Typography;
+const EMPTY_COLUMN_TYPES: Record<string, string | undefined> = {};
 
 type SampleMode = 'cube' | 'raw';
 
 type SampleData = {
-  columns: { key: string; label: string }[];
+  columns: { key: string; label: string; type?: string }[];
   rows: Record<string, unknown>[];
 };
 
@@ -17,6 +18,7 @@ type Props = {
   visible: boolean;
   cubeName: string | null;
   title?: string;
+  columnTypes?: Record<string, string | undefined>;
   onClose: () => void;
 };
 
@@ -40,7 +42,13 @@ function formatTotalCount(value: string | number): string {
     : String(value);
 }
 
-export function CubeSampleDataModal({ visible, cubeName, title, onClose }: Props) {
+export function CubeSampleDataModal({
+  visible,
+  cubeName,
+  title,
+  columnTypes = EMPTY_COLUMN_TYPES,
+  onClose,
+}: Props) {
   const [mode, setMode] = useState<SampleMode>('cube');
   const [data, setData] = useState<SampleData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +73,11 @@ export function CubeSampleDataModal({ visible, cubeName, title, onClose }: Props
         columns: rawData.columns.map((column: string) => ({
           key: column,
           label: rawData.columnLabels?.[column.toLowerCase()] || column,
+          type: rawData.columnTypes?.[column.toLowerCase()]
+            || (mode === 'cube'
+              ? columnTypes[column.toLowerCase()]
+                || columnTypes[column.split('__').pop()?.toLowerCase() || '']
+              : undefined),
         })),
         rows: rawData.rows,
       });
@@ -73,7 +86,7 @@ export function CubeSampleDataModal({ visible, cubeName, title, onClose }: Props
     } finally {
       setLoading(false);
     }
-  }, [cubeName, mode, visible]);
+  }, [columnTypes, cubeName, mode, visible]);
 
   const loadCount = useCallback(async () => {
     if (!visible || !cubeName) return;
@@ -112,8 +125,7 @@ export function CubeSampleDataModal({ visible, cubeName, title, onClose }: Props
       onCancel={onClose}
       maskClosable={false}
       destroyOnClose
-      width="calc(100vw - 32px)"
-      style={{ top: 24, maxWidth: 'none' }}
+      className="cube-modal-wide"
       footer={null}
     >
       <div style={{ display: 'flex', alignItems: 'center', width: '100%', marginBottom: 16, gap: 8 }}>
@@ -150,7 +162,16 @@ export function CubeSampleDataModal({ visible, cubeName, title, onClose }: Props
           rowKey={(_row, index) => String(index)}
           dataSource={data.rows}
           columns={data.columns.map(column => ({
-            title: column.label,
+            title: (
+              <div style={{ lineHeight: 1.2 }}>
+                <div>{column.label}</div>
+                {column.type ? (
+                  <Text type="secondary" style={{ display: 'block', marginTop: 3, fontSize: 11, fontWeight: 400 }}>
+                    {column.type}
+                  </Text>
+                ) : null}
+              </div>
+            ),
             dataIndex: column.key,
             key: column.key,
             width: sampleColumnWidth(column, data.rows),

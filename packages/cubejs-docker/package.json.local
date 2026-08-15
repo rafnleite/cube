@@ -9,7 +9,7 @@
     "node": "^14.0.0 || ^16.0.0 || >=17.0.0"
   },
   "scripts": {
-      "link:dev": "yarn link @cubejs-backend/shared @cubejs-backend/server @cubejs-backend/server-core @cubejs-backend/api-gateway @cubejs-backend/schema-compiler @cubejs-backend/query-orchestrator @cubejs-client/ws-transport @cubejs-client/core @cubejs-backend/templates @cubejs-client/playground @cubejs-backend/athena-driver @cubejs-backend/bigquery-driver @cubejs-backend/postgres-driver @cubejs-backend/mssql-driver"
+      "link:dev": "yarn link @cubejs-backend/shared @cubejs-backend/server @cubejs-backend/server-core @cubejs-backend/api-gateway @cubejs-backend/schema-compiler @cubejs-backend/query-orchestrator @cubejs-client/ws-transport @cubejs-client/core @cubejs-backend/templates @cubejs-backend/athena-driver @cubejs-backend/bigquery-driver @cubejs-backend/postgres-driver @cubejs-backend/netezza-driver @cubejs-backend/mssql-driver"
   },
   "dependencies": {
     "@cubejs-backend/athena-driver": "file:/cube-build/packages/cubejs-athena-driver",
@@ -28,6 +28,7 @@
     "@cubejs-backend/mongobi-driver": "file:/cube-build/packages/cubejs-mongobi-driver",
     "@cubejs-backend/mssql-driver": "file:/cube-build/packages/cubejs-mssql-driver",
     "@cubejs-backend/mysql-driver": "file:/cube-build/packages/cubejs-mysql-driver",
+    "@cubejs-backend/netezza-driver": "file:/cube-build/packages/cubejs-netezza-driver",
     "@cubejs-backend/oracle-driver": "file:/cube-build/packages/cubejs-oracle-driver",
     "@cubejs-backend/postgres-driver": "file:/cube-build/packages/cubejs-postgres-driver",
     "@cubejs-backend/prestodb-driver": "file:/cube-build/packages/cubejs-prestodb-driver",

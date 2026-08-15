@@ -1465,6 +1465,42 @@ const variables: Record<string, (...args: any) => any> = {
   ),
 
   /** ****************************************************************
+   * Netezza Driver                                                   *
+   ***************************************************************** */
+
+  /** Complete ODBC connection string for the Netezza driver. */
+  netezzaConnectionString: ({
+    dataSource,
+    preAggregations,
+  }: DataSourceOpts) => (
+    get(keyByDataSource('CUBEJS_DB_NETEZZA_CONNECTION_STRING', dataSource, preAggregations)).asString()
+  ),
+
+  /** Configured ODBC DSN for the Netezza driver. */
+  netezzaDsn: ({
+    dataSource,
+    preAggregations,
+  }: DataSourceOpts) => (
+    get(keyByDataSource('CUBEJS_DB_NETEZZA_DSN', dataSource, preAggregations)).asString()
+  ),
+
+  /** Installed vendor ODBC driver name, when a DSN is not used. */
+  netezzaDriver: ({
+    dataSource,
+    preAggregations,
+  }: DataSourceOpts) => (
+    get(keyByDataSource('CUBEJS_DB_NETEZZA_DRIVER', dataSource, preAggregations)).asString()
+  ),
+
+  /** Default Netezza schema for connections configured without a DSN. */
+  netezzaSchema: ({
+    dataSource,
+    preAggregations,
+  }: DataSourceOpts) => (
+    get(keyByDataSource('CUBEJS_DB_NETEZZA_SCHEMA', dataSource, preAggregations)).asString()
+  ),
+
+  /** ****************************************************************
    * Snowflake Driver                                                *
    ***************************************************************** */
 

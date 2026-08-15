@@ -1,14 +1,17 @@
-import React, { Component } from 'react';
-import { Layout, Modal, Empty, Typography, Button, Space, Popconfirm, message, notification, Input } from 'antd';
+import React, { Component, useLayoutEffect, useRef, useState } from 'react';
+import { Layout, Modal, Empty, Typography, Button, Space, Popconfirm, message, notification, Input, Tooltip } from 'antd';
 import { RouterProps } from 'react-router-dom';
 import {
   ApartmentOutlined,
+  CheckCircleFilled,
   CodeOutlined,
   CopyOutlined,
   EditOutlined,
   SearchOutlined,
   TableListOutlined,
   TrashOutlined,
+  LoadingOutlined,
+  WarningFilled,
 } from '../../shared/icons/FontAwesomeIcons';
 
 import { playgroundAction } from '../../events';
@@ -23,6 +26,7 @@ import { CubeVisualEditor } from './CubeVisualEditor';
 import { CubeRelationshipDiagram } from './CubeRelationshipDiagram';
 import { CubeSampleDataModal } from './CubeSampleDataModal';
 import styled, { createGlobalStyle } from 'styled-components';
+import { load } from 'js-yaml';
 
 const { Content, Sider } = Layout;
 
@@ -34,7 +38,22 @@ const SCHEMA_EDITOR_DRAFT_KEY = 'cube-schema-editor-draft';
 function cubeNameFromFileContent(fileName: string, content?: string): string | null {
   if (!content) return null;
   if (fileName.endsWith('.yml') || fileName.endsWith('.yaml')) {
-    const match = content.match(/^\s*-\s+name:\s*["']?([^\s"'#]+)["']?\s*$/m);
+    try {
+      const parsed = load(content) as { cubes?: unknown } | null;
+      const cubes = parsed && Array.isArray(parsed.cubes)
+        ? parsed.cubes as Array<{ name?: unknown }>
+        : [];
+      const cube = cubes.find(item => item && typeof item.name === 'string');
+      const cubeName = cube?.name;
+      if (typeof cubeName === 'string' && cubeName) return cubeName;
+    } catch (_error) {
+      // Fall back to the simple format below while the YAML is being edited.
+    }
+
+    // Keep the fallback restricted to the cubes list indentation. A generic
+    // "- name" search can accidentally select a join, such as `seats` in
+    // the airplanes cube.
+    const match = content.match(/^\s{2}-\s+name:\s*["']?([^\s"'#]+)["']?\s*$/m);
     return match?.[1] || null;
   }
   const match = content.match(/\bcube\s*\(\s*[`'\"]([^`'\"]+)[`'\"]/);
@@ -53,6 +72,10 @@ const TablesTreeScroll = styled.div`
   flex: 1;
   min-height: 0;
   overflow: auto;
+`;
+
+const FilesListScroll = styled(TablesTreeScroll)`
+  overflow: hidden;
 `;
 
 const SchemaPageOverlayStyles = createGlobalStyle`
@@ -92,6 +115,47 @@ const schemaToTreeData = (schemas) =>
     }),
   }));
 
+function FileNameWithTooltip({ name }: { name: string }) {
+  const nameRef = useRef<HTMLSpanElement>(null);
+  const [truncated, setTruncated] = useState(false);
+
+  useLayoutEffect(() => {
+    const updateTruncation = () => {
+      const element = nameRef.current;
+      setTruncated(Boolean(element && element.scrollWidth > element.clientWidth));
+    };
+
+    updateTruncation();
+    window.addEventListener('resize', updateTruncation);
+    const observer = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(updateTruncation)
+      : null;
+    if (nameRef.current) observer?.observe(nameRef.current);
+
+    return () => {
+      window.removeEventListener('resize', updateTruncation);
+      observer?.disconnect();
+    };
+  }, [name]);
+
+  return (
+    <Tooltip title={truncated ? name : undefined}>
+      <span
+        ref={nameRef}
+        style={{
+          flex: '1 1 auto',
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {name}
+      </span>
+    </Tooltip>
+  );
+}
+
 type SchemaPageProps = RouterProps;
 
 export class SchemaPage extends Component<SchemaPageProps, any> {
@@ -120,9 +184,17 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
       fileDialogLoading: false,
       visualEditorFileName: null,
       sampleCubeName: null,
-      relationshipDiagramVisible: false
+      relationshipDiagramVisible: false,
+      fileValidationErrors: {},
+      fileValidationGlobalError: null,
+      fileValidationLoading: false,
+      fileValidationCompleted: false,
     };
+
+    this.validationRun = 0;
   }
+
+  validationRun: number;
 
   async componentDidMount() {
     await this.loadDBSchema();
@@ -178,6 +250,9 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
       window.sessionStorage.removeItem(SCHEMA_EDITOR_DRAFT_KEY);
       this.setState({
         files: result.files,
+        fileValidationErrors: {},
+        fileValidationGlobalError: null,
+        fileValidationCompleted: false,
         activeTab: 'files',
         selectedFile: draftFile.fileName,
         editingFileName: draftFile.fileName,
@@ -189,13 +264,45 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
         placement: 'bottomRight',
         duration: 5,
       });
+      void this.validateFiles();
       return;
     }
 
     this.setState({
       files: result.files,
+      fileValidationErrors: {},
+      fileValidationGlobalError: null,
+      fileValidationCompleted: false,
       activeTab: result.files && result.files.length > 0 ? 'files' : 'schema',
     });
+    void this.validateFiles();
+  }
+
+  async validateFiles() {
+    const validationRun = ++this.validationRun;
+    this.setState({
+      fileValidationLoading: true,
+      fileValidationCompleted: false,
+    });
+    try {
+      const response = await playgroundFetch('playground/schema/validation');
+      if (!response.ok) {
+        throw new Error(await responseErrorMessage(response));
+      }
+      const result = await response.json();
+      if (validationRun !== this.validationRun) return;
+      this.setState({
+        fileValidationErrors: result.errors || {},
+        fileValidationGlobalError: result.globalError || null,
+        fileValidationCompleted: true,
+      });
+    } catch (_error) {
+      // Validation is best-effort and must not block the editor.
+    } finally {
+      if (validationRun === this.validationRun) {
+        this.setState({ fileValidationLoading: false });
+      }
+    }
   }
 
   async generateSchema(format: SchemaFormat = SchemaFormat.js) {
@@ -302,6 +409,7 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
     this.setState({
       files: files.map((f) => (f.fileName === fileName ? { ...f, content } : f))
     });
+    void this.validateFiles();
   }
 
   openSampleData() {
@@ -465,7 +573,14 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
   }
 
   renderFilesMenu() {
-    const { selectedFile, files } = this.state;
+    const {
+      selectedFile,
+      files,
+      fileValidationErrors = {},
+      fileValidationGlobalError,
+      fileValidationLoading = false,
+      fileValidationCompleted = false,
+    } = this.state;
     return (
       <TablesPaneContent>
         <div
@@ -484,7 +599,7 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
             Diagrama de relacionamentos
           </Button>
         </div>
-        <TablesTreeScroll>
+        <FilesListScroll>
           <Menu
             mode="inline"
             onClick={({ key }) => {
@@ -494,10 +609,29 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
             selectedKeys={selectedFile ? [selectedFile] : []}
           >
             {files.map((f) => (
-              <Menu.Item key={f.fileName}>{f.fileName}</Menu.Item>
+              <Menu.Item key={f.fileName}>
+                <span style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                  <FileNameWithTooltip name={f.fileName} />
+                  <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center' }}>
+                    {fileValidationLoading ? (
+                      <Tooltip title="Validando o schema...">
+                        <LoadingOutlined spin color="#7568d8" />
+                      </Tooltip>
+                    ) : (fileValidationErrors[f.fileName] || fileValidationGlobalError) ? (
+                      <Tooltip title={fileValidationErrors[f.fileName] || fileValidationGlobalError}>
+                        <WarningFilled color="#ff4d4f" />
+                      </Tooltip>
+                    ) : fileValidationCompleted ? (
+                      <Tooltip title="Schema validado">
+                        <CheckCircleFilled color="#b7eb8f" />
+                      </Tooltip>
+                    ) : null}
+                  </span>
+                </span>
+              </Menu.Item>
             ))}
           </Menu>
-        </TablesTreeScroll>
+        </FilesListScroll>
       </TablesPaneContent>
     );
   }
@@ -727,7 +861,7 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
                     disabled={Boolean(editingFileName) || deletingFile || fileDialogLoading}
                     onClick={() => this.openFileDialog('copy')}
                   >
-                    Copiar cubo
+                    Copiar arquivo
                   </Button>
                   {(selectedFile.endsWith('.yml') || selectedFile.endsWith('.yaml')) && (
                     <Button
@@ -769,7 +903,7 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
               </div>
 
               <Modal
-                title={fileDialog === 'copy' ? 'Copiar cubo' : 'Renomear arquivo do cubo'}
+                title={fileDialog === 'copy' ? 'Copiar arquivo' : 'Renomear arquivo do cubo'}
                 visible={Boolean(fileDialog)}
                 onCancel={() => this.closeFileDialog()}
                 onOk={() => this.submitFileDialog()}
@@ -836,6 +970,7 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
           <CubeRelationshipDiagram
             visible={relationshipDiagramVisible}
             projectId={playgroundContext.multiProject?.activeProject?.id}
+            tablesSchema={tablesSchema}
             onClose={() => this.setState({ relationshipDiagramVisible: false })}
             onChanged={() => this.loadFiles()}
           />

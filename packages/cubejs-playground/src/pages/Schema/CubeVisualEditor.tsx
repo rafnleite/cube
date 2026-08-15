@@ -33,8 +33,10 @@ import {
   MeasureForm,
   PreAggregationForm,
   SegmentForm,
+  AccessPolicyForm,
 } from './SchemaEntityForms';
 import { SchemaItemList } from './SchemaItemList';
+import { SqlExpressionAutocomplete } from './SqlExpressionAutocomplete';
 
 const { TabPane } = Tabs;
 const { Text } = Typography;
@@ -80,6 +82,21 @@ const EditorOverlayStyles = createGlobalStyle`
   }
 `;
 
+const ModalShortcutAction = styled.div`
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin-left: 8px;
+  vertical-align: bottom;
+`;
+
+const ModalShortcutHint = styled.span`
+  margin-top: 2px;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 10px;
+  line-height: 12px;
+`;
+
 type SchemaSectionConfig = {
   keys: string[];
   values?: Record<string, string[]>;
@@ -96,7 +113,7 @@ type SchemaAutocompleteConfig = {
 
 const schemaAutocomplete = autocompleteConfig as SchemaAutocompleteConfig;
 
-const LIST_SECTIONS = ['joins', 'dimensions', 'hierarchies', 'measures', 'segments', 'pre_aggregations'] as const;
+const LIST_SECTIONS = ['joins', 'dimensions', 'hierarchies', 'measures', 'segments', 'pre_aggregations', 'access_policy'] as const;
 type ListSection = typeof LIST_SECTIONS[number];
 const VISUAL_EDITOR_ID = '__visualEditorId';
 
@@ -107,6 +124,17 @@ const SECTION_TITLES: Record<ListSection, string> = {
   measures: 'Medidas',
   segments: 'Segmentos',
   pre_aggregations: 'Pré-agregações',
+  access_policy: 'Políticas de acesso',
+};
+
+const ITEM_FIELD_ORDER: Record<string, string[]> = {
+  joins: ['name', 'sql', 'relationship'],
+  dimensions: ['title', 'name', 'description', 'sql', 'type', 'latitude', 'longitude', 'primary_key', 'public', 'shown', 'case', 'sub_query', 'format', 'meta'],
+  measures: ['title', 'name', 'description', 'sql', 'type', 'public', 'format', 'drill_members', 'rolling_window', 'filters', 'case', 'meta'],
+  hierarchies: ['name', 'title', 'public', 'levels'],
+  segments: ['name', 'sql', 'title', 'description', 'public'],
+  pre_aggregations: ['name', 'type', 'measures', 'dimensions', 'time_dimension', 'granularity', 'partition_granularity', 'refresh_key', 'external', 'scheduled_refresh', 'indexes'],
+  access_policy: ['group', 'groups', 'conditions', 'member_level', 'row_level', 'member_masking'],
 };
 
 const VISUAL_EDITOR_DOCUMENTATION: Record<string, { label: string; url: string }> = {
@@ -142,6 +170,114 @@ const VISUAL_EDITOR_DOCUMENTATION: Record<string, { label: string; url: string }
 
 type CubeItem = Record<string, any>;
 type CubeDoc = { cubes?: CubeItem[]; [key: string]: any };
+
+/**
+ * The scaffolding generator separates structural YAML blocks with blank
+ * lines. Keep the visual editor output consistent with that generated style
+ * while retaining js-yaml's safe scalar escaping and key ordering.
+ */
+function formatYamlLikeGeneratedModel(content: string): string {
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
+  const formatted: string[] = [];
+  const listItemIndents = new Set<number>();
+
+  const addBlankLine = () => {
+    if (formatted.length > 0 && formatted[formatted.length - 1] !== '') {
+      formatted.push('');
+    }
+  };
+
+  const indentOf = (line: string) => (line.match(/^ */)?.[0].length || 0);
+  const previousNonBlank = () => {
+    for (let index = formatted.length - 1; index >= 0; index -= 1) {
+      if (formatted[index].trim()) return formatted[index];
+    }
+    return null;
+  };
+
+  const cubeHasDataSource = (index: number) => {
+    for (let next = index + 1; next < lines.length; next += 1) {
+      if (/^ {2}-\s/.test(lines[next])) return false;
+      if (/^ {4}data_source:/.test(lines[next])) return true;
+    }
+    return false;
+  };
+
+  lines.forEach((line, index) => {
+    if (!line.trim()) {
+      formatted.push(line);
+      return;
+    }
+
+    const previous = previousNonBlank();
+    const currentIndent = indentOf(line);
+    const listItem = line.match(/^( *)-\s/);
+
+    if (previous && listItem) {
+      const previousIndent = indentOf(previous);
+      if (listItemIndents.has(currentIndent) && previousIndent > currentIndent) {
+        addBlankLine();
+      }
+      listItemIndents.add(currentIndent);
+    } else if (previous && currentIndent < indentOf(previous)) {
+      // A list or nested object has ended and the next property starts.
+      addBlankLine();
+    }
+
+    formatted.push(line);
+
+    const cubeProperty = line.match(/^ {4}(sql_table|data_source):/);
+    const needsGeneratedBreak = cubeProperty
+      && (cubeProperty[1] === 'data_source'
+        || (cubeProperty[1] === 'sql_table' && !cubeHasDataSource(index)));
+    if (needsGeneratedBreak && lines[index + 1]?.trim()) {
+      addBlankLine();
+    }
+  });
+
+  return formatted.join('\n').replace(/\n+$/, '\n');
+}
+
+function reorderObject(value: CubeItem, keys: string[]): CubeItem {
+  const ordered: CubeItem = {};
+  keys.forEach(key => {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      ordered[key] = value[key];
+    }
+  });
+  Object.keys(value).forEach(key => {
+    if (!Object.prototype.hasOwnProperty.call(ordered, key)) {
+      ordered[key] = value[key];
+    }
+  });
+  return ordered;
+}
+
+function reorderCubeForVisualEditor(value: CubeItem): CubeItem {
+  const sourceKey = Object.prototype.hasOwnProperty.call(value, 'sql') ? 'sql' : 'sql_table';
+  const cubeKeys = [
+    'title',
+    'name',
+    'description',
+    sourceKey,
+    'extends',
+    'data_source',
+    'public',
+    'refresh_key',
+    ...LIST_SECTIONS,
+  ];
+  const ordered = reorderObject(value, cubeKeys);
+
+  LIST_SECTIONS.forEach(section => {
+    if (Array.isArray(ordered[section])) {
+      ordered[section] = ordered[section].map((item: CubeItem) => (
+        reorderObject(item, ITEM_FIELD_ORDER[section] || [])
+      ));
+    }
+  });
+
+  return ordered;
+}
 
 type ColumnUsage = {
   join: boolean;
@@ -347,7 +483,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
       if (!Array.isArray(c[section])) {
         c[section] = [];
       }
-      c[section].push({ name: '' });
+      c[section].push(section === 'access_policy' ? { group: '*' } : { name: '' });
     });
   }
 
@@ -559,7 +695,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
       <div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <Button type="dashed" onClick={() => addItem(section)}>
-            + {sectionConfig?.newItemLabel || 'novo item'}
+            + {sectionConfig?.newItemLabel || 'Novo item'}
           </Button>
           {section === 'dimensions' ? (
             <Button type="dashed" onClick={() => openPrimaryKeyModal()} disabled={columns.length === 0}>
@@ -575,7 +711,11 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
           droppableId={`visual-editor-${section}`}
           emptyDescription={`Nenhum item em ${SECTION_TITLES[section]}`}
           getItemKey={(item) => String(item[VISUAL_EDITOR_ID])}
-          getItemTitle={(item) => section === 'dimensions' ? item.title || item.name : item.name}
+          getItemTitle={(item) => section === 'dimensions'
+            ? item.title || item.name
+            : section === 'access_policy'
+              ? item.group || (Array.isArray(item.groups) ? item.groups.join(', ') : item.groups) || 'Política de acesso'
+              : item.name}
           isPrimaryKey={(item) => section === 'dimensions' && Boolean(item.primary_key || item.primaryKey)}
           onToggle={(index) => toggleItem(section, index)}
           onRemove={(index) => removeItem(section, index)}
@@ -584,6 +724,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
             const formProps = {
               values: item,
               columns,
+              tablesSchema,
               onChange: (key: string, value: any) => updateItemField(section, index, key, value),
             };
             if (section === 'dimensions') return <DimensionForm {...formProps} />;
@@ -591,6 +732,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
             if (section === 'hierarchies') return <HierarchyForm {...formProps} />;
             if (section === 'joins') return <JoinForm {...formProps} />;
             if (section === 'segments') return <SegmentForm {...formProps} />;
+            if (section === 'access_policy') return <AccessPolicyForm {...formProps} />;
             return <PreAggregationForm {...formProps} />;
           }}
         />
@@ -611,14 +753,44 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
   }
 
   async function handleSave() {
-    if (!doc || !cube) {
+    if (saving || !doc || !cube) {
       return;
     }
 
+    const expressionText = (value: unknown): string => {
+      if (typeof value === 'string') return value.trim();
+      if (value && typeof value === 'object' && 'sql' in value) {
+        return String((value as { sql?: unknown }).sql || '').trim();
+      }
+      return '';
+    };
+
     for (const section of LIST_SECTIONS) {
       const items: CubeItem[] = (cube[section] || []) as CubeItem[];
-      if (items.some((item) => !item.name)) {
+      if (section !== 'access_policy' && items.some((item) => !item.name)) {
         message.error(`Todo item em ${SECTION_TITLES[section]} precisa de um nome`);
+        return;
+      }
+      if (section === 'dimensions') {
+        const invalidGeo = items.find(item => (
+          item.type === 'geo'
+          && (!expressionText(item.latitude) || !expressionText(item.longitude))
+        ));
+        if (invalidGeo) {
+          message.error('Dimensões geo precisam informar o SQL da latitude e da longitude.');
+          return;
+        }
+      }
+      if (section === 'access_policy' && items.some((item) => !item.group && !item.groups)) {
+        message.error('Toda política de acesso precisa informar group ou groups');
+        return;
+      }
+      if ((section === 'dimensions' || section === 'measures') && items.some((item) => (
+        item.case !== undefined
+        && item.case !== null
+        && (typeof item.case === 'string' || typeof item.case !== 'object' || Array.isArray(item.case))
+      ))) {
+        message.error(`O case de ${section === 'dimensions' ? 'uma dimensÃ£o' : 'uma medida'} precisa ser um objeto YAML vÃ¡lido.`);
         return;
       }
     }
@@ -631,12 +803,30 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
         continue;
       }
 
-      cleanCube[section].forEach((item: CubeItem) => {
+      for (const item of cleanCube[section] as CubeItem[]) {
+        if (section === 'access_policy') {
+          if (typeof item.groups === 'string') {
+            item.groups = item.groups.split(',').map((group: string) => group.trim()).filter(Boolean);
+          }
+          for (const key of ['conditions', 'member_level', 'row_level', 'member_masking']) {
+            if (typeof item[key] === 'string') {
+              try {
+                item[key] = load(item[key]);
+              } catch (error: any) {
+                message.error(`A política de acesso contém YAML/JSON inválido em '${key}': ${error?.message || error}`);
+                return;
+              }
+            }
+          }
+        }
         delete item[VISUAL_EDITOR_ID];
-      });
+      }
     }
 
-    const content = dump(cleanDoc, { lineWidth: -1, noRefs: true, sortKeys: false });
+    cleanDoc.cubes![0] = reorderCubeForVisualEditor(cleanCube);
+    const content = formatYamlLikeGeneratedModel(
+      dump(cleanDoc, { lineWidth: -1, noRefs: true, sortKeys: false })
+    );
 
     setSaving(true);
     try {
@@ -648,11 +838,44 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
   }
 
   function handleEditorKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+    if (event.key === 'Enter' && event.ctrlKey && event.shiftKey) {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       void handleSave();
     }
   }
+
+  useEffect(() => {
+    if (!visible) return undefined;
+
+    const handleModalShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('.case-builder-modal')) return;
+
+      if (event.key === 'Enter' && event.ctrlKey && event.shiftKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+        return;
+      }
+
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        event.stopPropagation();
+        void handleSave();
+      }
+    };
+
+    document.addEventListener('keydown', handleModalShortcut, true);
+    return () => document.removeEventListener('keydown', handleModalShortcut, true);
+  }, [handleSave, onClose, visible]);
 
   return (
     <>
@@ -660,15 +883,23 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
       title={`Editor visual — ${fileName}`}
       visible={visible}
       onCancel={onClose}
-      width={1100}
+      closable={false}
+      keyboard={false}
+      className="cube-modal-wide"
       destroyOnClose
       footer={[
-        <Button key="cancel" onClick={onClose}>Cancelar</Button>,
-        <Button key="save" type="primary" loading={saving} disabled={!cube} onClick={handleSave}>Salvar</Button>,
+        <ModalShortcutAction key="cancel">
+          <Button onClick={onClose}>Cancelar</Button>
+          <ModalShortcutHint>Ctrl + Shift + Enter</ModalShortcutHint>
+        </ModalShortcutAction>,
+        <ModalShortcutAction key="save">
+          <Button type="primary" loading={saving} disabled={!cube} onClick={handleSave}>Salvar</Button>
+          <ModalShortcutHint>Ctrl + Enter</ModalShortcutHint>
+        </ModalShortcutAction>,
       ]}
     >
       <EditorOverlayStyles />
-      <div onKeyDown={handleEditorKeyDown}>
+      <div onKeyDownCapture={handleEditorKeyDown}>
         {parseError ? (
           <Empty description={parseError} />
         ) : !cube ? (
@@ -741,6 +972,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
                 <CubeForm
                   values={cube}
                   columns={columns}
+                  tablesSchema={tablesSchema}
                   onChange={(key, value) => updateScalar(key, value)}
                   source={{ mode: dataSourceMode, onModeChange: updateDataSourceMode }}
                 />
@@ -815,14 +1047,24 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
           </div>
           <div style={{ marginTop: 14 }}>
             <Text strong>{primaryKeyDraft.customSql ? 'SQL da dimensão' : 'SQL gerado'}</Text>
-            <Input.TextArea
-              rows={3}
-              value={primaryKeyDraft.customSql ? primaryKeyDraft.sql : defaultPrimaryKeySql(primaryKeyDraft.selectedColumns)}
-              readOnly={!primaryKeyDraft.customSql}
-              placeholder={primaryKeyDraft.customSql ? 'Ex.: CONCAT({CUBE}.airplane_code, \'-\', {CUBE}.seat_no)' : 'Selecione as colunas para visualizar o SQL'}
-              onChange={(event) => setPrimaryKeyDraft({ ...primaryKeyDraft, sql: event.target.value })}
-              style={{ marginTop: 6, fontFamily: 'monospace' }}
-            />
+            {primaryKeyDraft.customSql ? (
+              <SqlExpressionAutocomplete
+                value={primaryKeyDraft.sql}
+                columns={columns}
+                multiline
+                placeholder="Ex.: CONCAT({CUBE}.airplane_code, '-', {CUBE}.seat_no)"
+                style={{ marginTop: 6 }}
+                onChange={(sql) => setPrimaryKeyDraft({ ...primaryKeyDraft, sql })}
+              />
+            ) : (
+              <Input.TextArea
+                rows={3}
+                value={defaultPrimaryKeySql(primaryKeyDraft.selectedColumns)}
+                readOnly
+                placeholder="Selecione as colunas para visualizar o SQL"
+                style={{ marginTop: 6, fontFamily: 'monospace' }}
+              />
+            )}
           </div>
         </div>
       ) : null}

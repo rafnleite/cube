@@ -25,6 +25,14 @@ describe('ProjectRegistry', () => {
     expect(await fs.readFile(path.join(root, 'projects', 'sales', 'project.json'), 'utf8')).not.toContain('password');
   });
 
+  test('accepts underscores in project ids', async () => {
+    const registry = new ProjectRegistry(path.join(root, 'projects'), path.join(root, 'connections.json'));
+    const project = await registry.create({ id: 'sales_ops-2026', name: 'Sales Ops', connectionId: 'postgres-main' });
+
+    expect(project.id).toBe('sales_ops-2026');
+    expect(await fs.pathExists(path.join(root, 'projects', 'sales_ops-2026'))).toBe(true);
+  });
+
   test('rejects traversal and unknown presets', async () => {
     const registry = new ProjectRegistry(path.join(root, 'projects'), path.join(root, 'connections.json'));
     await expect(registry.create({ id: '../escape', name: 'Bad', connectionId: 'postgres-main' })).rejects.toThrow();

@@ -41,22 +41,6 @@
         "y": 231.9274584731392
       }
     },
-    "cubes/flights.yml": {
-      "name": "flights",
-      "source": "bookings.flights",
-      "position": {
-        "x": 1209.091930839892,
-        "y": -447.80860362089635
-      }
-    },
-    "cubes/routes.yml": {
-      "name": "routes",
-      "source": "bookings.routes",
-      "position": {
-        "x": 2061.590055844089,
-        "y": -78.1173409974368
-      }
-    },
     "cubes/seats.yml": {
       "name": "seats",
       "source": "bookings.seats",

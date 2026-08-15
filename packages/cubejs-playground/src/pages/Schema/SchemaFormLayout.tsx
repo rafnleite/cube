@@ -1,8 +1,8 @@
 import React from 'react';
-import { AutoComplete, Input, Select, Tooltip } from 'antd';
+import { Input, Select, Tooltip } from 'antd';
 import schemaAutocomplete from '../../config/schema-autocomplete.json';
 import { QuestionOutlined } from '../../shared/icons/FontAwesomeIcons';
-import { TableColumn } from './cubeSchemaUtils';
+import { TableColumn, TablesSchema } from './cubeSchemaUtils';
 import { SCHEMA_BOOLEAN_KEYS, SCHEMA_PROPERTY_LABELS } from './schemaFieldMetadata';
 import {
   SchemaFieldHelp,
@@ -11,6 +11,8 @@ import {
   SchemaFieldRow,
   SchemaFieldTable,
 } from './SchemaFieldComponents';
+import { SqlExpressionAutocomplete } from './SqlExpressionAutocomplete';
+import { CaseEditor } from './CaseEditor';
 
 export type SchemaFormLayoutProps = {
   section: string;
@@ -18,15 +20,17 @@ export type SchemaFormLayoutProps = {
   values: Record<string, any>;
   onChange: (key: string, value: any) => void;
   columns?: TableColumn[];
+  tablesSchema?: TablesSchema;
   examples?: Record<string, string>;
   optionOverrides?: Record<string, string[]>;
+  multilineFields?: Set<string>;
   cubeSource?: {
     mode: 'sql_table' | 'sql';
     onModeChange: (mode: 'sql_table' | 'sql') => void;
   };
 };
 
-const SQL_COLUMN_SECTIONS = new Set(['dimensions', 'measures', 'segments']);
+const SQL_COLUMN_SECTIONS = new Set(['joins', 'dimensions', 'measures', 'segments']);
 export const CUBE_SOURCE_FIELD = '__cube_source__';
 export const CUBE_PROPERTY_FIELDS = [
   'title',
@@ -45,7 +49,9 @@ function fieldControl(
   value: any,
   onChange: (value: any) => void,
   columns: TableColumn[],
+  tablesSchema: TablesSchema,
   optionOverrides?: Record<string, string[]>,
+  multilineFields: Set<string> = new Set<string>(),
 ) {
   const enumValues = optionOverrides?.[key] || schemaAutocomplete.yaml.sections[section]?.values?.[key];
   if (SCHEMA_BOOLEAN_KEYS.has(key)) {
@@ -71,6 +77,18 @@ function fieldControl(
     );
   }
 
+  if (key === 'case' && (section === 'dimensions' || section === 'measures')) {
+    return (
+      <CaseEditor
+        value={value}
+        mode={section === 'dimensions' ? 'dimension' : 'measure'}
+        onChange={onChange}
+        columns={columns}
+        tablesSchema={tablesSchema}
+      />
+    );
+  }
+
   if (key === 'description' || key === 'case') {
     return (
       <Input.TextArea
@@ -78,6 +96,18 @@ function fieldControl(
         value={value ?? ''}
         placeholder="(vazio)"
         onChange={(event) => onChange(event.target.value)}
+      />
+    );
+  }
+
+  if (multilineFields.has(key)) {
+    return (
+      <Input.TextArea
+        value={value ?? ''}
+        placeholder="(vazio)"
+        rows={key === 'member_level' || key === 'row_level' ? 4 : 3}
+        onChange={(event) => onChange(event.target.value)}
+        style={{ fontFamily: 'monospace' }}
       />
     );
   }
@@ -95,20 +125,25 @@ function fieldControl(
     );
   }
 
-  if (key === 'sql' && SQL_COLUMN_SECTIONS.has(section) && columns.length) {
+  if (key === 'sql' && SQL_COLUMN_SECTIONS.has(section)) {
     return (
-      <AutoComplete
-        style={{ width: '100%' }}
-        value={value}
-        placeholder="coluna ou expressão SQL"
+      <SqlExpressionAutocomplete
+        value={value ?? ''}
         onChange={onChange}
-        options={columns.map(column => ({
-          value: column.name,
-          label: column.type ? `${column.name} (${column.type})` : column.name,
-        }))}
-        filterOption={(inputValue, option) => (
-          String(option?.value || '').toLowerCase().includes(inputValue.toLowerCase())
-        )}
+        columns={columns}
+        tablesSchema={tablesSchema}
+      />
+    );
+  }
+
+  if (key === 'sql_table') {
+    return (
+      <SqlExpressionAutocomplete
+        value={value ?? ''}
+        onChange={onChange}
+        tablesSchema={tablesSchema}
+        tableReference
+        placeholder="schema.tabela"
       />
     );
   }
@@ -128,8 +163,10 @@ export function SchemaFormLayout({
   values,
   onChange,
   columns = [],
+  tablesSchema = {},
   examples = {},
   optionOverrides,
+  multilineFields = new Set<string>(),
   cubeSource,
 }: SchemaFormLayoutProps) {
   const descriptions = schemaAutocomplete.yaml.sections[section]?.descriptions || {};
@@ -142,6 +179,7 @@ export function SchemaFormLayout({
             <SchemaFieldRow key={key}>
               <SchemaFieldInputCell style={{ marginLeft: 0, background: '#fafafa' }}>
                 <Select
+                  style={{ width: '100%', flex: 1 }}
                   value={cubeSource.mode}
                   onChange={(mode) => cubeSource.onModeChange(mode as 'sql_table' | 'sql')}
                 >
@@ -151,17 +189,21 @@ export function SchemaFormLayout({
               </SchemaFieldInputCell>
               <SchemaFieldInputCell>
                 {cubeSource.mode === 'sql' ? (
-                  <Input.TextArea
-                    rows={3}
+                  <SqlExpressionAutocomplete
                     value={values.sql ?? ''}
+                    columns={columns}
+                    tablesSchema={tablesSchema}
+                    multiline
                     placeholder="Consulta SQL"
-                    onChange={(event) => onChange('sql', event.target.value)}
+                    onChange={(value) => onChange('sql', value)}
                   />
                 ) : (
-                  <Input
+                  <SqlExpressionAutocomplete
                     value={values.sql_table ?? ''}
+                    tablesSchema={tablesSchema}
+                    tableReference
                     placeholder="schema.tabela"
-                    onChange={(event) => onChange('sql_table', event.target.value)}
+                    onChange={(value) => onChange('sql_table', value)}
                   />
                 )}
               </SchemaFieldInputCell>
@@ -186,7 +228,7 @@ export function SchemaFormLayout({
           <SchemaFieldRow key={key}>
             <SchemaFieldLabel>{label}</SchemaFieldLabel>
             <SchemaFieldInputCell>
-              {fieldControl(section, key, values[key], value => onChange(key, value), columns, optionOverrides)}
+              {fieldControl(section, key, values[key], value => onChange(key, value), columns, tablesSchema, optionOverrides, multilineFields)}
             </SchemaFieldInputCell>
             <Tooltip title={tooltip}>
               <SchemaFieldHelp><QuestionOutlined /></SchemaFieldHelp>

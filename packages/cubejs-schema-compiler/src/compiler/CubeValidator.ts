@@ -343,7 +343,7 @@ const LinksSchema = Joi.array().items(LinkItemSchema).custom((value, helpers) =>
 
 const BaseDimensionWithoutSubQuery = {
   aliases: Joi.array().items(Joi.string()),
-  type: Joi.any().valid('string', 'number', 'boolean', 'time', 'geo').required(),
+  type: Joi.any().valid('string', 'number', 'boolean', 'time').required(),
   fieldType: Joi.any().valid('string'),
   valuesAsSegments: Joi.boolean().strict(),
   primaryKey: Joi.boolean().strict(),
@@ -1022,6 +1022,7 @@ const DimensionsSchema = Joi.object().pattern(identifierRegex, Joi.alternatives(
       multiStage: Joi.boolean().strict(),
     }),
     inherit(BaseDimensionWithoutSubQuery, {
+      type: Joi.any().valid('geo').required(),
       latitude: Joi.object().keys({
         sql: Joi.func().required()
       }).required(),

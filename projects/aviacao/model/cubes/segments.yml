@@ -1,33 +1,40 @@
 cubes:
-  - name: segments
+  - title: Segmentos
+    name: segments
     sql_table: bookings.segments
     data_source: default
+
     joins:
       - name: boarding_passes
-        sql: "{CUBE}.segment_id = {boarding_passes}.segment_id"
+        sql: '{CUBE}.segment_id = {boarding_passes}.segment_id'
         relationship: one_to_one
+
       - name: timetable
-        sql: "{CUBE}.flight_id = {timetable}.flight_id"
+        sql: '{CUBE}.flight_id = {timetable}.flight_id'
         relationship: many_to_one
+
     dimensions:
-      - name: segment_id
+      - title: ID do segmento
+        name: segment_id
         sql: CONCAT({CUBE}.ticket_no, '-', {CUBE}.flight_id)
         type: string
         primary_key: true
-        title: ID do segmento
-      - name: fare_conditions
+
+      - title: Condições de tarifa
+        name: fare_conditions
         sql: fare_conditions
         type: string
-        title: Condições de tarifa
-      - name: price
+
+      - title: Preço
+        name: price
         sql: price
         type: string
-        title: Preço
-      - name: ticket_no
+
+      - title: Número do bilhete
+        name: ticket_no
         sql: ticket_no
         type: string
-        title: Número do bilhete
+
     measures:
       - name: count
         type: count
-    title: Segmentos

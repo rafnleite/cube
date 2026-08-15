@@ -116,6 +116,7 @@ export type DatabaseType =
   | 'mysqlauroraserverless'
   | 'oracle'
   | 'postgres'
+  | 'netezza'
   | 'prestodb'
   | 'trino'
   | 'redshift'

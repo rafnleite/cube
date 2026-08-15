@@ -3,7 +3,7 @@ import path from 'path';
 
 import type { ConnectionPreset, DatamartProject } from './types';
 
-const PROJECT_ID = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const PROJECT_ID = /^[a-z0-9_-]{1,63}$/;
 
 export class ProjectRegistry {
   public constructor(
@@ -60,6 +60,6 @@ export class ProjectRegistry {
   }
 
   protected assertId(id: string): void {
-    if (!PROJECT_ID.test(id)) throw new Error('Project id must be a lowercase URL-safe slug');
+    if (!PROJECT_ID.test(id)) throw new Error('Project id must use lowercase letters, numbers, hyphens, or underscores');
   }
 }

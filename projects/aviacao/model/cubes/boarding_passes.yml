@@ -1,27 +1,31 @@
 cubes:
-  - name: boarding_passes
-    title: Cartões de embarque
+  - title: Cartões de embarque
+    name: boarding_passes
     sql_table: bookings.boarding_passes
     data_source: default
-    joins: []
+
     dimensions:
       - name: segment_id
         sql: CONCAT({CUBE}.ticket_no, '-', {CUBE}.flight_id)
         type: string
         primary_key: true
         shown: false
-      - name: seat_no
+
+      - title: Número do assento
+        name: seat_no
         sql: seat_no
         type: string
-        title: Número do assento
-      - name: ticket_no
+
+      - title: Número do bilhete
+        name: ticket_no
         sql: ticket_no
         type: string
-        title: Número do bilhete
-      - name: boarding_time
+
+      - title: Horário de embarque
+        name: boarding_time
         sql: boarding_time
         type: time
-        title: Horário de embarque
+
     measures:
       - name: count
         type: count

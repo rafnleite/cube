@@ -50,7 +50,7 @@ import styled, { createGlobalStyle } from 'styled-components';
 
 import { playgroundFetch, responseErrorMessage } from '../../shared/helpers';
 import { CubeSampleDataModal } from './CubeSampleDataModal';
-import { expressionReferencesColumn, inferDimensionType } from './cubeSchemaUtils';
+import { expressionReferencesColumn, inferDimensionType, TablesSchema } from './cubeSchemaUtils';
 import {
   CubeForm,
   DimensionForm,
@@ -118,6 +118,11 @@ type DiagramResponse = {
   relationships: DiagramRelationship[];
 };
 
+type PendingDiagramChange = {
+  endpoint: string;
+  body: Record<string, any>;
+};
+
 type DiagramState = {
   version?: number;
   cubes?: Record<string, {
@@ -176,6 +181,7 @@ type CubePropertiesDraft = {
 type Props = {
   visible: boolean;
   projectId?: string;
+  tablesSchema?: TablesSchema;
   onClose: () => void;
   onChanged: () => Promise<void> | void;
 };
@@ -209,6 +215,56 @@ function dimensionForColumn(cube: DiagramCube, column: DiagramColumn): DiagramDi
 function measureForColumn(cube: DiagramCube, column: DiagramColumn): DiagramMeasure | undefined {
   const matches = cube.measures?.filter(measure => memberReferencesColumn(measure, column.name)) || [];
   return matches.length === 1 ? matches[0] : undefined;
+}
+
+function updateDiagramCube(
+  diagram: DiagramResponse,
+  cubeName: string,
+  update: (cube: DiagramCube) => DiagramCube,
+): DiagramResponse {
+  return {
+    ...diagram,
+    cubes: diagram.cubes.map(cube => cube.name === cubeName ? update(cube) : cube),
+  };
+}
+
+function updateDiagramCubeMembers(
+  diagram: DiagramResponse,
+  cubeName: string,
+  section: 'dimensions' | 'measures',
+  itemName: string | undefined,
+  values: Record<string, any>,
+  operation: 'upsert' | 'delete' = 'upsert',
+): DiagramResponse {
+  return updateDiagramCube(diagram, cubeName, cube => {
+    if (section === 'dimensions') {
+      const members = [...(cube.dimensions || [])];
+      const index = itemName ? members.findIndex(member => member.name === itemName) : -1;
+      if (operation === 'delete') return { ...cube, dimensions: members.filter(member => member.name !== itemName) };
+      const member: DiagramDimension = {
+        name: String(values.name || itemName || ''),
+        ...(index >= 0 ? members[index] : {}),
+        ...values,
+        ...(values.primary_key !== undefined ? { primaryKey: Boolean(values.primary_key) } : {}),
+      };
+      delete (member as any).primary_key;
+      if (index >= 0) members[index] = member;
+      else members.push(member);
+      return { ...cube, dimensions: members };
+    }
+
+    const members = [...(cube.measures || [])];
+    const index = itemName ? members.findIndex(member => member.name === itemName) : -1;
+    if (operation === 'delete') return { ...cube, measures: members.filter(member => member.name !== itemName) };
+    const member: DiagramMeasure = {
+      name: String(values.name || itemName || ''),
+      ...(index >= 0 ? members[index] : {}),
+      ...values,
+    };
+    if (index >= 0) members[index] = member;
+    else members.push(member);
+    return { ...cube, measures: members };
+  });
 }
 
 const RELATIONSHIP_LABELS: Record<RelationshipType, string> = {
@@ -371,6 +427,35 @@ const Toolbar = styled.div`
   background: #fff;
 `;
 
+const DiagramModalTitle = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 16px;
+`;
+
+const DiagramModalActions = styled.div`
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-right: 8px;
+`;
+
+const DiagramModalAction = styled.div`
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+`;
+
+const DiagramModalShortcutHint = styled.span`
+  margin-top: 2px;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 12px;
+`;
+
 const RelationshipLabel = styled.span`
   position: absolute;
   padding: 2px 6px;
@@ -462,7 +547,7 @@ function CubeDiagramNode({ id, data }: any) {
     ((data.relationshipColumnNames || []) as string[]).map(columnName => columnName.toLowerCase())
   );
   const primaryKeySaving = data.primaryKeySaving as string | null;
-  const markColumnAsPrimaryKey = data.markColumnAsPrimaryKey as (cubeName: string, column: DiagramColumn) => Promise<void>;
+  const markColumnAsPrimaryKey = data.markColumnAsPrimaryKey as (cubeName: string, column: DiagramColumn) => void;
   const openDimensionEditor = data.openDimensionEditor as (cube: DiagramCube, column: DiagramColumn, dimension?: DiagramDimension) => void;
   const openSchemaItemEditor = data.openSchemaItemEditor as (action: string, cube: DiagramCube, column?: DiagramColumn, item?: any) => void;
   const openCubePropertiesEditor = data.openCubePropertiesEditor as (cube: DiagramCube) => void;
@@ -904,7 +989,7 @@ function RelationshipEdge({
 
 const edgeTypes = { relationship: RelationshipEdge };
 
-export function CubeRelationshipDiagram({ visible, projectId, onClose, onChanged }: Props) {
+export function CubeRelationshipDiagram({ visible, projectId, tablesSchema, onClose, onChanged }: Props) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [primaryKeySaving, setPrimaryKeySaving] = useState<string | null>(null);
@@ -918,11 +1003,11 @@ export function CubeRelationshipDiagram({ visible, projectId, onClose, onChanged
   const [dimensionDraft, setDimensionDraft] = useState<DimensionDraft | null>(null);
   const [schemaItemDraft, setSchemaItemDraft] = useState<SchemaItemDraft | null>(null);
   const [cubePropertiesDraft, setCubePropertiesDraft] = useState<CubePropertiesDraft | null>(null);
-  const [dimensionSaving, setDimensionSaving] = useState(false);
   const [search, setSearch] = useState('');
-  const [flowInstance, setFlowInstance] = useState<ReactFlowInstance | null>(null);
+  const [flowInstance, setFlowInstance] = useState<ReactFlowInstance<any, any> | null>(null);
   const [selectedCubeName, setSelectedCubeName] = useState<string | null>(null);
   const [sampleCube, setSampleCube] = useState<DiagramCube | null>(null);
+  const [pendingChanges, setPendingChanges] = useState<PendingDiagramChange[]>([]);
   const nodesRef = useRef<Node[]>([]);
 
   const positionsKey = `cube-relationship-diagram:${projectId || window.location.pathname}`;
@@ -939,16 +1024,33 @@ export function CubeRelationshipDiagram({ visible, projectId, onClose, onChanged
     nodesRef.current = nodes;
   }, [nodes]);
 
+  useEffect(() => {
+    setEdges(relationshipEdges(diagram.relationships, diagram.cubes));
+    setNodes(previous => previous.map(node => {
+      const cube = diagram.cubes.find(item => item.name === node.id);
+      return cube ? { ...node, data: { ...node.data, cube } } : node;
+    }));
+  }, [diagram, setEdges, setNodes]);
+
+  const stageChange = useCallback((change: PendingDiagramChange) => {
+    setPendingChanges(previous => [...previous, change]);
+  }, []);
+
   const persistDiagramState = useCallback(async (
     nextNodes?: Node[],
   ) => {
     const currentNodes = nextNodes || nodesRef.current;
-    const positions = Object.fromEntries(
-      diagram.cubes.map(cube => {
-        const node = currentNodes.find(item => item.id === cube.name);
-        return node ? [cube.fileName, { name: cube.name, source: cube.source, position: node.position }] : [];
-      }).filter((entry): entry is [string, { name: string; source?: string; position: { x: number; y: number } }] => entry.length > 0)
-    );
+    const positionEntries: Array<[string, { name: string; source?: string; position: { x: number; y: number } }]> = [];
+    diagram.cubes.forEach(cube => {
+      const node = currentNodes.find(item => item.id === cube.name);
+      if (node) {
+        positionEntries.push([
+          cube.fileName,
+          { name: cube.name, source: cube.source, position: { x: node.position.x, y: node.position.y } },
+        ]);
+      }
+    });
+    const positions: Record<string, { name: string; source?: string; position: { x: number; y: number } }> = Object.fromEntries(positionEntries);
     const state: DiagramState = {
       version: 1,
       cubes: positions,
@@ -1009,39 +1111,43 @@ export function CubeRelationshipDiagram({ visible, projectId, onClose, onChanged
     setSampleCube(cube);
   }, []);
 
-  const markColumnAsPrimaryKey = useCallback(async (cubeName: string, column: DiagramColumn) => {
+  const markColumnAsPrimaryKey = useCallback((cubeName: string, column: DiagramColumn) => {
     const savingKey = `${cubeName}:${column.name}`;
-    const statusMessageKey = `primary-key:${savingKey}`;
     setColumnMenuKey(null);
     setPrimaryKeySaving(savingKey);
-    message.loading({
-      key: statusMessageKey,
-      content: `Processando a chave primária de '${column.name}'...`,
-      duration: 0,
+    stageChange({
+      endpoint: 'playground/schema/primary-key',
+      body: { cubeName, columnName: column.name },
     });
-    try {
-      const response = await playgroundFetch('playground/schema/primary-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cubeName, columnName: column.name }),
-      });
-      if (!response.ok) {
-        throw new Error(await relationshipResponseError(response));
+    setDiagram(previous => updateDiagramCube(previous, cubeName, cube => {
+      const dimensions = [...(cube.dimensions || [])];
+      const existingIndex = dimensions.findIndex(dimension => (
+        dimension.name === column.name || memberReferencesColumn(dimension, column.name)
+      ));
+      if (existingIndex >= 0) {
+        dimensions[existingIndex] = { ...dimensions[existingIndex], primaryKey: true };
+      } else {
+        dimensions.push({
+          name: column.name,
+          sql: column.name,
+          type: inferDimensionType(column.type),
+          primaryKey: true,
+        });
       }
-      message.success(`'${column.name}' marcada como chave primária`);
-      message.destroy(statusMessageKey);
-      await loadDiagram();
-      await onChanged();
-    } catch (e: any) {
-      message.error(e?.message || 'Não foi possível marcar a coluna como chave primária');
-    } finally {
-      message.destroy(statusMessageKey);
-      setPrimaryKeySaving(null);
-    }
-  }, [loadDiagram, onChanged]);
+      return {
+        ...cube,
+        hasPrimaryKey: true,
+        dimensions,
+        columns: cube.columns.map(item => item.name === column.name ? { ...item, primaryKey: true } : item),
+      };
+    }));
+    message.info(`'${column.name}' foi marcada como chave primária. Clique em Salvar para validar.`);
+    setPrimaryKeySaving(null);
+  }, [stageChange]);
 
   useEffect(() => {
     if (visible) {
+      setPendingChanges([]);
       void loadDiagram();
     }
   }, [visible, loadDiagram]);
@@ -1272,174 +1378,150 @@ export function CubeRelationshipDiagram({ visible, projectId, onClose, onChanged
     );
   }, [openRelationship]);
 
-  const saveRelationship = useCallback(async () => {
+  const saveRelationship = useCallback(() => {
     if (!draft?.sourceColumn || !draft.targetColumn) {
       message.error('Selecione uma coluna em cada cubo.');
       return;
     }
 
-    setSaving(true);
-    try {
-      const response = await playgroundFetch('playground/schema/relationship', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...draft,
-          replaceCustom: Boolean(draft.customCondition),
-        }),
-      });
-      if (response.status !== 200) {
-        throw new Error(await relationshipResponseError(response));
-      }
-    } catch (e: any) {
-      message.error(e?.message || 'Não foi possível salvar o relacionamento');
-      setSaving(false);
-      return;
-    }
-
-    message.success(draft.operation === 'create' ? 'Relacionamento criado' : 'Relacionamento atualizado');
+    const change = {
+      ...draft,
+      replaceCustom: Boolean(draft.customCondition),
+    };
+    stageChange({ endpoint: 'playground/schema/relationship', body: change });
+    setDiagram(previous => {
+      const relationship: DiagramRelationship = {
+        sourceCube: draft.sourceCube,
+        targetCube: draft.targetCube,
+        sourceColumn: draft.sourceColumn,
+        targetColumn: draft.targetColumn,
+        relationship: draft.relationship,
+        sql: `{${draft.sourceCube}}.${draft.sourceColumn} = {${draft.targetCube}}.${draft.targetColumn}`,
+      };
+      const relationships = previous.relationships.filter(item => !(
+        item.sourceCube === draft.sourceCube && item.targetCube === draft.targetCube
+      ));
+      return {
+        ...previous,
+        relationships: [...relationships, relationship],
+      };
+    });
+    message.info(`${draft.operation === 'create' ? 'Relacionamento criado' : 'Relacionamento atualizado'} localmente. Clique em Salvar para validar.`);
     setDraft(null);
-    setSaving(false);
-    await loadDiagram();
-    try {
-      await onChanged();
-    } catch (_e) {
-      message.warning('A junção foi salva, mas a lista de arquivos não pôde ser atualizada.');
-    }
-  }, [draft, loadDiagram, onChanged]);
+  }, [draft, stageChange]);
 
-  const deleteRelationship = useCallback(async () => {
+  const deleteRelationship = useCallback(() => {
     if (!draft) return;
-    setSaving(true);
-    try {
-      const response = await playgroundFetch('playground/schema/relationship', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sourceCube: draft.sourceCube,
-          targetCube: draft.targetCube,
-          operation: 'delete',
-        }),
-      });
-      if (response.status !== 200) {
-        throw new Error(await relationshipResponseError(response));
-      }
-    } catch (e: any) {
-      message.error(e?.message || 'Não foi possível remover o relacionamento');
-      setSaving(false);
-      return;
-    }
-
-    message.success('Relacionamento removido');
+    stageChange({
+      endpoint: 'playground/schema/relationship',
+      body: {
+        sourceCube: draft.sourceCube,
+        targetCube: draft.targetCube,
+        operation: 'delete',
+      },
+    });
+    setDiagram(previous => ({
+      ...previous,
+      relationships: previous.relationships.filter(item => !(
+        item.sourceCube === draft.sourceCube && item.targetCube === draft.targetCube
+      )),
+    }));
+    message.info('Relacionamento removido localmente. Clique em Salvar para validar.');
     setDraft(null);
-    setSaving(false);
-    await loadDiagram();
-    try {
-      await onChanged();
-    } catch (_e) {
-      message.warning('A junção foi removida, mas a lista de arquivos não pôde ser atualizada.');
-    }
-  }, [draft, loadDiagram, onChanged]);
+  }, [draft, stageChange]);
 
-  const saveDimension = useCallback(async () => {
+  const saveDimension = useCallback(() => {
     if (!dimensionDraft) return;
-    if (!dimensionDraft.name.trim()) {
+    const textValue = (value: unknown): string => {
+      if (typeof value === 'string') return value;
+      if (value && typeof value === 'object' && 'sql' in value) return String((value as any).sql || '');
+      return value == null ? '' : String(value);
+    };
+    const name = textValue(dimensionDraft.name).trim();
+    const title = textValue(dimensionDraft.title).trim();
+    const sql = textValue(dimensionDraft.sql).trim();
+    const latitude = textValue(dimensionDraft.latitude).trim();
+    const longitude = textValue(dimensionDraft.longitude).trim();
+
+    if (!name) {
       message.error('Informe o nome e o SQL da dimensão.');
       return;
     }
 
     const isGeo = dimensionDraft.type === 'geo';
-    if (isGeo && (!dimensionDraft.latitude?.trim() || !dimensionDraft.longitude?.trim())) {
+    if (isGeo && (!latitude || !longitude)) {
       message.error('Informe o SQL da latitude e da longitude.');
       return;
     }
-    if (!isGeo && !dimensionDraft.sql.trim()) {
+    if (!isGeo && !sql) {
       message.error('Informe o SQL da dimensão.');
       return;
     }
 
-    setDimensionSaving(true);
-    try {
-      const response = await playgroundFetch('playground/schema/item', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cubeName: dimensionDraft.cubeName,
-          section: 'dimensions',
-          itemName: dimensionDraft.dimensionName || undefined,
-          values: {
-            name: dimensionDraft.name.trim(),
-            title: dimensionDraft.title.trim(),
-            description: dimensionDraft.description,
-            type: dimensionDraft.type,
-            primary_key: dimensionDraft.primaryKey ? true : null,
-            public: dimensionDraft.public,
-            shown: dimensionDraft.shown,
-            case: dimensionDraft.case,
-            sub_query: dimensionDraft.sub_query,
-            format: dimensionDraft.format,
-            meta: dimensionDraft.meta,
-            ...(isGeo
-              ? {
-                latitude: { sql: dimensionDraft.latitude?.trim() },
-                longitude: { sql: dimensionDraft.longitude?.trim() },
-              }
-              : { sql: dimensionDraft.sql.trim() }),
-          },
-        }),
-      });
-      if (!response.ok) {
-        throw new Error(await relationshipResponseError(response));
-      }
-      message.success(dimensionDraft.dimensionName ? 'Dimensão atualizada' : 'Dimensão criada');
-      setDimensionDraft(null);
-      await loadDiagram();
-      try {
-        await onChanged();
-      } catch (_e) {
-        message.warning('A dimensão foi salva, mas a lista de arquivos não pôde ser atualizada.');
-      }
-    } catch (e: any) {
-      message.error(e?.message || 'Não foi possível salvar a dimensão');
-    } finally {
-      setDimensionSaving(false);
-    }
-  }, [dimensionDraft, loadDiagram, onChanged]);
+    const values = {
+      name,
+      title,
+      description: dimensionDraft.description,
+      type: dimensionDraft.type,
+      primary_key: dimensionDraft.primaryKey ? true : null,
+      public: dimensionDraft.public,
+      shown: dimensionDraft.shown,
+      case: dimensionDraft.case,
+      sub_query: dimensionDraft.sub_query,
+      format: dimensionDraft.format,
+      meta: dimensionDraft.meta,
+      ...(isGeo
+        ? {
+          latitude: { sql: latitude },
+          longitude: { sql: longitude },
+        }
+        : { sql }),
+    };
+    stageChange({
+      endpoint: 'playground/schema/item',
+      body: {
+        cubeName: dimensionDraft.cubeName,
+        section: 'dimensions',
+        itemName: dimensionDraft.dimensionName || undefined,
+        values,
+      },
+    });
+    setDiagram(previous => updateDiagramCubeMembers(
+      previous,
+      dimensionDraft.cubeName,
+      'dimensions',
+      dimensionDraft.dimensionName,
+      { ...values, primaryKey: dimensionDraft.primaryKey },
+    ));
+    message.info(`${dimensionDraft.dimensionName ? 'Dimensão atualizada' : 'Dimensão criada'} localmente. Clique em Salvar para validar.`);
+    setDimensionDraft(null);
+  }, [dimensionDraft, stageChange]);
 
-  const deleteDimension = useCallback(async () => {
+  const deleteDimension = useCallback(() => {
     if (!dimensionDraft?.dimensionName) return;
 
-    setDimensionSaving(true);
-    try {
-      const response = await playgroundFetch('playground/schema/item', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cubeName: dimensionDraft.cubeName,
-          section: 'dimensions',
-          itemName: dimensionDraft.dimensionName,
-          operation: 'delete',
-        }),
-      });
-      if (!response.ok) {
-        throw new Error(await relationshipResponseError(response));
-      }
-      message.success('Dimensão removida');
-      setDimensionDraft(null);
-      await loadDiagram();
-      try {
-        await onChanged();
-      } catch (_e) {
-        message.warning('A dimensão foi removida, mas a lista de arquivos não pôde ser atualizada.');
-      }
-    } catch (e: any) {
-      message.error(e?.message || 'Não foi possível remover a dimensão');
-    } finally {
-      setDimensionSaving(false);
-    }
-  }, [dimensionDraft, loadDiagram, onChanged]);
+    stageChange({
+      endpoint: 'playground/schema/item',
+      body: {
+        cubeName: dimensionDraft.cubeName,
+        section: 'dimensions',
+        itemName: dimensionDraft.dimensionName,
+        operation: 'delete',
+      },
+    });
+    setDiagram(previous => updateDiagramCubeMembers(
+      previous,
+      dimensionDraft.cubeName,
+      'dimensions',
+      dimensionDraft.dimensionName,
+      {},
+      'delete',
+    ));
+    message.info('Dimensão removida localmente. Clique em Salvar para validar.');
+    setDimensionDraft(null);
+  }, [dimensionDraft, stageChange]);
 
-  const saveSchemaItem = useCallback(async () => {
+  const saveSchemaItem = useCallback(() => {
     if (!schemaItemDraft) return;
     const values = { ...schemaItemDraft.values };
     if (!String(values.name || '').trim()) {
@@ -1460,35 +1542,29 @@ export function CubeRelationshipDiagram({ visible, projectId, onClose, onChanged
       values.drill_members = values.drill_members.split(',').map((value: string) => value.trim()).filter(Boolean);
     }
 
-    setDimensionSaving(true);
-    try {
-      const response = await playgroundFetch('playground/schema/item', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cubeName: schemaItemDraft.cubeName,
-          section: schemaItemDraft.section,
-          itemName: schemaItemDraft.itemName,
-          values,
-        }),
-      });
-      if (!response.ok) throw new Error(await relationshipResponseError(response));
-      message.success('Item salvo');
-      setSchemaItemDraft(null);
-      await loadDiagram();
-      try {
-        await onChanged();
-      } catch (_e) {
-        message.warning('O item foi salvo, mas a lista de arquivos não pôde ser atualizada.');
-      }
-    } catch (e: any) {
-      message.error(e?.message || 'Não foi possível salvar o item');
-    } finally {
-      setDimensionSaving(false);
+    stageChange({
+      endpoint: 'playground/schema/item',
+      body: {
+        cubeName: schemaItemDraft.cubeName,
+        section: schemaItemDraft.section,
+        itemName: schemaItemDraft.itemName,
+        values,
+      },
+    });
+    if (schemaItemDraft.section === 'measures') {
+      setDiagram(previous => updateDiagramCubeMembers(
+        previous,
+        schemaItemDraft.cubeName,
+        'measures',
+        schemaItemDraft.itemName,
+        values,
+      ));
     }
-  }, [loadDiagram, onChanged, schemaItemDraft]);
+    message.info('Item alterado localmente. Clique em Salvar para validar.');
+    setSchemaItemDraft(null);
+  }, [schemaItemDraft, stageChange]);
 
-  const saveCubeProperties = useCallback(async () => {
+  const saveCubeProperties = useCallback(() => {
     if (!cubePropertiesDraft) return;
     const values = Object.fromEntries(
       Object.entries(cubePropertiesDraft.values).map(([key, value]) => [
@@ -1502,28 +1578,28 @@ export function CubeRelationshipDiagram({ visible, projectId, onClose, onChanged
       return;
     }
 
-    setDimensionSaving(true);
-    try {
-      const response = await playgroundFetch('playground/schema/item', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cubeName: cubePropertiesDraft.cubeName,
-          section: 'cube',
-          values,
-        }),
-      });
-      if (!response.ok) throw new Error(await relationshipResponseError(response));
-      message.success('Propriedades do cubo atualizadas');
-      setCubePropertiesDraft(null);
-      await loadDiagram();
-      await onChanged();
-    } catch (e: any) {
-      message.error(e?.message || 'Não foi possível salvar as propriedades');
-    } finally {
-      setDimensionSaving(false);
-    }
-  }, [cubePropertiesDraft, loadDiagram, onChanged]);
+    stageChange({
+      endpoint: 'playground/schema/item',
+      body: {
+        cubeName: cubePropertiesDraft.cubeName,
+        section: 'cube',
+        values,
+      },
+    });
+    setDiagram(previous => updateDiagramCube(previous, cubePropertiesDraft.cubeName, cube => ({
+      ...cube,
+      title: values.title,
+      description: values.description,
+      source: values.sql_table || values.sql || cube.source,
+      sourceType: values.sql ? 'sql' : 'sql_table',
+      dataSource: values.data_source || cube.dataSource,
+      extends: values.extends,
+      public: values.public,
+      refresh_key: values.refresh_key,
+    })));
+    message.info('Propriedades alteradas localmente. Clique em Salvar para validar.');
+    setCubePropertiesDraft(null);
+  }, [cubePropertiesDraft, stageChange]);
 
   function updateSchemaItemValue(key: string, value: any) {
     setSchemaItemDraft(previous => previous ? {
@@ -1547,6 +1623,7 @@ export function CubeRelationshipDiagram({ visible, projectId, onClose, onChanged
         const formProps = {
           values: schemaItemDraft.values,
           columns: diagram.cubes.find(cube => cube.name === schemaItemDraft.cubeName)?.columns,
+          tablesSchema,
           onChange: updateSchemaItemValue,
         };
         if (schemaItemDraft.section === 'measures') return <MeasureForm {...formProps} />;
@@ -1563,31 +1640,134 @@ export function CubeRelationshipDiagram({ visible, projectId, onClose, onChanged
     ? diagram.cubes.find(cube => cube.name === selectedCubeName)
     : undefined;
 
-  const handleClose = useCallback(() => {
-    void persistDiagramState();
+  const savePendingChanges = useCallback(async () => {
+    if (saving) return;
+    if (!pendingChanges.length) {
+      await persistDiagramState();
+      onClose();
+      return;
+    }
+
+    setSaving(true);
+    let appliedChanges = 0;
+    try {
+      for (const change of pendingChanges) {
+        const response = await playgroundFetch(change.endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(change.body),
+        });
+        if (!response.ok) {
+          throw new Error(await relationshipResponseError(response));
+        }
+        appliedChanges += 1;
+      }
+
+      setPendingChanges([]);
+      await loadDiagram();
+      await persistDiagramState();
+      try {
+        await onChanged();
+      } catch (_e) {
+        message.warning('As alterações foram salvas, mas a lista de arquivos não pôde ser atualizada.');
+      }
+      message.success('Alterações salvas e validadas');
+      onClose();
+    } catch (e: any) {
+      setPendingChanges(previous => previous.slice(appliedChanges));
+      message.error(e?.message || 'Não foi possível salvar as alterações');
+    } finally {
+      setSaving(false);
+    }
+  }, [loadDiagram, onChanged, onClose, pendingChanges, persistDiagramState, saving]);
+
+  const handleCancel = useCallback(() => {
+    setPendingChanges([]);
+    setDraft(null);
+    setDimensionDraft(null);
+    setSchemaItemDraft(null);
+    setCubePropertiesDraft(null);
+    setSampleCube(null);
     onClose();
-  }, [onClose, persistDiagramState]);
+  }, [onClose]);
+
+  function handleDiagramShortcut(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key === 'Enter' && event.ctrlKey && event.shiftKey) {
+      event.preventDefault();
+      handleCancel();
+      return;
+    }
+
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      void savePendingChanges();
+    }
+  }
+
+  useEffect(() => {
+    if (!visible) return undefined;
+
+    const handleModalShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+
+      if (event.key === 'Enter' && event.ctrlKey && event.shiftKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        handleCancel();
+        return;
+      }
+
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        event.stopPropagation();
+        void savePendingChanges();
+      }
+    };
+
+    document.addEventListener('keydown', handleModalShortcut, true);
+    return () => document.removeEventListener('keydown', handleModalShortcut, true);
+  }, [handleCancel, savePendingChanges, visible]);
+
+  const sampleColumnTypes = useMemo(() => Object.fromEntries([
+    ...(sampleCube?.columns || []).map(column => [column.name.toLowerCase(), column.type] as const),
+    ...(sampleCube?.dimensions || []).map(dimension => [dimension.name.toLowerCase(), dimension.type] as const),
+    ...(sampleCube?.measures || []).map(measure => [measure.name.toLowerCase(), measure.type] as const),
+  ]), [sampleCube]);
 
   return (
     <>
       <RelationshipDiagramOverlayStyles />
       <Modal
         title={(
-          <Space>
-            <ApartmentOutlined />
-            <span>Diagrama de relacionamentos</span>
-          </Space>
+          <DiagramModalTitle>
+            <Space>
+              <ApartmentOutlined />
+              <span>Diagrama de relacionamentos</span>
+            </Space>
+            <DiagramModalActions>
+              <DiagramModalAction>
+                <Button onClick={handleCancel} disabled={saving}>Cancelar</Button>
+                <DiagramModalShortcutHint>Ctrl + Shift + Enter</DiagramModalShortcutHint>
+              </DiagramModalAction>
+              <DiagramModalAction>
+                <Button type="primary" onClick={savePendingChanges} loading={saving}>Salvar</Button>
+                <DiagramModalShortcutHint>Ctrl + Enter</DiagramModalShortcutHint>
+              </DiagramModalAction>
+            </DiagramModalActions>
+          </DiagramModalTitle>
         )}
         visible={visible}
-        onCancel={handleClose}
+        onCancel={handleCancel}
+        closable={false}
+        keyboard={false}
         maskClosable={false}
-        width="calc(100vw - 32px)"
-        style={{ top: 16, paddingBottom: 0 }}
+        className="cube-modal-wide"
         bodyStyle={{ height: 'calc(100vh - 110px)', padding: 0, overflow: 'hidden' }}
         destroyOnClose
         footer={null}
       >
-        <Toolbar>
+        <div onKeyDownCapture={handleDiagramShortcut}>
+          <Toolbar>
           <Space size={12}>
             <Input.Search
               allowClear
@@ -1598,6 +1778,7 @@ export function CubeRelationshipDiagram({ visible, projectId, onClose, onChanged
             />
             <Text type="secondary">
               Arraste entre colunas para criar. Clique em uma ligação para editar ou remover. 1 = um, N = muitos.
+              {pendingChanges.length ? ` ${pendingChanges.length} alteração(ões) pendente(s).` : ''}
             </Text>
           </Space>
           <Space style={{ marginLeft: 'auto' }}>
@@ -1608,11 +1789,11 @@ export function CubeRelationshipDiagram({ visible, projectId, onClose, onChanged
             >
               Ver amostra de dados
             </Button>
-            <Button icon={<ReloadOutlined />} onClick={() => loadDiagram()} loading={loading}>
+            <Button icon={<ReloadOutlined />} onClick={() => loadDiagram()} loading={loading} disabled={Boolean(pendingChanges.length)}>
               Atualizar
             </Button>
           </Space>
-        </Toolbar>
+          </Toolbar>
 
         {loadError ? (
           <div style={{ padding: 24 }}>
@@ -1671,7 +1852,6 @@ export function CubeRelationshipDiagram({ visible, projectId, onClose, onChanged
                 } catch (_e) {
                   // The diagram still works when browser storage is unavailable.
                 }
-                void persistDiagramState(nextNodes);
               }}
               isValidConnection={(connection) => connection.source !== connection.target}
               edgesReconnectable={false}
@@ -1685,13 +1865,15 @@ export function CubeRelationshipDiagram({ visible, projectId, onClose, onChanged
               <Controls showInteractive={false} />
             </ReactFlow>
           </Canvas>
-        )}
+          )}
+        </div>
       </Modal>
 
       <CubeSampleDataModal
         visible={Boolean(sampleCube)}
         cubeName={sampleCube?.name || null}
         title={sampleCube?.title || sampleCube?.name}
+        columnTypes={sampleColumnTypes}
         onClose={() => setSampleCube(null)}
       />
 
@@ -1703,8 +1885,8 @@ export function CubeRelationshipDiagram({ visible, projectId, onClose, onChanged
         destroyOnClose
         width={780}
         footer={[
-          <Button key="cancel" onClick={() => setSchemaItemDraft(null)} disabled={dimensionSaving}>Cancelar</Button>,
-          <Button key="save" type="primary" loading={dimensionSaving} onClick={saveSchemaItem}>Salvar</Button>,
+          <Button key="cancel" onClick={() => setSchemaItemDraft(null)} disabled={saving}>Cancelar</Button>,
+          <Button key="save" type="primary" loading={saving} onClick={saveSchemaItem}>Salvar</Button>,
         ]}
       >
         {schemaItemDraft ? renderSchemaItemFields() : null}
@@ -1718,13 +1900,14 @@ export function CubeRelationshipDiagram({ visible, projectId, onClose, onChanged
         destroyOnClose
         width={780}
         footer={[
-          <Button key="cancel" onClick={() => setCubePropertiesDraft(null)} disabled={dimensionSaving}>Cancelar</Button>,
-          <Button key="save" type="primary" loading={dimensionSaving} onClick={saveCubeProperties}>Salvar</Button>,
+          <Button key="cancel" onClick={() => setCubePropertiesDraft(null)} disabled={saving}>Cancelar</Button>,
+          <Button key="save" type="primary" loading={saving} onClick={saveCubeProperties}>Salvar</Button>,
         ]}
       >
         {cubePropertiesDraft ? (
           <CubeForm
             values={cubePropertiesDraft.values}
+            tablesSchema={tablesSchema}
             onChange={(key, value) => setCubePropertiesDraft({
               ...cubePropertiesDraft,
               values: { ...cubePropertiesDraft.values, [key]: value },
@@ -1759,17 +1942,18 @@ export function CubeRelationshipDiagram({ visible, projectId, onClose, onChanged
               okText="Remover"
               cancelText="Cancelar"
             >
-              <Button danger loading={dimensionSaving} style={{ float: 'left' }}>Remover</Button>
+              <Button danger loading={saving} style={{ float: 'left' }}>Remover</Button>
             </Popconfirm>
           ) : null,
-          <Button key="cancel" onClick={() => setDimensionDraft(null)} disabled={dimensionSaving}>Cancelar</Button>,
-          <Button key="save" type="primary" loading={dimensionSaving} onClick={saveDimension}>Salvar</Button>,
+          <Button key="cancel" onClick={() => setDimensionDraft(null)} disabled={saving}>Cancelar</Button>,
+          <Button key="save" type="primary" loading={saving} onClick={saveDimension}>Salvar</Button>,
         ]}
       >
         {dimensionDraft ? (
           <DimensionForm
             values={{ ...dimensionDraft, primary_key: dimensionDraft.primaryKey }}
             columns={diagram.cubes.find(cube => cube.name === dimensionDraft.cubeName)?.columns}
+            tablesSchema={tablesSchema}
             onChange={updateDimensionValue}
           />
         ) : null}

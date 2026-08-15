@@ -36,7 +36,9 @@ export const SchemaFieldCell = styled.div`
   & > .ant-input-number,
   & > .ant-select,
   & > .ant-auto-complete {
-    flex: 1;
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
     width: 100%;
   }
 
@@ -64,7 +66,10 @@ export const SchemaFieldCell = styled.div`
   }
 
   & > .ant-select .ant-select-selector {
+    flex: 1;
+    width: 100%;
     background: inherit !important;
+    cursor: pointer;
   }
 
   & .ant-select-arrow {

@@ -1795,6 +1795,44 @@ describe('Cube Validation', () => {
     });
   });
 
+  describe('Geo dimensions', () => {
+    it('requires latitude and longitude SQL expressions', () => {
+      const cubeValidator = new CubeValidator(new CubeSymbols());
+      const cube = {
+        name: 'name',
+        sql: () => 'SELECT * FROM public.locations',
+        dimensions: {
+          location: {
+            type: 'geo',
+          },
+        },
+        fileName: 'fileName',
+      };
+
+      const validationResult = cubeValidator.validate(cube, new ConsoleErrorReporter());
+      expect(validationResult.error).toBeTruthy();
+    });
+
+    it('accepts latitude and longitude SQL expressions', () => {
+      const cubeValidator = new CubeValidator(new CubeSymbols());
+      const cube = {
+        name: 'name',
+        sql: () => 'SELECT * FROM public.locations',
+        dimensions: {
+          location: {
+            type: 'geo',
+            latitude: { sql: () => 'latitude' },
+            longitude: { sql: () => 'longitude' },
+          },
+        },
+        fileName: 'fileName',
+      };
+
+      const validationResult = cubeValidator.validate(cube, new ConsoleErrorReporter());
+      expect(validationResult.error).toBeFalsy();
+    });
+  });
+
   describe('Custom time format for time dimensions (strptime)', () => {
     it('time dimension with valid strptime format - correct', async () => {
       const cubeValidator = new CubeValidator(new CubeSymbols());

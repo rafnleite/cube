@@ -25,6 +25,7 @@
     "@cubejs-backend/mongobi-driver": "1.7.16",
     "@cubejs-backend/mssql-driver": "1.7.16",
     "@cubejs-backend/mysql-driver": "1.7.16",
+    "@cubejs-backend/netezza-driver": "1.7.16",
     "@cubejs-backend/oracle-driver": "1.7.16",
     "@cubejs-backend/pinot-driver": "1.7.16",
     "@cubejs-backend/postgres-driver": "1.7.16",

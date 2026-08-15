@@ -939,6 +939,7 @@ export class DevServer {
         let sql: string;
         let params: unknown[] = [];
         let columnLabels: Record<string, string> = {};
+        let columnTypes: Record<string, string> = {};
 
         if (mode === 'cube') {
           const compilers = await compilerApi.getCompilers({ requestId: definitions.requestId });
@@ -952,6 +953,11 @@ export class DevServer {
             columnLabels[`${cubeName}.${member.name}`.toLowerCase()] = label;
             columnLabels[`${cubeName}__${member.name}`.toLowerCase()] = label;
             columnLabels[member.name.toLowerCase()] = label;
+            if (member.type) {
+              columnTypes[`${cubeName}.${member.name}`.toLowerCase()] = String(member.type);
+              columnTypes[`${cubeName}__${member.name}`.toLowerCase()] = String(member.type);
+              columnTypes[member.name.toLowerCase()] = String(member.type);
+            }
           });
 
           const primaryKeyNames = compilers.cubeEvaluator.primaryKeys?.[cubeName] || [];
@@ -1070,9 +1076,13 @@ export class DevServer {
             const filters = dimensionSampleFilters.length
               ? [{ or: dimensionSampleFilters }]
               : [];
-            if (dimensions.length && !dimensionSampleFilters.length) {
-              return res.json({ columns: [], columnLabels, rows: [] });
-            }
+
+            // The dimension-only query is only used to narrow the sample to
+            // representative primary-key values. If those values cannot be
+            // mapped back because the driver/compiler returned an unexpected
+            // column alias, the cube query is still valid without filters.
+            // Returning an empty response here made the UI show "No Data"
+            // while the count endpoint correctly reported records.
             const query = await compilerApi.createQueryByDataSource(compilers, {
               cube: cubeName,
               dimensions,
@@ -1088,6 +1098,44 @@ export class DevServer {
           const source = model.source!.trim().replace(/;$/, '');
           const from = model.sourceType === 'sql' ? `(${source}) AS cube_sample` : source;
           sql = `SELECT * FROM ${from}`;
+        }
+
+        if (mode === 'raw' && model.sourceType === 'sql_table') {
+          try {
+            let nativeTypesLoaded = false;
+            const sourceParts = modelSource
+              ?.split('.')
+              .map(part => part.replace(/^"|"$/g, ''));
+
+            if (isPostgres && sourceParts?.length === 2) {
+              const nativeColumns = await driver.query<{ column_name: string; postgres_type: string }>(
+                `SELECT a.attname AS column_name,
+                        format_type(a.atttypid, a.atttypmod) AS postgres_type
+                 FROM pg_attribute a
+                 JOIN pg_class c ON c.oid = a.attrelid
+                 JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE n.nspname = $1
+                   AND c.relname = $2
+                   AND a.attnum > 0
+                   AND NOT a.attisdropped
+                 ORDER BY a.attnum`,
+                sourceParts,
+                { requestId: definitions.requestId } as any,
+              );
+              nativeColumns.forEach(column => {
+                columnTypes[String(column.column_name).toLowerCase()] = String(column.postgres_type);
+              });
+              nativeTypesLoaded = nativeColumns.length > 0;
+            }
+
+            if (!nativeTypesLoaded) {
+              (await driver.tableColumnTypes(model.source!)).forEach(column => {
+                columnTypes[String(column.name).toLowerCase()] = String(column.type);
+              });
+            }
+          } catch {
+            // Column metadata is optional; it must not prevent the sample query.
+          }
         }
 
         let rows: Record<string, unknown>[];
@@ -1115,7 +1163,7 @@ export class DevServer {
             ? (await driver.tableColumnTypes(model.source!)).map(column => String(column.name))
             : [];
 
-        return res.json({ columns, columnLabels, rows: sampleRows });
+        return res.json({ columns, columnLabels, columnTypes, rows: sampleRows });
       } finally {
         if (multiProject) await driver.release?.();
       }
@@ -1449,6 +1497,69 @@ export class DevServer {
           absPath: path.resolve(path.join(repository.localPath(), f.fileName))
         }))
       });
+    }));
+
+    app.get('/playground/schema/validation', catchErrors(async (req, res) => {
+      this.cubejsServer.event('Dev Server Schema Validation Load');
+      const repository = multiProject
+        ? multiProject.repository(multiProject.contextFromRequest(req))
+        : this.cubejsServer.repository;
+      const files = await repository.dataSchemaFiles();
+      const requestId = getRequestIdFromRequest(req);
+      const projectContext = multiProject?.contextFromRequest(req);
+      const context = {
+        authInfo: null,
+        securityContext: null,
+        requestId,
+        ...(projectContext || {}),
+      };
+
+      const fileByCube = new Map<string, string>();
+      files.forEach(file => {
+        try {
+          if (file.fileName.endsWith('.yml') || file.fileName.endsWith('.yaml')) {
+            const document = YAML.load(file.content) as any;
+            (Array.isArray(document?.cubes) ? document.cubes : [])
+              .filter((cube: any) => typeof cube?.name === 'string')
+              .forEach((cube: any) => fileByCube.set(cube.name, file.fileName));
+          } else {
+            const cubeNames = [...file.content.matchAll(/\bcube\s*\(\s*[`'\"]([^`'\"]+)[`'\"]/g)];
+            cubeNames.forEach(match => fileByCube.set(match[1], file.fileName));
+          }
+        } catch (_error) {
+          // The compiler response below contains the useful syntax error.
+        }
+      });
+
+      try {
+        const compilerApi = await this.cubejsServer.getCompilerApi(context);
+        await compilerApi.getCompilers({ requestId });
+        return res.json({ valid: true, errors: {}, globalError: null });
+      } catch (error: any) {
+        const details = String(error?.plainMessage || error?.message || error || 'O schema é inválido');
+        const errors: Record<string, string> = {};
+        let matched = false;
+
+        files.forEach(file => {
+          if (details.includes(file.fileName)) {
+            errors[file.fileName] = details.slice(0, 1200);
+            matched = true;
+          }
+        });
+
+        fileByCube.forEach((fileName, cubeName) => {
+          if (details.includes(cubeName)) {
+            errors[fileName] = details.slice(0, 1200);
+            matched = true;
+          }
+        });
+
+        return res.json({
+          valid: false,
+          errors,
+          globalError: matched ? null : details.slice(0, 1200),
+        });
+      }
     }));
 
     app.post('/playground/files/copy', catchErrors(async (req, res) => {

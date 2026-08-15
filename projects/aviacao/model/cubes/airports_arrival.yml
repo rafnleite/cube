@@ -1,34 +1,45 @@
 cubes:
-  - name: airports_arrival
+  - title: Aeroportos chegada
+    name: airports_arrival
     sql_table: bookings.airports
     data_source: default
+
     dimensions:
-      - name: coordinates
-        title: Coordenadas
-        sql: "{CUBE}.coordinates"
-        type: geo
-      - name: airport_code
+      - title: Código do aeroporto
+        name: airport_code
         sql: airport_code
         type: string
-        title: Código do aeroporto
         primary_key: true
-      - name: airport_name
+
+      - title: Nome
+        name: airport_name
         sql: airport_name
         type: string
-        title: Nome
-      - name: city
+
+      - title: Cidade
+        name: city
         sql: city
         type: string
-        title: Cidade
-      - name: country
+
+      - title: País
+        name: country
         sql: country
         type: string
-        title: País
-      - name: timezone
+
+      - title: Fuso horário
+        name: timezone
         sql: timezone
         type: string
-        title: Fuso horário
+
+      - title: Coordenadas
+        name: coordinates
+        type: geo
+        latitude:
+          sql: ({CUBE}.coordinates)[1]
+
+        longitude:
+          sql: ({CUBE}.coordinates)[0]
+
     measures:
       - name: count
         type: count
-    title: Aeroportos chegada
