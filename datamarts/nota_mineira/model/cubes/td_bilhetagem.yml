@@ -1,0 +1,28 @@
+cubes:
+  - name: td_bilhetagem
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_BILHETAGEM\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: dt_inicio_ref_compra
+        sql: "{CUBE}.\"DT_INICIO_REF_COMPRA\""
+        type: time
+
+      - name: dt_fim_ref_compra
+        sql: "{CUBE}.\"DT_FIM_REF_COMPRA\""
+        type: time
+
+      - name: dt_gerar_bilhete
+        sql: "{CUBE}.\"DT_GERAR_BILHETE\""
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+

@@ -11,8 +11,8 @@ describe('NetezzaDriver', () => {
             database: 'warehouse',
             schema: 'analytics',
             user: 'cube',
-            password: 'p;ass}',
-        })).toBe('DRIVER={NetezzaSQL};SERVER={netezza.internal};PORT={5480};DATABASE={warehouse};SCHEMA={analytics};UID={cube};PWD={p;ass}}}');
+            password: 'pass',
+        })).toBe('DRIVER={NetezzaSQL};SERVERNAME=netezza.internal;PORT=5480;DATABASE=warehouse;SECURITYLEVEL=preferredUnSecured;UNICODETRANSLATIONOPTION=utf16;CHARACTERTRANSLATIONOPTION=all;SCHEMA=analytics;USERNAME=cube;PASSWORD=pass');
         expect((0, NetezzaDriver_1.escapeOdbcConnectionValue)('a}b')).toBe('{a}}b}');
     });
     it('keeps a supplied connection string untouched', () => {

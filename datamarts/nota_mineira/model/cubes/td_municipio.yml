@@ -1,0 +1,68 @@
+cubes:
+  - name: td_municipio
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: ds_municipio_siare
+        sql: "{CUBE}.\"DS_MUNICIPIO_SIARE\""
+        type: string
+
+      - name: sg_uf_siare
+        sql: "{CUBE}.\"SG_UF_SIARE\""
+        type: string
+
+      - name: ds_nome_uf
+        sql: "{CUBE}.\"DS_NOME_UF\""
+        type: string
+
+      - name: ds_municipio_ibge
+        sql: "{CUBE}.\"DS_MUNICIPIO_IBGE\""
+        type: string
+
+      - name: ds_municipio_cognos
+        sql: "{CUBE}.\"DS_MUNICIPIO_COGNOS\""
+        type: string
+
+      - name: ds_regiao_metropolitana
+        sql: "{CUBE}.\"DS_REGIAO_METROPOLITANA\""
+        type: string
+
+      - name: ds_territorio
+        sql: "{CUBE}.\"DS_TERRITORIO\""
+        type: string
+
+      - name: ds_mesorregiao
+        sql: "{CUBE}.\"DS_MESORREGIAO\""
+        type: string
+
+      - name: ds_microrregiao
+        sql: "{CUBE}.\"DS_MICRORREGIAO\""
+        type: string
+
+      - name: cd_df_circunscricao
+        sql: "{CUBE}.\"CD_DF_CIRCUNSCRICAO\""
+        type: string
+
+      - name: ds_df_circunscricao
+        sql: "{CUBE}.\"DS_DF_CIRCUNSCRICAO\""
+        type: string
+
+      - name: cd_af_circunscricao
+        sql: "{CUBE}.\"CD_AF_CIRCUNSCRICAO\""
+        type: string
+
+      - name: ds_af_circunscricao
+        sql: "{CUBE}.\"DS_AF_CIRCUNSCRICAO\""
+        type: string
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+

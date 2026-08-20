@@ -1,0 +1,156 @@
+cubes:
+  - name: td_entidade_social
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_ENTIDADE_SOCIAL\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: sk_entidade_social
+        sql: '{CUBE}."SK_ENTIDADE_SOCIAL"'
+        type: string
+        primary_key: true
+
+      - name: ID_LOCALIDADE
+        title: Localidade
+        sql: "{CUBE}.ID_LOCALIDADE"
+        type: number
+        primary_key: false
+
+      - name: id_entidade_social
+        title: CNPJ da Entidade Social
+        sql: '{CUBE}."ID_ENTIDADE_SOCIAL"'
+        type: string
+        primary_key: false
+
+      - name: nm_empresarial
+        title: Nome empresarial
+        sql: '{CUBE}."NM_EMPRESARIAL"'
+        type: string
+        primary_key: false
+
+      - name: nm_fantasia
+        title: Nome fantasia
+        sql: '{CUBE}."NM_FANTASIA"'
+        type: string
+        primary_key: false
+
+      - name: id_entidade_social_matriz
+        title: CNPJ Entidade Social Matriz
+        sql: '{CUBE}."ID_ENTIDADE_SOCIAL_MATRIZ"'
+        type: string
+        primary_key: false
+
+      - name: dt_abertura
+        title: Data de abertura
+        sql: '{CUBE}."DT_ABERTURA"'
+        type: time
+        primary_key: false
+
+      - name: dt_fundacao
+        title: Data de fundação
+        sql: '{CUBE}."DT_FUNDACAO"'
+        type: time
+        primary_key: false
+
+      - name: id_responsavel
+        title: CPF responsável
+        sql: '{CUBE}."ID_RESPONSAVEL"'
+        type: string
+        primary_key: false
+
+      - name: nm_responsavel
+        title: Nome responsável
+        sql: '{CUBE}."NM_RESPONSAVEL"'
+        type: string
+        primary_key: false
+
+      - name: dt_nascimento_resp
+        title: Data de nascimento do responsável
+        sql: '{CUBE}."DT_NASCIMENTO_RESP"'
+        type: time
+        primary_key: false
+
+      - name: nr_telefone
+        title: Número de telefone
+        sql: '{CUBE}."NR_TELEFONE"'
+        type: string
+        primary_key: false
+
+      - name: nr_fax
+        title: Número de fax
+        sql: '{CUBE}."NR_FAX"'
+        type: string
+        primary_key: false
+
+      - name: ds_email
+        title: E-mail
+        sql: '{CUBE}."DS_EMAIL"'
+        type: string
+        primary_key: false
+
+      - name: ds_pagina_internet
+        title: Página de internet
+        sql: '{CUBE}."DS_PAGINA_INTERNET"'
+        type: string
+        primary_key: false
+
+      - name: nm_logradouro
+        title: Endereço - Logradouro
+        sql: '{CUBE}."NM_LOGRADOURO"'
+        type: string
+        primary_key: false
+
+      - name: nr_endereco
+        title: Endereço - Número
+        sql: '{CUBE}."NR_ENDERECO"'
+        type: string
+        primary_key: false
+
+      - name: ds_endereco_complemento
+        title: Endereço - Complemento
+        sql: '{CUBE}."DS_ENDERECO_COMPLEMENTO"'
+        type: string
+        primary_key: false
+
+      - name: nm_bairro
+        title: Endereço - Bairro
+        sql: '{CUBE}."NM_BAIRRO"'
+        type: string
+        primary_key: false
+
+      - name: CEP
+        title: Endereço - CEP
+        sql: "{CUBE}.CEP"
+        type: number
+        primary_key: false
+
+      - name: dt_alteracao
+        title: Data alteração
+        sql: '{CUBE}."DT_ALTERACAO"'
+        type: time
+        primary_key: false
+
+      - name: dt_inclusao
+        title: Data inclusão
+        sql: '{CUBE}."DT_INCLUSAO"'
+        type: time
+        primary_key: false
+
+      - name: dt_carga_dados
+        title: Data de carga dos dados
+        sql: '{CUBE}."DT_CARGA_DADOS"'
+        type: time
+        primary_key: false
+
+    measures:
+      - name: count
+        title: Contagem
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Entidade Social
+    hierarchies: []

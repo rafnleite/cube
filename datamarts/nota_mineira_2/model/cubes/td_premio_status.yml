@@ -1,0 +1,30 @@
+cubes:
+  - name: td_premio_status
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_PREMIO_STATUS\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: sk_premio_status
+        sql: '{CUBE}."SK_PREMIO_STATUS"'
+        type: number
+        primary_key: true
+
+      - name: ds_premio_status
+        title: Status do prêmio
+        sql: '{CUBE}."DS_PREMIO_STATUS"'
+        type: string
+        primary_key: false
+
+    measures:
+      - name: count
+        title: Contagem
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Status do prêmio
+    hierarchies: []

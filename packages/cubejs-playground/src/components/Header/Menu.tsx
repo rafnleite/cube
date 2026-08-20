@@ -60,6 +60,9 @@ export const StyledMenuButton = styled.a<TStyledMenuButtonProps>`
     display: flex;
     align-items: center;
     color: white;
+    font: inherit;
+    background: transparent;
+    cursor: pointer;
     transition: all 0.25s ease;
     padding: 0 10px;
 
@@ -71,6 +74,11 @@ export const StyledMenuButton = styled.a<TStyledMenuButtonProps>`
     &:hover {
       border-color: white;
       color: white;
+    }
+
+    &:disabled {
+      cursor: wait;
+      opacity: 0.6;
     }
   }
 `;

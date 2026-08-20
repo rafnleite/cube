@@ -1,0 +1,44 @@
+cubes:
+  - name: td_periodo
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_PERIODO\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: ds_mes_ano
+        sql: "{CUBE}.\"DS_MES_ANO\""
+        type: string
+
+      - name: ds_mes
+        sql: "{CUBE}.\"DS_MES\""
+        type: string
+
+      - name: ds_trimestre
+        sql: "{CUBE}.\"DS_TRIMESTRE\""
+        type: string
+
+      - name: ds_semestre
+        sql: "{CUBE}.\"DS_SEMESTRE\""
+        type: string
+
+      - name: ds_trimestre_ano
+        sql: "{CUBE}.\"DS_TRIMESTRE_ANO\""
+        type: string
+
+      - name: ds_semestre_ano
+        sql: "{CUBE}.\"DS_SEMESTRE_ANO\""
+        type: string
+
+      - name: data
+        sql: "{CUBE}.\"DATA\""
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+

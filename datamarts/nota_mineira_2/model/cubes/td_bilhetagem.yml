@@ -1,0 +1,50 @@
+cubes:
+  - name: td_bilhetagem
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_BILHETAGEM\""
+    data_source: default
+
+    joins:
+      - name: td_sorteio_tipo
+        sql: "{CUBE}.SK_TIPO_SORTEIO = {td_sorteio_tipo}.SK_SORTEIO_TIPO"
+        relationship: many_to_one
+
+    dimensions:
+      - name: sk_bilhetagem
+        sql: '{CUBE}."SK_BILHETAGEM"'
+        type: number
+        primary_key: true
+
+      - name: sk_tipo_sorteio
+        sql: '{CUBE}."SK_TIPO_SORTEIO"'
+        type: number
+        primary_key: false
+
+      - name: dt_inicio_ref_compra
+        title: Data de início da referência compra
+        sql: '{CUBE}."DT_INICIO_REF_COMPRA"'
+        type: time
+        primary_key: false
+
+      - name: dt_fim_ref_compra
+        title: Data final da referência de compra
+        sql: '{CUBE}."DT_FIM_REF_COMPRA"'
+        type: time
+        primary_key: false
+
+      - name: dt_gerar_bilhete
+        title: Data de geração dos bilhetes
+        sql: '{CUBE}."DT_GERAR_BILHETE"'
+        type: time
+        primary_key: false
+
+    measures:
+      - name: count
+        title: Contagem
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Bilhetagem
+    hierarchies: []

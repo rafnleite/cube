@@ -1,0 +1,33 @@
+cubes:
+  - title: Aviões
+    name: airplanes
+    sql_table: bookings.airplanes
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - title: Código
+        name: airplane_code
+        sql: airplane_code
+        type: string
+        primary_key: true
+      - name: speed
+        title: Velocidade
+        type: number
+        sql: "{CUBE}.speed"
+      - name: range
+        title: Distância
+        type: number
+        sql: "{CUBE}.range"
+
+      - title: Modelo
+        name: model
+        sql: model
+        type: string
+
+    measures:
+      - name: count
+        type: count
+        title: Contagem
+        drill_members: []

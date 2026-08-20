@@ -10,7 +10,13 @@ export class NetezzaError extends Error {
 
 export class NetezzaConnectionError extends NetezzaError {
   public constructor(cause: Error, poolName: string) {
-    super(`Unable to connect to Netezza using pool ${poolName}: ${cause.message}`, cause);
+    const diagnostics = (cause as Error & {
+      odbcErrors?: Array<{ state?: string; code?: number | string; message?: string }>;
+    }).odbcErrors;
+    const detail = Array.isArray(diagnostics) && diagnostics.length
+      ? ` (${diagnostics.map((item) => [item.state, item.code, item.message].filter(Boolean).join(': ')).join('; ')})`
+      : '';
+    super(`Unable to connect to Netezza using pool ${poolName}: ${cause.message}${detail}`, cause);
     this.name = 'NetezzaConnectionError';
   }
 }

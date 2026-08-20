@@ -214,6 +214,40 @@ cubes:
     expect(composite?.targetColumn).toBeUndefined();
   });
 
+  test('reads a YAML join qualified with the source cube name', async () => {
+    const reader = new CubeRelationshipReader();
+    const converter = new CubeSchemaConverter(repository([
+      {
+        fileName: 'tf_partic_ent_indicacoes.yml',
+        content: `cubes:
+  - name: tf_partic_ent_indicacoes
+    sql_table: public.tf_partic_ent_indicacoes
+    joins:
+      - name: td_periodo
+        sql: "{tf_partic_ent_indicacoes}.DATA = {td_periodo}.DATA"
+        relationship: many_to_one
+`,
+      },
+      {
+        fileName: 'td_periodo.yml',
+        content: `cubes:
+  - name: td_periodo
+    sql_table: public.td_periodo
+`,
+      },
+    ]), [reader]);
+
+    await converter.generate();
+    expect(reader.getRelationships()).toContainEqual(expect.objectContaining({
+      sourceCube: 'tf_partic_ent_indicacoes',
+      targetCube: 'td_periodo',
+      sourceColumn: 'DATA',
+      targetColumn: 'DATA',
+      sourceColumns: ['DATA'],
+      targetColumns: ['DATA'],
+    }));
+  });
+
   test('creates and reads a relationship in a JavaScript joins array', async () => {
     const original = `cube('Orders', {
   sql: \`SELECT * FROM orders\`,

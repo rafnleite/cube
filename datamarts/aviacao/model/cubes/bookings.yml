@@ -1,0 +1,47 @@
+cubes:
+  - title: Reserva
+    name: bookings
+    sql_table: bookings.bookings
+    data_source: default
+
+    pre_aggregations:
+      - name: dashboard_totals
+        type: rollup
+        external: false
+        measures:
+          - CUBE.count
+          - CUBE.total_amount
+          - CUBE.avg_amount
+        refresh_key:
+          every: 1 hour
+
+    joins: []
+
+    dimensions:
+      - title: Referência
+        name: book_ref
+        sql: book_ref
+        type: string
+        primary_key: true
+
+      - title: Data de reserva
+        name: book_date
+        sql: book_date
+        type: time
+
+    measures:
+      - name: count
+        type: count
+        title: Contagem
+        drill_members: []
+
+      - title: Valor total
+        name: total_amount
+        sql: '{CUBE}.total_amount'
+        type: sum
+        drill_members: []
+
+      - title: Valor médio
+        name: avg_amount
+        sql: '{CUBE}.total_amount'
+        type: avg

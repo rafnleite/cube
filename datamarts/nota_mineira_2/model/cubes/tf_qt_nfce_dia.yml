@@ -1,0 +1,57 @@
+cubes:
+  - name: tf_qt_nfce_dia
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TF_QT_NFCE_DIA\""
+    data_source: default
+
+    joins:
+      - name: td_periodo
+        sql: "{CUBE}.dt_emissao = {td_periodo}.data"
+        relationship: many_to_one
+
+      - name: td_municipio
+        sql: "{CUBE}.sk_municipio = {td_municipio}.sk_municipio"
+        relationship: many_to_one
+
+    dimensions:
+      - name: id
+        title: ID
+        sql: '{CUBE}."SK_MUNICIPIO"'
+        type: string
+        primary_key: true
+
+      - name: sk_municipio
+        sql: '{CUBE}."SK_MUNICIPIO"'
+        type: number
+        primary_key: false
+
+      - name: dt_emissao
+        sql: '{CUBE}."DT_EMISSAO"'
+        type: time
+        primary_key: false
+
+    measures:
+      - name: count
+        title: Contagem
+        type: count
+
+      - name: qt_nfce
+        title: Quantidade NFCe
+        sql: '{CUBE}."QT_NFCE"'
+        type: sum
+
+      - name: qt_nfce_cpf
+        title: Quantidade NFCe com CPF
+        sql: '{CUBE}."QT_NFCE_CPF"'
+        type: sum
+
+      - name: qt_nfce_nota_mineira
+        title: Quantidade NFCe NFM
+        sql: '{CUBE}."QT_NFCE_NOTA_MINEIRA"'
+        type: sum
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Fato - Quantidade NFCe dia
+    hierarchies: []

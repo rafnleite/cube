@@ -1,0 +1,48 @@
+cubes:
+  - name: tf_premiacoes_entidades
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_ENTIDADES\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: sk_premiado
+        sql: "{CUBE}.\"SK_PREMIADO\""
+        type: string
+
+      - name: dt_premio_pagamento
+        sql: "{CUBE}.\"DT_PREMIO_PAGAMENTO\""
+        type: string
+
+      - name: cd_requisicao_premio
+        sql: "{CUBE}.\"CD_REQUISICAO_PREMIO\""
+        type: string
+
+      - name: nr_chave_acesso
+        sql: "{CUBE}.\"NR_CHAVE_ACESSO\""
+        type: string
+
+      - name: dt_sorteio
+        sql: "{CUBE}.\"DT_SORTEIO\""
+        type: time
+
+      - name: dt_bilhetagem
+        sql: "{CUBE}.\"DT_BILHETAGEM\""
+        type: time
+
+      - name: dt_premio_primeira_requisicao
+        sql: "{CUBE}.\"DT_PREMIO_PRIMEIRA_REQUISICAO\""
+        type: time
+
+      - name: dt_premio_ultima_requisicao
+        sql: "{CUBE}.\"DT_PREMIO_ULTIMA_REQUISICAO\""
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+

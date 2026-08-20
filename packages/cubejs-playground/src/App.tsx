@@ -20,10 +20,21 @@ import {
 } from './events';
 import { useAppContext } from './hooks';
 import { QUERY_BUILDER_COLOR_TOKENS } from './QueryBuilderV2';
-import { ProjectSelector } from './components/ProjectSelector/ProjectSelector';
+import { DatamartSelector } from './components/DatamartSelector/DatamartSelector';
+import { recoverExpiredDatamartSession, responseErrorMessage } from './shared/helpers';
 
 const StyledLayoutContent = styled(Layout.Content)`
   height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+
+  > * {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
 `;
 
 type AppState = {
@@ -34,7 +45,9 @@ type AppState = {
 };
 
 const ROOT_STYLES = {
-  height: 'min 100vh',
+  height: '100vh',
+  minHeight: '100vh',
+  overflow: 'hidden',
   display: 'grid',
   gridTemplateRows: 'min-content 1fr',
   ...QUERY_BUILDER_COLOR_TOKENS,
@@ -52,8 +65,18 @@ class App extends Component<PropsWithChildren<RouteComponentProps>, AppState> {
     isAppContextSet: false,
   };
 
+  private datamartSessionMonitor: number | null = null;
+
   async loadContext() {
     const res = await fetch('playground/context');
+    if (!res.ok) {
+      const errorText = await responseErrorMessage(res);
+      if (/Datamart session is missing or expired|Datamart credentials are required/i.test(errorText)) {
+        recoverExpiredDatamartSession(errorText);
+        return;
+      }
+      throw new Error(errorText || `Falha ao carregar o contexto (${res.status})`);
+    }
     const context = await res.json();
 
     setTelemetry(context.telemetry);
@@ -81,6 +104,37 @@ class App extends Component<PropsWithChildren<RouteComponentProps>, AppState> {
     });
 
     await this.loadContext();
+    this.datamartSessionMonitor = window.setInterval(() => {
+      void this.checkDatamartSession();
+    }, 30000);
+  }
+
+  componentWillUnmount() {
+    if (this.datamartSessionMonitor !== null) {
+      window.clearInterval(this.datamartSessionMonitor);
+      this.datamartSessionMonitor = null;
+    }
+  }
+
+  async checkDatamartSession() {
+    if (!this.state.context?.multiDatamart?.enabled || !this.state.context.multiDatamart.activeDatamart) {
+      return;
+    }
+
+    try {
+      const response = await fetch('playground/context', { cache: 'no-store' });
+      if (!response.ok) {
+        const errorText = await responseErrorMessage(response);
+        recoverExpiredDatamartSession(errorText);
+        return;
+      }
+      const context = await response.json();
+      if (!context.multiDatamart?.activeDatamart) {
+        recoverExpiredDatamartSession('Datamart session is missing or expired');
+      }
+    } catch (_e) {
+      // A temporary context request failure must not interrupt the playground.
+    }
   }
 
   componentDidCatch(error, info) {
@@ -94,8 +148,8 @@ class App extends Component<PropsWithChildren<RouteComponentProps>, AppState> {
     const { location, children } = this.props;
     const { context, fatalError, isAppContextSet, showLoader } = this.state;
 
-    if (context?.multiProject?.enabled && !context.multiProject.activeProject) {
-      return <ProjectSelector onReady={() => this.loadContext()} />;
+    if (context?.multiDatamart?.enabled && !context.multiDatamart.activeDatamart) {
+      return <DatamartSelector onReady={() => this.loadContext()} />;
     }
 
     if (context != null && !isAppContextSet) {

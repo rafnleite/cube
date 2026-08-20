@@ -1,0 +1,31 @@
+cubes:
+  - name: td_pagamento_retorno_status
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_PAGAMENTO_RETORNO_STATUS\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: sk_pagamento_retorno_status
+        sql: '{CUBE}."SK_PAGAMENTO_RETORNO_STATUS"'
+        type: number
+        primary_key: true
+
+      - name: ds_pagamento_retorno_status
+        sql: '{CUBE}."DS_PAGAMENTO_RETORNO_STATUS"'
+        type: string
+        primary_key: false
+        title: Status de retorno de pagamento
+
+    measures:
+      - name: count
+        type: count
+        title: Contagem
+        drill_members: []
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Status de retorno de pagamento
+    hierarchies: []

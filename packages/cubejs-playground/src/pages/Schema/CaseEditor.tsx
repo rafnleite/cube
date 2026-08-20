@@ -11,6 +11,11 @@ import {
 } from '../../shared/icons/FontAwesomeIcons';
 import { TableColumn, TablesSchema } from './cubeSchemaUtils';
 import { SqlExpressionAutocomplete } from './SqlExpressionAutocomplete';
+import {
+  CASE_AUTOCOMPLETE,
+  CompletionDefinition,
+  toMonacoCompletionItems,
+} from './autocomplete/autocompleteDefinitions';
 
 const { Text } = Typography;
 
@@ -236,7 +241,42 @@ function caseCompletionContext(model: Monaco.editor.ITextModel, position: Monaco
   };
 }
 
-function registerCaseYamlCompletionProvider(monaco: typeof Monaco) {
+function caseBlockIndent(model: Monaco.editor.ITextModel, position: Monaco.Position): number | null {
+  if (model.uri.toString().startsWith('inmemory://cube-case/')) {
+    return -1;
+  }
+
+  if (!model.uri.toString().startsWith('inmemory://cube-schema/')) {
+    return null;
+  }
+
+  const lines = model.getValueInRange({
+    startLineNumber: 1,
+    startColumn: 1,
+    endLineNumber: position.lineNumber,
+    endColumn: position.column,
+  }).split('\n');
+
+  let activeIndent: number | null = null;
+  lines.forEach((sourceLine) => {
+    const trimmed = sourceLine.trim();
+    if (!trimmed) return;
+
+    const indent = lineIndent(sourceLine);
+    if (/^case:\s*$/.test(trimmed)) {
+      activeIndent = indent;
+      return;
+    }
+
+    if (activeIndent !== null && indent <= activeIndent) {
+      activeIndent = null;
+    }
+  });
+
+  return activeIndent;
+}
+
+function registerLegacyCaseYamlCompletionProvider(monaco: typeof Monaco) {
   if (caseYamlCompletionProvider) return;
 
   const keySuggestion = (
@@ -277,8 +317,31 @@ function registerCaseYamlCompletionProvider(monaco: typeof Monaco) {
       const context = caseCompletionContext(model, position);
       const range = caseCompletionRange(model, position);
       const suggestions: Monaco.languages.CompletionItem[] = [];
+      const trimmedPrefix = context.linePrefix.trim();
 
-      if (context.isRoot && context.isKeyPosition) {
+      if (trimmedPrefix === 'when:') {
+        suggestions.push(
+          snippetSuggestion(
+            'Adicionar condição',
+            "\n  - sql: \"${1:{CUBE}.status = 'active'}\"\n    label: ${2:Ativo}",
+            range,
+            'Condição SQL e resultado do case',
+            '0000',
+          ),
+        );
+      } else if (trimmedPrefix === 'else:') {
+        suggestions.push(
+          snippetSuggestion(
+            'Adicionar resultado padrão',
+            '\n  label: ${1:Outro}',
+            range,
+            'Resultado usado quando nenhuma condição for atendida',
+            '0000',
+          ),
+        );
+      }
+
+      if (!suggestions.length && context.isRoot && context.isKeyPosition) {
         suggestions.push(
           snippetSuggestion(
             'Case completo (1 when)',
@@ -322,6 +385,47 @@ function registerCaseYamlCompletionProvider(monaco: typeof Monaco) {
       }
 
       return { suggestions };
+    },
+  });
+}
+
+export function registerCaseYamlCompletionProvider(monaco: typeof Monaco) {
+  if (caseYamlCompletionProvider) return;
+
+  caseYamlCompletionProvider = monaco.languages.registerCompletionItemProvider('yaml', {
+    triggerCharacters: [':', '-', ' '],
+    provideCompletionItems: (model, position) => {
+      const caseIndent = caseBlockIndent(model, position);
+      if (caseIndent === null) {
+        return { suggestions: [] };
+      }
+
+      const context = caseCompletionContext(model, position);
+      const range = caseCompletionRange(model, position);
+      const trimmedPrefix = context.linePrefix.trim();
+      let definitions: CompletionDefinition[] = [];
+      const isCaseRoot = caseIndent >= 0
+        && !context.inWhen
+        && !context.inElse
+        && lineIndent(context.linePrefix) > caseIndent;
+
+      if (trimmedPrefix === 'when:') {
+        definitions = CASE_AUTOCOMPLETE.whenValue;
+      } else if (trimmedPrefix === 'else:') {
+        definitions = CASE_AUTOCOMPLETE.elseValue;
+      } else if ((context.isRoot || isCaseRoot) && context.isKeyPosition) {
+        definitions = CASE_AUTOCOMPLETE.root;
+      } else if (context.inWhen && context.isKeyPosition) {
+        if (context.isAfterWhen || /^\s*-\s*$/.test(context.linePrefix)) {
+          definitions = CASE_AUTOCOMPLETE.whenItemStart;
+        } else if (context.isInsideWhenItem) {
+          definitions = CASE_AUTOCOMPLETE.whenItemProperties;
+        }
+      } else if (context.inElse && context.isKeyPosition && context.isAfterElse) {
+        definitions = CASE_AUTOCOMPLETE.elseProperties;
+      }
+
+      return { suggestions: toMonacoCompletionItems(monaco, range, definitions) };
     },
   });
 }
@@ -513,7 +617,7 @@ function CaseBuilderModal({
       event.preventDefault();
       save();
     }
-    if (event.key === 'Enter' && event.ctrlKey && event.shiftKey) {
+    if (event.key === 'Enter' && event.shiftKey && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
       onCancel();
     }
@@ -806,13 +910,8 @@ export function CaseEditor({
     });
 
     editor.onDidDispose(() => {
-      caseEditorModels.delete(modelPath);
       languageConfig.dispose();
       contentSizeListener.dispose();
-      if (caseEditorModels.size === 0) {
-        caseYamlCompletionProvider?.dispose();
-        caseYamlCompletionProvider = null;
-      }
     });
   };
 

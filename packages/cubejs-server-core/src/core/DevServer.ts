@@ -3,11 +3,13 @@ import dotenv from '@cubejs-backend/dotenv';
 import {
   CubePreAggregationConverter,
   CubeDimensionConverter,
+  CubeDimensionOrderConverter,
   CubePrimaryKeyConverter,
   CubeRelationshipConverter,
   CubeRelationshipReader,
   CubeSchemaConverter,
   CubeSchemaItemConverter,
+  CubeSchemaSnapshotConverter,
   ScaffoldingTemplate,
   SchemaFormat,
 } from '@cubejs-backend/schema-compiler';
@@ -30,7 +32,7 @@ import type { BaseDriver } from '@cubejs-backend/query-orchestrator';
 import { CubejsServerCore } from './server';
 import { ExternalDbTypeFn, ServerCoreInitializedOptions, DatabaseType } from './types';
 import DriverDependencies from './DriverDependencies';
-import { MultiProjectRuntime } from './multi-project/MultiProjectRuntime';
+import { MultiDatamartRuntime } from './multi-datamart/MultiDatamartRuntime';
 
 const repo = {
   owner: 'cube-js',
@@ -41,7 +43,7 @@ type DevServerOptions = {
   externalDbTypeFn: ExternalDbTypeFn;
   isReadyForQueryProcessing: () => boolean;
   dockerVersion?: string;
-  multiProjectRuntime?: MultiProjectRuntime;
+  multiDatamartRuntime?: MultiDatamartRuntime;
 };
 
 class SchemaMutationError extends Error {
@@ -51,6 +53,16 @@ class SchemaMutationError extends Error {
     super(message);
     this.status = status;
   }
+}
+
+function repairUtf8Mojibake(value: string): string {
+  let repaired = value;
+  for (let attempt = 0; attempt < 3 && /[ÃÂ]/.test(repaired); attempt += 1) {
+    const decoded = Buffer.from(repaired, 'latin1').toString('utf8');
+    if (decoded === repaired || decoded.includes('\uFFFD')) break;
+    repaired = decoded;
+  }
+  return repaired;
 }
 
 const JINJA_SYNTAX = /{%|%}|{{|}}/i;
@@ -68,6 +80,14 @@ function validateYamlSyntax(fileName: string, content: string): string | null {
       return `O arquivo '${fileName}' precisa conter um documento YAML com um objeto na raiz.`;
     }
   } catch (error: any) {
+    const reason = error?.reason || error?.message || String(error);
+    if (/duplicated mapping key/i.test(reason)) {
+      const topLevelCubeDeclarations = content.match(/^[ \t]*cubes[ \t]*:/gm) || [];
+      if (topLevelCubeDeclarations.length > 1) {
+        return `O arquivo '${fileName}' declara 'cubes:' mais de uma vez. Use uma única chave 'cubes:' e coloque os cubos como itens da mesma lista.`;
+      }
+    }
+
     const line = error?.mark?.line == null ? null : error.mark.line + 1;
     const column = error?.mark?.column == null ? null : error.mark.column + 1;
     const location = line == null ? '' : ` (linha ${line}, coluna ${column})`;
@@ -111,7 +131,7 @@ function diagramStatePath(repository: { localPath(): string }): string {
   return path.resolve(repository.localPath(), DIAGRAM_STATE_FILE);
 }
 
-function sanitizeDiagramState(input: any): any {
+function sanitizeDiagramCubes(input: any): Record<string, any> {
   const cubes: Record<string, any> = {};
   if (input?.cubes && typeof input.cubes === 'object' && !Array.isArray(input.cubes)) {
     for (const [key, value] of Object.entries(input.cubes)) {
@@ -126,10 +146,44 @@ function sanitizeDiagramState(input: any): any {
       };
     }
   }
+  return cubes;
+}
+
+function sanitizeDiagramState(input: any): any {
+  const views: Record<string, any> = {};
+  if (input?.views && typeof input.views === 'object' && !Array.isArray(input.views)) {
+    for (const [key, value] of Object.entries(input.views)) {
+      const view = value as any;
+      if (!key || !view || typeof view !== 'object') continue;
+
+      const visibility: Record<string, boolean> = {};
+      if (view.visibility && typeof view.visibility === 'object' && !Array.isArray(view.visibility)) {
+        for (const [cubeName, visible] of Object.entries(view.visibility)) {
+          if (cubeName && typeof visible === 'boolean') visibility[cubeName] = visible;
+        }
+      }
+
+      const backgroundColor = typeof view.backgroundColor === 'string'
+        && /^#[0-9a-f]{6}$/i.test(view.backgroundColor)
+        ? view.backgroundColor
+        : '#f7f8fc';
+      views[key] = {
+        id: key,
+        name: typeof view.name === 'string' && view.name.trim() ? view.name.trim().slice(0, 120) : key,
+        backgroundColor,
+        visibility,
+        cubes: sanitizeDiagramCubes(view),
+      };
+    }
+  }
 
   return {
-    version: 1,
-    cubes,
+    version: Object.keys(views).length ? 2 : 1,
+    activeViewId: typeof input?.activeViewId === 'string' && views[input.activeViewId]
+      ? input.activeViewId
+      : Object.keys(views)[0],
+    views,
+    cubes: sanitizeDiagramCubes(input),
   };
 }
 
@@ -157,6 +211,17 @@ function escapeRegExp(value: string): string {
 
 function quoteIdentifier(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
+}
+
+function serializeBigInts(value: unknown): unknown {
+  if (typeof value === 'bigint') return value.toString();
+  if (Array.isArray(value)) return value.map(serializeBigInts);
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, serializeBigInts(item)])
+    );
+  }
+  return value;
 }
 
 function postgresSampleCastType(type: unknown): string {
@@ -239,10 +304,171 @@ async function postgresSampleRows(
   return rows;
 }
 
+async function netezzaSampleRows(
+  driver: BaseDriver,
+  source: string,
+  projection: string,
+  limit: number,
+  requestId: string,
+): Promise<Record<string, unknown>[]> {
+  // Netezza does not support PostgreSQL's TABLESAMPLE syntax. A narrow
+  // projection with LIMIT is still substantially cheaper than executing the
+  // complete cube query with every join and measure just to obtain 25 rows.
+  return driver.query<Record<string, unknown>>(
+    `SELECT ${projection} FROM ${source} LIMIT ${limit}`,
+    [],
+    { requestId } as any,
+  );
+}
+
+function rowValue(row: Record<string, unknown>, column: string): unknown {
+  const key = Object.keys(row).find(item => item.toLowerCase() === column.toLowerCase());
+  return key === undefined ? undefined : row[key];
+}
+
+function sampleKeyIdentity(values: unknown[]): string {
+  return JSON.stringify(values, (_key, value) => (
+    typeof value === 'bigint' ? `${value}n` : value
+  ));
+}
+
+function uniqueSampleKeyRows(
+  rows: Record<string, unknown>[],
+  columns: string[],
+  limit: number,
+): unknown[][] {
+  const unique = new Map<string, unknown[]>();
+  rows.forEach(row => {
+    const values = columns.map(column => rowValue(row, column));
+    const identity = sampleKeyIdentity(values);
+    if (!unique.has(identity)) unique.set(identity, values);
+  });
+  return [...unique.values()].slice(0, limit);
+}
+
+function topLevelClauseIndex(
+  sql: string,
+  clauses: string[],
+): { index: number; clause: string } | null {
+  let depth = 0;
+  let quote: string | null = null;
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const character = sql[index];
+    if (quote) {
+      if (character === quote) {
+        if (sql[index + 1] === quote) {
+          index += 1;
+        } else {
+          quote = null;
+        }
+      }
+      continue;
+    }
+    if (character === '\'' || character === '"' || character === '`') {
+      quote = character;
+      continue;
+    }
+    if (character === '(') {
+      depth += 1;
+      continue;
+    }
+    if (character === ')') {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (depth !== 0 || (index > 0 && /[A-Za-z0-9_$]/.test(sql[index - 1]))) continue;
+
+    const remaining = sql.slice(index);
+    const clause = clauses.find(candidate => (
+      remaining.slice(0, candidate.length).toUpperCase() === candidate
+      && (remaining[candidate.length] === undefined || /\s|[;(]/.test(remaining[candidate.length]))
+    ));
+    if (clause) return { index, clause };
+  }
+  return null;
+}
+
+function parameterCountBefore(sql: string, end: number): number {
+  let count = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < end; index += 1) {
+    const character = sql[index];
+    if (quote) {
+      if (character === quote) {
+        if (sql[index + 1] === quote) index += 1;
+        else quote = null;
+      }
+      continue;
+    }
+    if (character === '\'' || character === '"' || character === '`') {
+      quote = character;
+    } else if (character === '?') {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function injectNetezzaSampleKeyFilter(
+  sql: string,
+  source: string,
+  cubeName: string,
+  keyColumns: string[],
+  keyRows: unknown[][],
+  params: unknown[],
+): [string, unknown[]] | null {
+  if (!keyRows.length || !keyColumns.length) return null;
+
+  const relationPattern = source
+    .replace(/"/g, '')
+    .split('.')
+    .map(part => `"?${escapeRegExp(part)}"?`)
+    .join('\\s*\\.\\s*');
+  const aliasPattern = `(?:AS\\s+)?"?${escapeRegExp(cubeName)}"?`;
+  const fromPattern = new RegExp(`FROM\\s+${relationPattern}\\s+${aliasPattern}`, 'i');
+  if (!fromPattern.test(sql)) return null;
+
+  const whereClause = topLevelClauseIndex(sql, ['WHERE']);
+  const nextClause = topLevelClauseIndex(sql, [
+    'GROUP BY', 'HAVING', 'ORDER BY', 'LIMIT', 'OFFSET', 'UNION',
+  ]);
+  const insertionIndex = whereClause
+    ? whereClause.index + whereClause.clause.length
+    : nextClause?.index ?? sql.length;
+  const cubeAlias = quoteIdentifier(cubeName);
+  const condition = keyRows.map(row => {
+    const parts = keyColumns.map((column, index) => {
+      const value = row[index];
+      if (value === null || value === undefined) return `${cubeAlias}.${quoteIdentifier(column)} IS NULL`;
+      return `${cubeAlias}.${quoteIdentifier(column)} = ?`;
+    });
+    return `(${parts.join(' AND ')})`;
+  }).join(' OR ');
+  const filterSql = `(${condition})`;
+  const updatedSql = whereClause
+    ? `${sql.slice(0, insertionIndex)} (${filterSql}) AND${sql.slice(insertionIndex)}`
+    : `${sql.slice(0, insertionIndex)} WHERE ${filterSql}${sql.slice(insertionIndex)}`;
+  const values = keyRows.flatMap(row => row.filter(value => value !== null && value !== undefined));
+  const parameterIndex = parameterCountBefore(sql, insertionIndex);
+  const updatedParams = [
+    ...params.slice(0, parameterIndex),
+    ...values,
+    ...params.slice(parameterIndex),
+  ];
+  return [updatedSql, updatedParams];
+}
+
 function cubeExpressionColumns(sql: unknown): string[] {
   if (typeof sql !== 'string') return [];
-  return [...sql.matchAll(/\{CUBE\}\.([A-Za-z_][A-Za-z0-9_]*)/g)]
-    .map(match => match[1])
+  return [...sql.matchAll(/\{CUBE\}\.((?:"[^"]+")|(?:[A-Za-z_][A-Za-z0-9_]*))/g)]
+    .map(match => match[1].replace(/^"|"$/g, ''))
+    .filter((column, index, columns) => columns.indexOf(column) === index);
+}
+
+function cubeDimensionExpressionColumns(dimensions: Array<{ sql?: unknown }> = []): string[] {
+  return dimensions
+    .flatMap(dimension => cubeExpressionColumns(dimension.sql))
     .filter((column, index, columns) => columns.indexOf(column) === index);
 }
 
@@ -300,6 +526,12 @@ export class DevServer {
 
   protected livePreviewWatcher = new LivePreviewWatcher();
 
+  protected projectLocks = new Map<string, {
+    token: string;
+    acquiredAt: number;
+    expiresAt: number;
+  }>();
+
   public constructor(
     protected readonly cubejsServer: CubejsServerCore,
     protected readonly options: DevServerOptions
@@ -309,7 +541,7 @@ export class DevServer {
   public initDevEnv(app: ExpressApplication, options: ServerCoreInitializedOptions) {
     const port = process.env.PORT || 4000; // TODO
     const apiUrl = process.env.CUBEJS_API_URL || `http://localhost:${port}`;
-    const multiProject = this.options.multiProjectRuntime;
+    const multiDatamart = this.options.multiDatamartRuntime;
 
     // todo: empty/default `apiSecret` in dev mode to allow the DB connection wizard
     const cubejsToken = jwt.sign({}, options.apiSecret || 'secret', { expiresIn: '1d' });
@@ -341,6 +573,7 @@ export class DevServer {
         await handler(req, res, next);
       } catch (e) {
         const errorString = ((e as Error).stack || e).toString();
+        const expiredDatamartSession = /Datamart session is missing or expired|Datamart credentials are required/i.test(errorString);
         console.error(errorString);
         this.cubejsServer.event('Dev Server Error', { error: errorString });
 
@@ -361,7 +594,11 @@ export class DevServer {
             // If header is already sent, we can't alter any of it, so best we can do is just terminate body
             res.end();
           } else {
-            res.status(500).json({ error: errorString });
+            if (expiredDatamartSession) {
+              res.status(401).json({ error: errorString });
+            } else {
+              res.status(500).json({ error: errorString });
+            }
           }
         } catch (send500Error) {
           const send500ErrorString = ((send500Error as Error).stack || send500Error).toString();
@@ -372,7 +609,7 @@ export class DevServer {
       }
     };
 
-    const pendingProjects = new Map<string, {
+    const pendingDatamarts = new Map<string, {
       id: string;
       name: string;
       connectionId: string;
@@ -380,15 +617,15 @@ export class DevServer {
 
     const loadRelationshipDefinitions = async (req: Request) => {
       const requestId = getRequestIdFromRequest(req);
-      const projectContext = multiProject?.contextFromRequest(req);
+      const datamartContext = multiDatamart?.contextFromRequest(req);
       const context = {
         authInfo: null,
         securityContext: null,
         requestId,
-        ...(projectContext || {}),
+        ...(datamartContext || {}),
       };
-      const repository = multiProject
-        ? multiProject.repository(projectContext!)
+      const repository = multiDatamart
+        ? multiDatamart.repository(datamartContext!)
         : this.cubejsServer.repository;
       const reader = new CubeRelationshipReader();
       const schemaConverter = new CubeSchemaConverter(repository, [reader]);
@@ -396,13 +633,82 @@ export class DevServer {
 
       return {
         requestId,
-        projectContext,
+        datamartContext,
         context,
         repository,
         models: reader.getModels(),
         relationships: reader.getRelationships(),
       };
     };
+
+    const projectLockTtlMs = 90_000;
+    const projectLockKey = (req: Request): string => {
+      if (multiDatamart) {
+        return `datamart:${multiDatamart.activeDatamart(req) || 'default'}`;
+      }
+      return `repository:${path.resolve(this.cubejsServer.repository.localPath())}`;
+    };
+    const projectLockToken = (req: Request): string | undefined => {
+      const header = req.header('x-cube-project-lock');
+      return typeof header === 'string' && header ? header : undefined;
+    };
+    const requireProjectLock = (req: Request): void => {
+      const key = projectLockKey(req);
+      const lock = this.projectLocks.get(key);
+      const token = projectLockToken(req);
+      if (!lock || lock.expiresAt <= Date.now()) {
+        this.projectLocks.delete(key);
+        throw new SchemaMutationError(423, 'O projeto não está bloqueado para esta sessão. Reabra o diagrama.');
+      }
+      if (!token || token !== lock.token) {
+        throw new SchemaMutationError(423, 'O projeto está sendo editado por outra sessão.');
+      }
+      lock.expiresAt = Date.now() + projectLockTtlMs;
+    };
+
+    app.post('/playground/schema/lock', catchErrors(async (req: Request, res: Response) => {
+      const key = projectLockKey(req);
+      const now = Date.now();
+      const current = this.projectLocks.get(key);
+      if (current && current.expiresAt > now) {
+        const requestedToken = projectLockToken(req);
+        if (requestedToken && requestedToken === current.token) {
+          current.expiresAt = now + projectLockTtlMs;
+          return res.json({ token: current.token, expiresAt: current.expiresAt, ttlMs: projectLockTtlMs });
+        }
+        return res.status(423).json({
+          error: 'O projeto já está sendo editado por outra sessão.',
+          expiresAt: current.expiresAt,
+        });
+      }
+
+      const lock = {
+        token: crypto.randomUUID(),
+        acquiredAt: now,
+        expiresAt: now + projectLockTtlMs,
+      };
+      this.projectLocks.set(key, lock);
+      return res.json({ token: lock.token, expiresAt: lock.expiresAt, ttlMs: projectLockTtlMs });
+    }));
+
+    app.post('/playground/schema/lock/heartbeat', catchErrors((req: Request, res: Response) => {
+      const key = projectLockKey(req);
+      const lock = this.projectLocks.get(key);
+      const token = projectLockToken(req);
+      if (!lock || lock.expiresAt <= Date.now() || !token || token !== lock.token) {
+        this.projectLocks.delete(key);
+        return res.status(423).json({ error: 'O lock do projeto expirou ou pertence a outra sessão.' });
+      }
+      lock.expiresAt = Date.now() + projectLockTtlMs;
+      return res.json({ expiresAt: lock.expiresAt, ttlMs: projectLockTtlMs });
+    }));
+
+    app.delete('/playground/schema/lock', catchErrors((req: Request, res: Response) => {
+      const key = projectLockKey(req);
+      const lock = this.projectLocks.get(key);
+      if (lock && projectLockToken(req) === lock.token) this.projectLocks.delete(key);
+      return res.status(204).end();
+    }));
 
     const loadRelationshipDiagram = async (
       req: Request,
@@ -417,21 +723,32 @@ export class DevServer {
         relationships,
       } = definitions;
 
-      const compilerApi = await this.cubejsServer.getCompilerApi(context);
-      const compilers = await compilerApi.getCompilers({ requestId });
-      const metaCubes = compilers.metaTransformer?.cubes || [];
+      let compilerApi: any = null;
+      let compilers: any = null;
+      try {
+        compilerApi = await this.cubejsServer.getCompilerApi(context);
+        compilers = await compilerApi.getCompilers({ requestId });
+      } catch (error: any) {
+        // The relationship diagram must remain usable while a YAML file is
+        // temporarily invalid, so the raw model reader is used below.
+        console.warn(`Unable to compile schema for relationship diagram: ${String(error?.message || error).split('\n')[0]}`);
+      }
+      const metaCubes = compilers?.metaTransformer?.cubes || [];
       const drivers = new Map<string, BaseDriver>();
 
       try {
         const cubes: any[] = [];
         for (const model of models) {
           if (modelNames && !modelNames.has(model.name)) continue;
-          const evaluatedCube = compilers.cubeEvaluator.cubeFromPath(model.name);
+          const evaluatedCube = compilers?.cubeEvaluator?.cubeFromPath(model.name);
           if (evaluatedCube?.isView) continue;
 
           const dataSource = evaluatedCube?.dataSource || model.dataSource || 'default';
           const metaCube = metaCubes.find(cube => cube.config?.name === model.name)?.config;
-          const primaryKeyNames = compilers.cubeEvaluator.primaryKeys?.[model.name] || [];
+          const primaryKeyNames = compilers?.cubeEvaluator?.primaryKeys?.[model.name]
+            || (model.dimensions || [])
+              .filter((dimension: any) => Boolean(dimension.primaryKey))
+              .map((dimension: any) => dimension.name);
           const configuredDimensions = Array.isArray(model.dimensions) && model.dimensions.length
             ? model.dimensions
             : Array.isArray(metaCube?.dimensions)
@@ -449,6 +766,7 @@ export class DevServer {
             hasPrimaryKey: Boolean(primaryKeyNames.length),
             primaryKeyNames,
             dimensions: configuredDimensions.map((dimension: any) => ({
+              ...dimension,
               name: String(dimension?.name || ''),
               title: typeof dimension?.title === 'string' ? dimension.title : undefined,
               sql: typeof dimension?.sql === 'string' ? dimension.sql : undefined,
@@ -462,6 +780,7 @@ export class DevServer {
               primaryKey: Boolean(dimension?.primaryKey || dimension?.primary_key),
             })).filter(dimension => dimension.name),
             measures: configuredMeasures.map((measure: any) => ({
+              ...measure,
               name: String(measure?.name || ''),
               title: typeof measure?.title === 'string' ? measure.title : undefined,
               sql: typeof measure?.sql === 'string' ? measure.sql : undefined,
@@ -521,15 +840,21 @@ export class DevServer {
                 // Dynamic, unqualified, or dialect-specific table names use the compiled probe below.
               }
             }
-            if (!columns?.length) {
+            if (!columns?.length && compilerApi && compilers) {
               columns = await loadCompiledColumns();
             }
+            if (!columns?.length) {
+              columns = (model.dimensions || []).map((dimension: any) => ({
+                name: dimension.name,
+                type: dimension.type,
+              }));
+            }
             const physicalColumnsByName = new Map(
-              (columns || []).map(column => [String(column.name).toLowerCase(), column])
+              (columns || []).map(column => [String(column.name).trim().toLowerCase(), column])
             );
             const dimensionNames = new Set<string>();
             const dimensionColumns = Object.entries(evaluatedCube?.dimensions || {}).map(([name, dimension]: [string, any]) => {
-              const normalizedName = name.toLowerCase();
+              const normalizedName = name.trim().toLowerCase();
               const physicalColumn = physicalColumnsByName.get(normalizedName);
               dimensionNames.add(normalizedName);
 
@@ -542,17 +867,13 @@ export class DevServer {
               ...dimensionColumns,
               ...(columns || []).filter(column => !dimensionNames.has(String(column.name).toLowerCase())),
             ];
-            const uniqueColumns = allColumns.filter((column, index, sourceColumns) => (
-              sourceColumns.findIndex(candidate => (
-                String(candidate.name).toLowerCase() === String(column.name).toLowerCase()
-              )) === index
-            ));
+            const uniqueColumns = allColumns;
 
             if (!uniqueColumns.length) {
               throw new Error('The database driver did not return column metadata');
             }
             diagramCube.columns = uniqueColumns.map(column => {
-              const name = String(column.name);
+              const name = String(column.name).trim();
               const normalizedName = name.toLowerCase();
               return {
                 name,
@@ -576,7 +897,7 @@ export class DevServer {
           relationships,
         };
       } finally {
-        if (multiProject) {
+        if (multiDatamart) {
           await Promise.allSettled(Array.from(drivers.values()).map(driver => driver.release?.()));
         }
       }
@@ -635,7 +956,7 @@ export class DevServer {
               || 'O arquivo mudou enquanto a alteração era validada. Recarregue o diagrama e tente novamente.'
           );
         }
-        throw new SchemaMutationError(400, invalidMessage(error));
+        throw new SchemaMutationError(400, repairUtf8Mojibake(invalidMessage(error)));
       }
 
       const savedFile = (await repository.dataSchemaFiles())
@@ -647,26 +968,106 @@ export class DevServer {
       return updatedFile;
     };
 
-    app.get('/playground/projects', catchErrors(async (_req, res) => {
-      if (!multiProject) return res.status(404).json({ error: 'Multi-project mode is disabled' });
-      const connections = (await multiProject.registry.connections()).map(connection => ({
+    const saveValidatedSchemaChanges = async (options: {
+      definitions: Awaited<ReturnType<typeof loadRelationshipDefinitions>>;
+      cubeNames: string[];
+      originalFiles: any[];
+      converter: CubeSchemaConverter;
+      invalidMessage: (error: any) => string;
+      rollbackRequestId: string;
+      changedDuringValidationMessage?: string;
+    }) => {
+      const {
+        definitions,
+        cubeNames,
+        originalFiles,
+        converter,
+        invalidMessage,
+        rollbackRequestId,
+      } = options;
+      const { repository, context, requestId } = definitions;
+
+      await converter.generate();
+      const requestedCubes = new Set(cubeNames);
+      const updatedByFile = new Map<string, { fileName: string; source: string }>();
+      converter.getSourceFiles().forEach(file => {
+        if (requestedCubes.has(file.cubeName)) {
+          updatedByFile.set(file.fileName, file);
+        }
+      });
+      const updatedFiles = Array.from(updatedByFile.values());
+      if (!updatedFiles.length) {
+        throw new SchemaMutationError(404, 'The relationship cubes were not found');
+      }
+
+      const originalByFile = new Map(originalFiles.map(file => [file.fileName, file]));
+      const currentFiles = await repository.dataSchemaFiles();
+      for (const originalFile of originalByFile.values()) {
+        const currentFile = currentFiles.find(file => file.fileName === originalFile.fileName);
+        if (!currentFile || currentFile.content !== originalFile.content) {
+        throw new SchemaMutationError(409, 'O arquivo mudou enquanto a alteração era preparada. Recarregue o diagrama e tente novamente.');
+        }
+      }
+
+      updatedFiles.forEach(file => repository.writeDataSchemaFile(file.fileName, file.source));
+      try {
+        const compilerApi = await this.cubejsServer.getCompilerApi(context);
+        await compilerApi.getCompilers({ requestId });
+      } catch (error: any) {
+        const filesAfterFailure = await repository.dataSchemaFiles();
+        const allFilesStillUpdated = updatedFiles.every(updatedFile => (
+          filesAfterFailure.find(file => file.fileName === updatedFile.fileName)?.content === updatedFile.source
+        ));
+        if (allFilesStillUpdated) {
+          originalByFile.forEach(originalFile => {
+            repository.writeDataSchemaFile(originalFile.fileName, originalFile.content);
+          });
+          try {
+            const compilerApi = await this.cubejsServer.getCompilerApi(context);
+            await compilerApi.getCompilers({ requestId: rollbackRequestId });
+          } catch (_rollbackError) {
+            // Preserve the original sources even if rollback compilation fails.
+          }
+        } else {
+          throw new SchemaMutationError(
+            409,
+            options.changedDuringValidationMessage
+              || 'O arquivo mudou enquanto a alteração era validada. Recarregue o diagrama e tente novamente.'
+          );
+        }
+        throw new SchemaMutationError(400, repairUtf8Mojibake(invalidMessage(error)));
+      }
+
+      const savedFiles = await repository.dataSchemaFiles();
+      if (!updatedFiles.every(updatedFile => (
+        savedFiles.find(file => file.fileName === updatedFile.fileName)?.content === updatedFile.source
+      ))) {
+        throw new SchemaMutationError(409, 'O arquivo mudou enquanto a alteração era validada. Recarregue o diagrama para ver a versão atual.');
+      }
+
+      return updatedFiles[0];
+    };
+
+    app.get('/playground/datamarts', catchErrors(async (_req, res) => {
+      if (!multiDatamart) return res.status(404).json({ error: 'Multi-datamart mode is disabled' });
+      const connections = (await multiDatamart.registry.connections()).map(connection => ({
         ...connection,
         fields: (connection.fields || []).filter(field => !connection.defaults?.[field.name]),
       }));
       return res.json({
-        projects: await multiProject.registry.list(),
+        datamarts: await multiDatamart.registry.list(),
         connections,
       });
     }));
 
-    app.post('/playground/projects', catchErrors(async (req, res) => {
-      if (!multiProject) return res.status(404).json({ error: 'Multi-project mode is disabled' });
+    app.post('/playground/datamarts', catchErrors(async (req, res) => {
+      if (!multiDatamart) return res.status(404).json({ error: 'Multi-datamart mode is disabled' });
       const { id, name, connectionId, credentials = {} } = req.body || {};
       if (!id || !name || !connectionId || typeof credentials !== 'object') {
         return res.status(400).json({ error: 'id, name, connectionId, and credentials are required' });
       }
 
-      const connection = (await multiProject.registry.connections())
+      const connection = (await multiDatamart.registry.connections())
         .find(item => item.id === connectionId);
       if (!connection) return res.status(400).json({ error: `Unknown connection preset: ${connectionId}` });
 
@@ -674,8 +1075,8 @@ export class DevServer {
         .filter(field => field.required && !credentials[field.name] && !connection.defaults?.[field.name])
         .map(field => field.name);
       if (missing.length) {
-        pendingProjects.set(id, { id, name, connectionId });
-        const pendingProject = {
+        pendingDatamarts.set(id, { id, name, connectionId });
+        const pendingDatamart = {
           id,
           name,
           connectionId,
@@ -684,8 +1085,8 @@ export class DevServer {
           pending: true,
         };
         return res.status(200).json({
-          ...pendingProject,
-          project: pendingProject,
+          ...pendingDatamart,
+          datamart: pendingDatamart,
         });
       }
 
@@ -696,7 +1097,7 @@ export class DevServer {
       };
 
       try {
-        await multiProject.testConnectionPreset(connection.id, fullCredentials);
+        await multiDatamart.testConnectionPreset(connection.id, fullCredentials);
       } catch (e) {
         let message = (e as Error).message || 'Connection failed';
         for (const credential of Object.values(credentials)) {
@@ -707,32 +1108,32 @@ export class DevServer {
         throw new Error(message);
       }
 
-      const project = await multiProject.registry.create({ id, name, connectionId });
-      const sessionId = multiProject.sessions.create(project.id, fullCredentials);
+      const datamart = await multiDatamart.registry.create({ id, name, connectionId });
+      const sessionId = multiDatamart.sessions.create(datamart.id, fullCredentials);
       const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-      res.setHeader('Set-Cookie', `cube_project_session=${sessionId}; Path=/; HttpOnly; SameSite=Strict${secure}`);
+      res.setHeader('Set-Cookie', `cube_datamart_session=${sessionId}; Path=/; HttpOnly; SameSite=Strict${secure}`);
       return res.status(201).json({
-        ...project,
-        project,
-        apiPath: `/cubejs-api/projects/${project.id}/v1`,
+        ...datamart,
+        datamart,
+        apiPath: `/cubejs-api/datamarts/${datamart.id}/v1`,
       });
     }));
 
-    app.post('/playground/projects/:projectId/session', catchErrors(async (req, res) => {
-      if (!multiProject) {
-        return res.status(404).json({ error: 'Multi-project mode is disabled' });
+    app.post('/playground/datamarts/:datamartId/session', catchErrors(async (req, res) => {
+      if (!multiDatamart) {
+        return res.status(404).json({ error: 'Multi-datamart mode is disabled' });
       }
-      const pendingProject = pendingProjects.get(req.params.projectId);
-      let project = await multiProject.registry.get(req.params.projectId).catch(() => null);
-      if (!project && !pendingProject) {
-        return res.status(404).json({ error: `Unknown project: ${req.params.projectId}` });
+      const pendingDatamart = pendingDatamarts.get(req.params.datamartId);
+      let datamart = await multiDatamart.registry.get(req.params.datamartId).catch(() => null);
+      if (!datamart && !pendingDatamart) {
+        return res.status(404).json({ error: `Unknown datamart: ${req.params.datamartId}` });
       }
 
-      const projectConnectionId = project?.connectionId || pendingProject?.connectionId || '';
-      const connection = (await multiProject.registry.connections())
-        .find(item => item.id === projectConnectionId);
+      const datamartConnectionId = datamart?.connectionId || pendingDatamart?.connectionId || '';
+      const connection = (await multiDatamart.registry.connections())
+        .find(item => item.id === datamartConnectionId);
       if (!connection) {
-        return res.status(400).json({ error: `Unknown connection preset: ${projectConnectionId}` });
+        return res.status(400).json({ error: `Unknown connection preset: ${datamartConnectionId}` });
       }
       const credentials = req.body?.credentials || {};
       const missing = (connection?.fields || [])
@@ -747,7 +1148,7 @@ export class DevServer {
       };
 
       try {
-        await multiProject.testConnectionPreset(connection.id, fullCredentials);
+        await multiDatamart.testConnectionPreset(connection.id, fullCredentials);
       } catch (e) {
         let message = (e as Error).message || 'Connection failed';
         for (const credential of Object.values(credentials)) {
@@ -758,44 +1159,48 @@ export class DevServer {
         throw new Error(message);
       }
 
-      if (!project && pendingProject) {
-        project = await multiProject.registry.create({
-          id: pendingProject.id,
-          name: pendingProject.name,
-          connectionId: pendingProject.connectionId,
+      if (!datamart && pendingDatamart) {
+        datamart = await multiDatamart.registry.create({
+          id: pendingDatamart.id,
+          name: pendingDatamart.name,
+          connectionId: pendingDatamart.connectionId,
         });
-        pendingProjects.delete(project.id);
+        pendingDatamarts.delete(datamart.id);
       }
 
-      if (!project) {
-        return res.status(500).json({ error: `Unable to open project: ${req.params.projectId}` });
+      if (!datamart) {
+        return res.status(500).json({ error: `Unable to open datamart: ${req.params.datamartId}` });
       }
 
-      const sessionId = multiProject.sessions.create(project.id, fullCredentials);
+      const sessionId = multiDatamart.sessions.create(datamart.id, fullCredentials);
       const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-      res.setHeader('Set-Cookie', `cube_project_session=${sessionId}; Path=/; HttpOnly; SameSite=Strict${secure}`);
-      return res.json({ project, apiPath: `/cubejs-api/projects/${project.id}/v1` });
+      res.setHeader('Set-Cookie', `cube_datamart_session=${sessionId}; Path=/; HttpOnly; SameSite=Strict${secure}`);
+      return res.json({ datamart, apiPath: `/cubejs-api/datamarts/${datamart.id}/v1` });
     }));
 
-    app.delete('/playground/projects/session', catchErrors((req, res) => {
-      const sessionId = this.cookie(req, 'cube_project_session');
-      if (sessionId) multiProject?.sessions.delete(sessionId);
-      res.setHeader('Set-Cookie', 'cube_project_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0');
+    app.delete('/playground/datamarts/session', catchErrors((req, res) => {
+      const sessionId = this.cookie(req, 'cube_datamart_session');
+      if (sessionId) multiDatamart?.sessions.delete(sessionId);
+      res.setHeader('Set-Cookie', 'cube_datamart_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0');
       return res.status(204).end();
     }));
 
     app.get('/playground/context', catchErrors(async (req, res) => {
       this.cubejsServer.event('Dev Server Env Open');
 
-      const activeProjectId = multiProject?.activeProject(req) || null;
-      const activeProject = activeProjectId
-        ? await multiProject?.registry.get(activeProjectId).catch(() => null)
+      const datamartSession = multiDatamart ? this.cookie(req, 'cube_datamart_session') : undefined;
+      const activeDatamartId = multiDatamart?.activeDatamart(req) || null;
+      const activeDatamart = activeDatamartId
+        ? await multiDatamart?.registry.get(activeDatamartId).catch(() => null)
         : null;
+      if (multiDatamart && datamartSession && !activeDatamart) {
+        res.setHeader('Set-Cookie', 'cube_datamart_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0');
+      }
 
       res.json({
         cubejsToken,
-        basePath: activeProject
-          ? `${options.basePath}/projects/${activeProject.id}`
+        basePath: activeDatamart
+          ? `${options.basePath}/datamarts/${activeDatamart.id}`
           : options.basePath,
         anonymousId: getAnonymousId(),
         coreServerVersion: this.cubejsServer.coreServerVersion,
@@ -808,28 +1213,28 @@ export class DevServer {
         telemetry: options.telemetry,
         identifier: this.getIdentifier(options.apiSecret),
         previewFeatures: getEnv('previewFeatures'),
-        multiProject: {
-          enabled: Boolean(multiProject),
-          activeProject,
+        multiDatamart: {
+          enabled: Boolean(multiDatamart),
+          activeDatamart,
         },
       });
     }));
 
     app.get('/playground/db-schema', catchErrors(async (req, res) => {
       this.cubejsServer.event('Dev Server DB Schema Load');
-      const projectContext = multiProject?.contextFromRequest(req);
+      const datamartContext = multiDatamart?.contextFromRequest(req);
       const driver = await this.cubejsServer.getDriver({
         dataSource: req.body.dataSource || 'default',
         authInfo: null,
         securityContext: null,
         requestId: getRequestIdFromRequest(req),
-        ...(projectContext || {}),
+        ...(datamartContext || {}),
       });
       let tablesSchema;
       try {
         tablesSchema = await driver.tablesSchema();
       } finally {
-        if (multiProject) await driver.release?.();
+        if (multiDatamart) await driver.release?.();
       }
 
       this.cubejsServer.event('Dev Server DB Schema Load Success');
@@ -837,6 +1242,72 @@ export class DevServer {
         this.cubejsServer.event('Dev Server DB Schema Load Empty');
       }
       res.json({ tablesSchema });
+    }));
+
+    app.post('/playground/schema/table-preview', catchErrors(async (req: Request, res: Response) => {
+      this.cubejsServer.event('Dev Server Table Preview Load');
+      const { schemaName, tableName, dataSource = 'default' } = req.body || {};
+      if (typeof schemaName !== 'string' || !schemaName
+        || typeof tableName !== 'string' || !tableName) {
+        return res.status(400).json({ error: 'schemaName and tableName are required' });
+      }
+
+      const datamartContext = multiDatamart?.contextFromRequest(req);
+      const requestId = getRequestIdFromRequest(req);
+      const driver = await this.cubejsServer.getDriver({
+        dataSource,
+        authInfo: null,
+        securityContext: null,
+        requestId,
+        ...(datamartContext || {}),
+      });
+      try {
+        const qualifiedTable = `${quoteIdentifier(schemaName)}.${quoteIdentifier(tableName)}`;
+        const rows = await driver.query<Record<string, unknown>>(
+          `SELECT * FROM ${qualifiedTable} LIMIT 25`,
+          [],
+          { requestId } as any,
+        );
+        return res.json({
+          columns: rows.length ? Object.keys(rows[0]) : [],
+          rows: serializeBigInts(rows.slice(0, 25)),
+        });
+      } finally {
+        if (multiDatamart) await driver.release?.();
+      }
+    }));
+
+    app.post('/playground/schema/table-count', catchErrors(async (req: Request, res: Response) => {
+      this.cubejsServer.event('Dev Server Table Count Load');
+      const { schemaName, tableName, dataSource = 'default' } = req.body || {};
+      if (typeof schemaName !== 'string' || !schemaName
+        || typeof tableName !== 'string' || !tableName) {
+        return res.status(400).json({ error: 'schemaName and tableName are required' });
+      }
+
+      const datamartContext = multiDatamart?.contextFromRequest(req);
+      const requestId = getRequestIdFromRequest(req);
+      const driver = await this.cubejsServer.getDriver({
+        dataSource,
+        authInfo: null,
+        securityContext: null,
+        requestId,
+        ...(datamartContext || {}),
+      });
+      try {
+        const qualifiedTable = `${quoteIdentifier(schemaName)}.${quoteIdentifier(tableName)}`;
+        const result = await driver.query<{ total_count: string | number }>(
+          `SELECT COUNT(*) AS "total_count" FROM ${qualifiedTable}`,
+          [],
+          { requestId } as any,
+        );
+        const countRow = result[0] || {};
+        const countKey = Object.keys(countRow).find((key) => key.toLocaleLowerCase() === 'total_count');
+        const total = countKey ? countRow[countKey] : Object.values(countRow)[0];
+        return res.json({ total: total == null ? null : String(total) });
+      } finally {
+        if (multiDatamart) await driver.release?.();
+      }
     }));
 
     app.get('/playground/schema/relationships', catchErrors(async (req: Request, res: Response) => {
@@ -868,14 +1339,16 @@ export class DevServer {
         dataSource,
       });
       try {
-        const compilerApi = await this.cubejsServer.getCompilerApi(definitions.context);
+        const compilerApi = await this.cubejsServer.getCompilerApi(definitions.context, { forceRefresh: true });
         let countSql: string;
         let countParams: unknown[] = [];
 
         if (mode === 'raw') {
           const source = model.source!.trim().replace(/;$/, '');
           const from = model.sourceType === 'sql' ? `(${source}) AS cube_sample_count` : source;
-          countSql = `SELECT COUNT(*)::bigint AS total_count FROM ${from}`;
+          // Keep this expression portable. PostgreSQL accepts the explicit
+          // ::bigint cast, but Netezza does not use PostgreSQL's cast syntax.
+          countSql = `SELECT COUNT(*) AS total_count FROM ${from}`;
         } else {
           const dimensions = (model.dimensions || []).map(dimension => `${cubeName}.${dimension.name}`);
           const measures = (model.measures || []).map(measure => `${cubeName}.${measure.name}`);
@@ -894,23 +1367,38 @@ export class DevServer {
           [cubeSql, countParams] = compilers.compiler.withQuery(query, () => query.buildSqlAndParams());
           // The count must be applied after Cube's GROUP BY, so it represents
           // the number of configured cube rows rather than source records.
-          countSql = `SELECT COUNT(*)::bigint AS total_count FROM (${cubeSql}) AS cube_sample_count`;
+          // Keep this expression portable. PostgreSQL accepts the explicit
+          // ::bigint cast, but Netezza does not use PostgreSQL's cast syntax.
+          countSql = `SELECT COUNT(*) AS total_count FROM (${cubeSql}) AS cube_sample_count`;
         }
 
-        const result = await driver.query<{ total_count: string | number }>(
-          countSql,
-          countParams,
-          { requestId: definitions.requestId } as any
-        );
-        return res.json({ total: result[0]?.total_count == null ? '0' : String(result[0].total_count) });
+        let result: { total_count?: string | number }[];
+        try {
+          result = await driver.query<{ total_count?: string | number }>(
+            countSql,
+            countParams,
+            { requestId: definitions.requestId } as any
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new Error(`Falha ao contar os registros do cubo "${cubeName}".\nSQL gerado:\n${countSql}\nErro do driver: ${message}`);
+        }
+        const countRow = result[0] || {};
+        const countKey = Object.keys(countRow).find(key => key.toLowerCase() === 'total_count');
+        const total = countKey ? countRow[countKey] : Object.values(countRow)[0];
+        return res.json({
+          total: total == null ? '0' : String(total),
+          sql: countSql,
+          params: serializeBigInts(countParams),
+        });
       } finally {
-        if (multiProject) await driver.release?.();
+        if (multiDatamart) await driver.release?.();
       }
     }));
 
     app.post('/playground/schema/sample', catchErrors(async (req: Request, res: Response) => {
       this.cubejsServer.event('Dev Server Schema Sample Load');
-      const { cubeName, mode = 'raw' } = req.body || {};
+      const { cubeName, mode = 'raw', queryOnly = false } = req.body || {};
       if (typeof cubeName !== 'string' || !cubeName) {
         return res.status(400).json({ error: 'cubeName is required' });
       }
@@ -930,10 +1418,31 @@ export class DevServer {
         ...definitions.context,
         dataSource,
       });
+      const executeSampleQuery = async <R = Record<string, unknown>>(
+        statement: string,
+        values: unknown[],
+        stage: string,
+      ): Promise<R[]> => {
+        try {
+          return await driver.query<R>(
+            statement,
+            values,
+            { requestId: definitions.requestId } as any,
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new Error(
+            `Falha ao executar a etapa "${stage}" da amostra do cubo "${cubeName}".\n`
+            + `SQL gerado:\n${statement}\n`
+            + `Erro do driver: ${message}`,
+          );
+        }
+      };
       try {
-        const compilerApi = await this.cubejsServer.getCompilerApi(definitions.context);
+        const compilerApi = await this.cubejsServer.getCompilerApi(definitions.context, { forceRefresh: true });
         const dbType = await compilerApi.getDbType(dataSource);
         const isPostgres = ['postgres', 'postgresql'].includes(dbType.toLowerCase());
+        const isNetezza = dbType.toLowerCase() === 'netezza';
         const dimensionSampleLimit = 1000;
         const modelSource = model.source?.trim().replace(/;$/, '');
         let sql: string;
@@ -964,15 +1473,15 @@ export class DevServer {
           const normalizedPrimaryKeyNames = new Set(
             primaryKeyNames.map((name: string) => name.split('.').pop()!.toLowerCase())
           );
-          const primaryKeyDimension = (model.dimensions || []).find(dimension => (
-            normalizedPrimaryKeyNames.has(dimension.name.toLowerCase()) || dimension.primaryKey
-          ));
-          const expressionColumns = cubeExpressionColumns(primaryKeyDimension?.sql);
-          let usedPhysicalCompositeKey = false;
+          // A Cube primary key can repeat in an aggregated fact. Use every
+          // physical source column referenced by a dimension to preserve the
+          // dimensional grain represented by the sample.
+          const dimensionColumns = cubeDimensionExpressionColumns(model.dimensions || []);
+          let usedSampleKeyRestriction = false;
 
-          if (isPostgres && model.sourceType === 'sql_table' && modelSource && expressionColumns.length >= 2) {
+          if (isPostgres && model.sourceType === 'sql_table' && modelSource && dimensionColumns.length >= 1) {
             const source = modelSource;
-            const quotedColumns = expressionColumns.map(quoteIdentifier).join(', ');
+            const quotedColumns = dimensionColumns.map(quoteIdentifier).join(', ');
             const sourceParts = source.split('.').map(part => part.replace(/^"|"$/g, ''));
             const physicalColumnTypes = new Map<string, string>();
             if (sourceParts.length === 2) {
@@ -999,7 +1508,7 @@ export class DevServer {
               dimensionSampleLimit,
               definitions.requestId,
             );
-            const keyRows = sampledRows.map(row => expressionColumns.map(column => row[column]));
+            const keyRows = sampledRows.map(row => dimensionColumns.map(column => rowValue(row, column)));
 
             const uniqueKeyRows = [...new Map(
               keyRows.map(row => [JSON.stringify(row), row])
@@ -1017,19 +1526,59 @@ export class DevServer {
               sql,
               source,
               cubeName,
-              expressionColumns,
+              dimensionColumns,
               uniqueKeyRows,
               params,
               physicalColumnTypes,
             );
             if (joinedQuery) {
               [sql, params] = joinedQuery;
-              usedPhysicalCompositeKey = true;
+              usedSampleKeyRestriction = true;
+            }
+          } else if (isNetezza && model.sourceType === 'sql_table' && modelSource && dimensionColumns.length >= 1) {
+            try {
+              const source = modelSource;
+              const quotedColumns = dimensionColumns.map(quoteIdentifier).join(', ');
+              const sampledRows = await netezzaSampleRows(
+                driver,
+                source,
+                quotedColumns,
+                250,
+                definitions.requestId,
+              );
+              const keyRows = uniqueSampleKeyRows(sampledRows, dimensionColumns, 250);
+              const query = await compilerApi.createQueryByDataSource(compilers, {
+                cube: cubeName,
+                dimensions,
+                measures,
+                timezone: 'UTC',
+                limit: 25,
+                requestId: definitions.requestId,
+              } as any, dataSource);
+              [sql, params] = compilers.compiler.withQuery(query, () => query.buildSqlAndParams());
+              const restrictedQuery = injectNetezzaSampleKeyFilter(
+                sql,
+                source,
+                cubeName,
+                dimensionColumns,
+                keyRows,
+                params,
+              );
+              if (restrictedQuery) {
+                [sql, params] = restrictedQuery;
+                usedSampleKeyRestriction = true;
+              }
+            } catch {
+              // Fall back to the regular cube sample if the physical key
+              // projection or predicate is not accepted by this Netezza
+              // version. The optimization must never make sampling fail.
             }
           }
 
-          if (!usedPhysicalCompositeKey) {
-            const sampleQuery = await compilerApi.createQueryByDataSource(compilers, {
+          if (!usedSampleKeyRestriction) {
+            let filters: any[] = [];
+            if (!isNetezza) {
+              const sampleQuery = await compilerApi.createQueryByDataSource(compilers, {
               cube: cubeName,
               dimensions,
               measures: [],
@@ -1043,10 +1592,10 @@ export class DevServer {
             const [sampleSql, sampleParams] = compilers.compiler.withQuery(sampleQuery, () => (
               sampleQuery.buildSqlAndParams()
             ));
-            const dimensionSampleRows = await driver.query<Record<string, unknown>>(
+            const dimensionSampleRows = await executeSampleQuery<Record<string, unknown>>(
               `SELECT * FROM (${sampleSql}) AS dimension_sample LIMIT ${dimensionSampleLimit}`,
               sampleParams,
-              { requestId: definitions.requestId } as any
+              'seleção dos valores de referência das dimensões',
             );
             const filterDimensions = normalizedPrimaryKeyNames.size
               ? dimensions.filter(dimension => normalizedPrimaryKeyNames.has(dimension.split('.').pop()!.toLowerCase()))
@@ -1073,9 +1622,10 @@ export class DevServer {
                 };
               })
               .filter(Boolean);
-            const filters = dimensionSampleFilters.length
-              ? [{ or: dimensionSampleFilters }]
-              : [];
+              filters = dimensionSampleFilters.length
+                ? [{ or: dimensionSampleFilters }]
+                : [];
+            }
 
             // The dimension-only query is only used to narrow the sample to
             // representative primary-key values. If those values cannot be
@@ -1098,6 +1648,13 @@ export class DevServer {
           const source = model.source!.trim().replace(/;$/, '');
           const from = model.sourceType === 'sql' ? `(${source}) AS cube_sample` : source;
           sql = `SELECT * FROM ${from}`;
+        }
+
+        if (queryOnly) {
+          return res.json({
+            sql: `SELECT * FROM (${sql}) AS sample_rows LIMIT 25`,
+            params: serializeBigInts(params),
+          });
         }
 
         if (mode === 'raw' && model.sourceType === 'sql_table') {
@@ -1149,11 +1706,20 @@ export class DevServer {
             definitions.requestId,
           );
 
+        } else if (mode === 'raw' && model.sourceType === 'sql_table' && isNetezza && source) {
+          rows = await netezzaSampleRows(
+            driver,
+            source,
+            '*',
+            25,
+            definitions.requestId,
+          );
+
         } else {
-          rows = await driver.query<Record<string, unknown>>(
+          rows = await executeSampleQuery<Record<string, unknown>>(
             `SELECT * FROM (${sql}) AS sample_rows LIMIT 25`,
             params,
-            { requestId: definitions.requestId } as any
+            'seleção da amostra final',
           );
         }
         const sampleRows = (rows || []).slice(0, 25);
@@ -1163,9 +1729,16 @@ export class DevServer {
             ? (await driver.tableColumnTypes(model.source!)).map(column => String(column.name))
             : [];
 
-        return res.json({ columns, columnLabels, columnTypes, rows: sampleRows });
+        return res.json({
+          columns,
+          columnLabels,
+          columnTypes,
+          rows: serializeBigInts(sampleRows),
+          sql,
+          params: serializeBigInts(params),
+        });
       } finally {
-        if (multiProject) await driver.release?.();
+        if (multiDatamart) await driver.release?.();
       }
     }));
 
@@ -1195,6 +1768,7 @@ export class DevServer {
 
       const converter = new CubeSchemaConverter(repository, [
         new CubePrimaryKeyConverter({ cubeName, columnName, columnType: column.type }),
+        new CubeDimensionOrderConverter(),
       ]);
       let updatedFile;
       try {
@@ -1281,13 +1855,14 @@ export class DevServer {
 
     app.post('/playground/schema/item', catchErrors(async (req: Request, res: Response) => {
       this.cubejsServer.event('Dev Server Schema Item Save');
-      const { cubeName, section, itemName, values = {}, operation = 'upsert' } = req.body || {};
+      const { cubeName, section, itemName, itemIndex, values = {}, operation = 'upsert' } = req.body || {};
       const validSections = new Set(['dimensions', 'measures', 'segments', 'hierarchies', 'pre_aggregations', 'cube']);
       if (typeof cubeName !== 'string' || !cubeName
         || typeof section !== 'string' || !validSections.has(section)
         || !['upsert', 'delete'].includes(operation)
         || (operation === 'delete' && (!itemName || section === 'cube'))
         || (itemName !== undefined && typeof itemName !== 'string')
+        || (itemIndex !== undefined && (!Number.isInteger(itemIndex) || itemIndex < 0))
         || !values || typeof values !== 'object' || Array.isArray(values)) {
         return res.status(400).json({ error: 'cubeName, section, operation, and values are required' });
       }
@@ -1308,6 +1883,7 @@ export class DevServer {
           cubeName,
           section: section as any,
           itemName: itemName || undefined,
+          itemIndex,
           values,
           operation,
         }),
@@ -1328,6 +1904,328 @@ export class DevServer {
       }
 
       return res.json({ status: 'ok', fileName: updatedFile.fileName, content: updatedFile.source });
+    }));
+
+    app.post('/playground/schema/snapshot', catchErrors(async (req: Request, res: Response) => {
+      this.cubejsServer.event('Dev Server Schema Snapshot Save');
+      requireProjectLock(req);
+      const snapshots = req.body?.cubes;
+      if (!Array.isArray(snapshots) || snapshots.length === 0 || snapshots.length > 200) {
+        return res.status(400).json({ error: 'cubes must be a non-empty array with at most 200 items' });
+      }
+
+      const definitions = await loadRelationshipDefinitions(req);
+      const cubeNames: string[] = [];
+      snapshots.forEach((snapshot: any) => {
+        if (!snapshot || typeof snapshot.cubeName !== 'string' || !snapshot.cubeName
+          || !definitions.models.some(cube => cube.name === snapshot.cubeName)) {
+          throw new SchemaMutationError(400, 'Invalid schema snapshot cube');
+        }
+        cubeNames.push(snapshot.cubeName);
+        if (!Array.isArray(snapshot.joins)) {
+          throw new SchemaMutationError(400, 'Invalid schema snapshot joins: the diagram must send the complete relationship state');
+        }
+        ['dimensions', 'measures', 'hierarchies', 'joins'].forEach(section => {
+          if (snapshot[section] !== undefined && !Array.isArray(snapshot[section])) {
+            throw new SchemaMutationError(400, `Invalid schema snapshot section '${section}'`);
+          }
+        });
+      });
+
+      const { repository, requestId } = definitions;
+      const files = await repository.dataSchemaFiles();
+      const fileNames = new Set(cubeNames.map(cubeName => (
+        definitions.models.find(cube => cube.name === cubeName)?.fileName
+      )).filter((fileName): fileName is string => Boolean(fileName)));
+      const originalFiles = files.filter(file => fileNames.has(file.fileName));
+      if (originalFiles.length !== fileNames.size) {
+        throw new SchemaMutationError(404, 'The schema snapshot file was not found');
+      }
+
+      const converter = new CubeSchemaConverter(repository, snapshots.map((snapshot: any) => (
+        new CubeSchemaSnapshotConverter(snapshot)
+      )));
+      await converter.generate();
+      const originalByFile = new Map(originalFiles.map(file => [file.fileName, file]));
+      const generatedFiles = converter.getSourceFiles()
+        .filter(file => originalByFile.has(file.fileName));
+      const sourceChanged = generatedFiles.length !== originalFiles.length || generatedFiles.some(file => (
+        file.source !== originalByFile.get(file.fileName)?.content
+      ));
+      if (!sourceChanged) {
+        return res.json({ status: 'ok', changed: false, files: [] });
+      }
+      let updatedFiles;
+      try {
+        updatedFiles = await saveValidatedSchemaChanges({
+          definitions,
+          cubeNames: Array.from(new Set(cubeNames)),
+          originalFiles,
+          converter,
+          rollbackRequestId: `${requestId}-schema-snapshot-rollback`,
+          invalidMessage: error => {
+            const reason = compilerValidationReason(error);
+            return `A estrutura de dados não foi salva porque o modelo ficaria inválido${reason ? `: ${reason}` : ''}`;
+          },
+        });
+      } catch (error: any) {
+        if (error?.status) return res.status(error.status).json({ error: error.message });
+        throw error;
+      }
+
+      return res.json({ status: 'ok', changed: true, files: updatedFiles });
+    }));
+
+    app.post('/playground/schema/changes', catchErrors(async (req: Request, res: Response) => {
+      this.cubejsServer.event('Dev Server Schema Changes Save');
+      const changes = req.body?.changes;
+      if (!Array.isArray(changes) || changes.length === 0 || changes.length > 100) {
+        return res.status(400).json({ error: 'changes must be a non-empty array with at most 100 items' });
+      }
+
+      const definitions = await loadRelationshipDefinitions(req);
+      const { repository, requestId } = definitions;
+      const converters: any[] = [];
+      const cubeNames = new Set<string>();
+      const relationshipState = [...definitions.relationships];
+      const diagramCache = new Map<string, any>();
+      const validSections = new Set(['dimensions', 'measures', 'segments', 'hierarchies', 'pre_aggregations', 'cube']);
+      const validRelationships = new Set(['one_to_one', 'one_to_many', 'many_to_one']);
+
+      const addCube = (cubeName: unknown) => {
+        if (typeof cubeName !== 'string' || !cubeName || /\r|\n/.test(cubeName)) {
+          throw new SchemaMutationError(400, 'Invalid cube name');
+        }
+        if (!definitions.models.some(cube => cube.name === cubeName)) {
+          throw new SchemaMutationError(404, `Cube '${cubeName}' was not found`);
+        }
+        cubeNames.add(cubeName);
+      };
+
+      const getDiagram = async (names: string[]) => {
+        const key = [...names].sort().join('|');
+        const cached = diagramCache.get(key);
+        if (cached) return cached;
+        const diagram = await loadRelationshipDiagram(req, new Set(names), definitions);
+        diagramCache.set(key, diagram);
+        return diagram;
+      };
+
+      for (const change of changes) {
+        const endpoint = change?.endpoint;
+        const body = change?.body || {};
+
+        if (endpoint === 'playground/schema/item') {
+          const { cubeName, section, itemName, itemIndex, values = {}, operation = 'upsert' } = body;
+          if (typeof cubeName !== 'string' || !cubeName
+            || typeof section !== 'string' || !validSections.has(section)
+            || !['upsert', 'delete'].includes(operation)
+            || (operation === 'delete' && (!itemName || section === 'cube'))
+            || (itemName !== undefined && typeof itemName !== 'string')
+            || (itemIndex !== undefined && (!Number.isInteger(itemIndex) || itemIndex < 0))
+            || !values || typeof values !== 'object' || Array.isArray(values)) {
+            throw new SchemaMutationError(400, 'Invalid schema item change');
+          }
+          addCube(cubeName);
+          converters.push(new CubeSchemaItemConverter({
+            cubeName,
+            section: section as any,
+            itemName,
+            itemIndex,
+            values,
+            operation: operation as any,
+          }));
+          continue;
+        }
+
+        if (endpoint === 'playground/schema/primary-key') {
+          const { cubeName, columnName } = body;
+          addCube(cubeName);
+          if (typeof columnName !== 'string' || !columnName || /\r|\n|`|\$\{|\{|\}/.test(columnName)) {
+            throw new SchemaMutationError(400, 'Unsupported column name');
+          }
+          const diagram = await getDiagram([cubeName]);
+          const cube = diagram.cubes.find(item => item.name === cubeName);
+          const column = cube?.columns.find(item => item.name === columnName);
+          if (!column) throw new SchemaMutationError(404, `Column '${columnName}' was not found in '${cubeName}'`);
+          if (!column.primaryKey) {
+            converters.push(new CubePrimaryKeyConverter({ cubeName, columnName, columnType: column.type }));
+            converters.push(new CubeDimensionOrderConverter());
+          }
+          continue;
+        }
+
+        if (endpoint === 'playground/schema/relationship') {
+          const {
+            sourceCube,
+            targetCube,
+            sourceColumn,
+            targetColumn,
+            relationship,
+            operation = 'create',
+            replaceCustom = false,
+          } = body;
+          addCube(sourceCube);
+          addCube(targetCube);
+          if (!['create', 'update', 'delete'].includes(operation)
+            || (operation !== 'delete' && !validRelationships.has(relationship))) {
+            throw new SchemaMutationError(400, 'Invalid relationship change');
+          }
+          if (sourceCube === targetCube) throw new SchemaMutationError(400, 'Self relationships are not supported');
+
+          const existing = relationshipState.find(join => (
+            join.sourceCube === sourceCube && join.targetCube === targetCube
+          ));
+          const reverseExisting = relationshipState.find(join => (
+            join.sourceCube === targetCube && join.targetCube === sourceCube
+          ));
+          const existingRelationship = existing || reverseExisting;
+          if (operation === 'create' && (existing || reverseExisting)) {
+            throw new SchemaMutationError(409, 'This relationship already exists');
+          }
+          if (operation === 'update' && !existingRelationship) {
+            throw new SchemaMutationError(404, 'This relationship does not exist');
+          }
+
+          if (operation !== 'delete') {
+            if (typeof sourceColumn !== 'string' || typeof targetColumn !== 'string') {
+              throw new SchemaMutationError(400, 'sourceColumn and targetColumn are required');
+            }
+            if (/\r|\n|`|\$\{|\{|\}/.test(sourceColumn) || /\r|\n|`|\$\{|\{|\}/.test(targetColumn)) {
+              throw new SchemaMutationError(400, 'Unsupported column name');
+            }
+            const diagram = await getDiagram([sourceCube, targetCube]);
+            const source = diagram.cubes.find(item => item.name === sourceCube);
+            const target = diagram.cubes.find(item => item.name === targetCube);
+            if (!source?.columns.some(column => column.name === sourceColumn)) {
+              throw new SchemaMutationError(400, `Column '${sourceColumn}' was not found in '${sourceCube}'`);
+            }
+            if (!target?.columns.some(column => column.name === targetColumn)) {
+              throw new SchemaMutationError(400, `Column '${targetColumn}' was not found in '${targetCube}'`);
+            }
+            if (operation === 'update' && existingRelationship && (!existingRelationship.sourceColumn || !existingRelationship.targetColumn) && !replaceCustom) {
+              throw new SchemaMutationError(409, 'This relationship has a custom SQL condition and requires explicit replacement');
+            }
+          }
+
+          const storedRelationship = relationship === 'one_to_many' ? 'many_to_one' : relationship;
+          const storedSourceCube = relationship === 'one_to_many' ? targetCube : sourceCube;
+          const storedTargetCube = relationship === 'one_to_many' ? sourceCube : targetCube;
+          const storedSourceColumn = relationship === 'one_to_many' ? targetColumn : sourceColumn;
+          const storedTargetColumn = relationship === 'one_to_many' ? sourceColumn : targetColumn;
+          const storageMatchesExisting = Boolean(
+            existingRelationship
+            && existingRelationship.sourceCube === storedSourceCube
+            && existingRelationship.targetCube === storedTargetCube
+          );
+
+          if (existingRelationship && !storageMatchesExisting) {
+            converters.push(new CubeRelationshipConverter({
+              sourceCube: existingRelationship.sourceCube,
+              targetCube: existingRelationship.targetCube,
+              operation: 'delete',
+            }));
+            cubeNames.add(existingRelationship.sourceCube);
+          }
+          if (operation === 'delete') {
+            if (!existingRelationship) throw new SchemaMutationError(404, 'This relationship does not exist');
+            converters.push(new CubeRelationshipConverter({
+              sourceCube: existingRelationship.sourceCube,
+              targetCube: existingRelationship.targetCube,
+              operation: 'delete',
+            }));
+            relationshipState.splice(relationshipState.indexOf(existingRelationship), 1);
+          } else {
+            converters.push(new CubeRelationshipConverter({
+              sourceCube: storedSourceCube,
+              targetCube: storedTargetCube,
+              sourceColumn: storedSourceColumn,
+              targetColumn: storedTargetColumn,
+              relationship: storedRelationship,
+              operation: storageMatchesExisting ? 'update' : 'create',
+            }));
+            if (existingRelationship) relationshipState.splice(relationshipState.indexOf(existingRelationship), 1);
+            relationshipState.push({
+              sourceCube: storedSourceCube,
+              targetCube: storedTargetCube,
+              sourceColumn: storedSourceColumn,
+              targetColumn: storedTargetColumn,
+              relationship: storedRelationship,
+              sql: '',
+            } as any);
+            cubeNames.add(storedSourceCube);
+          }
+          continue;
+        }
+
+        if (endpoint === 'playground/schema/normalize-diagram') {
+          const relationshipsToMove = relationshipState.filter(join => (
+            join.relationship === 'one_to_many' && join.sourceColumn && join.targetColumn
+          ));
+          relationshipsToMove.forEach(join => {
+            cubeNames.add(join.sourceCube);
+            cubeNames.add(join.targetCube);
+            converters.push(new CubeRelationshipConverter({
+              sourceCube: join.sourceCube,
+              targetCube: join.targetCube,
+              operation: 'delete',
+            }));
+            const canonicalAlreadyExists = relationshipState.some(existing => (
+              existing.sourceCube === join.targetCube && existing.targetCube === join.sourceCube
+            ));
+            if (!canonicalAlreadyExists) {
+              converters.push(new CubeRelationshipConverter({
+                sourceCube: join.targetCube,
+                targetCube: join.sourceCube,
+                sourceColumn: join.targetColumn,
+                targetColumn: join.sourceColumn,
+                relationship: 'many_to_one',
+                operation: 'create',
+              }));
+            }
+          });
+          definitions.models.forEach(model => {
+            let sawNonPrimary = false;
+            const outOfOrder = (model.dimensions || []).some(dimension => {
+              if (dimension.primaryKey) return sawNonPrimary;
+              sawNonPrimary = true;
+              return false;
+            });
+            if (outOfOrder) {
+              addCube(model.name);
+              converters.push(new CubeDimensionOrderConverter());
+            }
+          });
+          continue;
+        }
+
+        throw new SchemaMutationError(400, `Unsupported schema change endpoint: ${endpoint}`);
+      }
+
+      if (!converters.length) return res.json({ status: 'ok', changed: false });
+      const files = await repository.dataSchemaFiles();
+      const fileNames = new Set(Array.from(cubeNames).map(cubeName => (
+        definitions.models.find(cube => cube.name === cubeName)?.fileName
+      )).filter((fileName): fileName is string => Boolean(fileName)));
+      const originalFiles = files.filter(file => fileNames.has(file.fileName));
+      if (!originalFiles.length || originalFiles.length !== fileNames.size) {
+        throw new SchemaMutationError(404, 'The schema change file was not found');
+      }
+
+      const converter = new CubeSchemaConverter(repository, converters);
+      const updatedFiles = await saveValidatedSchemaChanges({
+        definitions,
+        cubeNames: Array.from(cubeNames),
+        originalFiles,
+        converter,
+        rollbackRequestId: `${requestId}-schema-changes-rollback`,
+        invalidMessage: error => {
+          const reason = compilerValidationReason(error);
+          return `As alterações não foram salvas porque o estado final do modelo é inválido${reason ? `: ${reason}` : ''}`;
+        },
+      });
+
+      return res.json({ status: 'ok', changed: true, files: updatedFiles });
     }));
 
     app.post('/playground/schema/relationship', catchErrors(async (req: Request, res: Response) => {
@@ -1363,6 +2261,7 @@ export class DevServer {
       const reverseExisting = definitions.relationships.find(join => (
         join.sourceCube === targetCube && join.targetCube === sourceCube
       ));
+      const existingRelationship = existing || reverseExisting;
       if (!sourceModel || !targetModel) {
         return res.status(404).json({ error: 'Source or target cube was not found' });
       }
@@ -1386,7 +2285,7 @@ export class DevServer {
           error: `A relationship between '${sourceCube}' and '${targetCube}' already exists in the opposite direction`,
         });
       }
-      if (operation === 'update' && !existing) {
+      if (operation === 'update' && !existingRelationship) {
         return res.status(404).json({ error: 'This relationship does not exist' });
       }
 
@@ -1409,7 +2308,7 @@ export class DevServer {
         if (!target!.columns.some(column => column.name === targetColumn)) {
           return res.status(400).json({ error: `Column '${targetColumn}' was not found in '${targetCube}'` });
         }
-        if (operation === 'update' && existing && (!existing.sourceColumn || !existing.targetColumn) && !replaceCustom) {
+        if (operation === 'update' && existingRelationship && (!existingRelationship.sourceColumn || !existingRelationship.targetColumn) && !replaceCustom) {
           return res.status(409).json({
             error: 'This relationship has a custom SQL condition and requires explicit replacement',
             customRelationship: true,
@@ -1417,29 +2316,73 @@ export class DevServer {
         }
       }
 
-      const { repository, context, requestId } = definitions;
-      const originalFile = (await repository.dataSchemaFiles())
-        .find(file => file.fileName === sourceModel.fileName);
-      if (!originalFile) {
-        return res.status(404).json({ error: `File '${sourceModel.fileName}' was not found` });
+      const { repository, requestId } = definitions;
+      const storedRelationship = relationship === 'one_to_many'
+        ? 'many_to_one'
+        : relationship;
+      const storedSourceCube = relationship === 'one_to_many' ? targetCube : sourceCube;
+      const storedTargetCube = relationship === 'one_to_many' ? sourceCube : targetCube;
+      const storedSourceColumn = relationship === 'one_to_many' ? targetColumn : sourceColumn;
+      const storedTargetColumn = relationship === 'one_to_many' ? sourceColumn : targetColumn;
+      const storageMatchesExisting = Boolean(
+        existingRelationship
+        && existingRelationship.sourceCube === storedSourceCube
+        && existingRelationship.targetCube === storedTargetCube
+      );
+      const relationshipConverters: CubeRelationshipConverter[] = [];
+
+      if (operation === 'delete') {
+        if (!existingRelationship) {
+          return res.status(404).json({ error: 'This relationship does not exist' });
+        }
+        relationshipConverters.push(new CubeRelationshipConverter({
+          sourceCube: existingRelationship.sourceCube,
+          targetCube: existingRelationship.targetCube,
+          operation: 'delete',
+        }));
+      } else {
+        if (!storageMatchesExisting && existingRelationship) {
+          relationshipConverters.push(new CubeRelationshipConverter({
+            sourceCube: existingRelationship.sourceCube,
+            targetCube: existingRelationship.targetCube,
+            operation: 'delete',
+          }));
+        }
+        relationshipConverters.push(new CubeRelationshipConverter({
+          sourceCube: storedSourceCube,
+          targetCube: storedTargetCube,
+          sourceColumn: storedSourceColumn,
+          targetColumn: storedTargetColumn,
+          relationship: storedRelationship,
+          operation: storageMatchesExisting ? 'update' : 'create',
+        }));
       }
 
-      const converter = new CubeSchemaConverter(repository, [
-        new CubeRelationshipConverter({
-          sourceCube,
-          targetCube,
-          sourceColumn,
-          targetColumn,
-          relationship,
-          operation,
-        }),
-      ]);
+      const files = await repository.dataSchemaFiles();
+      const cubeNames = Array.from(new Set([
+        ...(existingRelationship ? [existingRelationship.sourceCube] : []),
+        ...(operation === 'delete' ? [] : [storedSourceCube]),
+      ]));
+      const originalFiles = Array.from(new Map(
+        cubeNames
+          .map(name => definitions.models.find(cube => cube.name === name)?.fileName)
+          .filter((fileName): fileName is string => Boolean(fileName))
+          .map(fileName => [fileName, files.find(file => file.fileName === fileName)])
+          .filter((entry): entry is [string, any] => Boolean(entry[1]))
+      ).values());
+      if (!originalFiles.length || originalFiles.length !== new Set(cubeNames.map(name => (
+        definitions.models.find(cube => cube.name === name)?.fileName
+      ))).size) {
+        return res.status(404).json({ error: 'The relationship file was not found' });
+      }
+
+      const converter = new CubeSchemaConverter(repository, relationshipConverters);
       let updatedFile;
       try {
-        updatedFile = await saveValidatedSchemaChange({
+        updatedFile = await saveValidatedSchemaChanges({
           definitions,
-          cubeName: sourceCube,
-          originalFile,
+          cubeNames,
+          originalFiles,
           converter,
           rollbackRequestId: `${requestId}-relationship-rollback`,
           changedDuringValidationMessage: 'The model file changed while the relationship was being validated. Reload the diagram before editing it again.',
@@ -1460,9 +2403,95 @@ export class DevServer {
       });
     }));
 
+    app.post('/playground/schema/normalize-diagram', catchErrors(async (req: Request, res: Response) => {
+      this.cubejsServer.event('Dev Server Diagram Normalization');
+      const definitions = await loadRelationshipDefinitions(req);
+      const relationshipsToMove = definitions.relationships.filter(join => (
+        join.relationship === 'one_to_many'
+        && join.sourceColumn
+        && join.targetColumn
+      ));
+      const cubesWithOutOfOrderKeys = definitions.models.filter(model => {
+        let sawNonPrimary = false;
+        return (model.dimensions || []).some(dimension => {
+          if (dimension.primaryKey) return sawNonPrimary;
+          sawNonPrimary = true;
+          return false;
+        });
+      });
+      const cubeNames = new Set<string>(cubesWithOutOfOrderKeys.map(cube => cube.name));
+      relationshipsToMove.forEach(join => {
+        cubeNames.add(join.sourceCube);
+        cubeNames.add(join.targetCube);
+      });
+
+      if (!cubeNames.size) {
+        return res.json({ status: 'ok', changed: false });
+      }
+
+      const relationshipConverters: CubeRelationshipConverter[] = [];
+      relationshipsToMove.forEach(join => {
+        relationshipConverters.push(new CubeRelationshipConverter({
+          sourceCube: join.sourceCube,
+          targetCube: join.targetCube,
+          operation: 'delete',
+        }));
+        const canonicalAlreadyExists = definitions.relationships.some(existing => (
+          existing.sourceCube === join.targetCube && existing.targetCube === join.sourceCube
+        ));
+        if (!canonicalAlreadyExists) {
+          relationshipConverters.push(new CubeRelationshipConverter({
+            sourceCube: join.targetCube,
+            targetCube: join.sourceCube,
+            sourceColumn: join.targetColumn,
+            targetColumn: join.sourceColumn,
+            relationship: 'many_to_one',
+            operation: 'create',
+          }));
+        }
+      });
+
+      const { repository, requestId } = definitions;
+      const files = await repository.dataSchemaFiles();
+      const fileNames = new Set(Array.from(cubeNames).map(cubeName => (
+        definitions.models.find(cube => cube.name === cubeName)?.fileName
+      )).filter((fileName): fileName is string => Boolean(fileName)));
+      const originalFiles = files.filter(file => fileNames.has(file.fileName));
+      const converter = new CubeSchemaConverter(repository, [
+        new CubeDimensionOrderConverter(),
+        ...relationshipConverters,
+      ]);
+
+      let updatedFile;
+      try {
+        updatedFile = await saveValidatedSchemaChanges({
+          definitions,
+          cubeNames: Array.from(cubeNames),
+          originalFiles,
+          converter,
+          rollbackRequestId: `${requestId}-diagram-normalization-rollback`,
+          changedDuringValidationMessage: 'Os arquivos do diagrama mudaram enquanto a normalização era validada. Recarregue o diagrama e tente novamente.',
+          invalidMessage: error => {
+            const reason = compilerValidationReason(error);
+            return `A normalização do diagrama não foi salva porque o modelo ficaria inválido${reason ? `: ${reason}` : ''}`;
+          },
+        });
+      } catch (error: any) {
+        if (error?.status) return res.status(error.status).json({ error: error.message });
+        throw error;
+      }
+
+      return res.json({
+        status: 'ok',
+        changed: true,
+        fileName: updatedFile.fileName,
+        content: updatedFile.source,
+      });
+    }));
+
     app.get('/playground/schema/diagram-state', catchErrors(async (req, res) => {
-      const repository = multiProject
-        ? multiProject.repository(multiProject.contextFromRequest(req))
+      const repository = multiDatamart
+        ? multiDatamart.repository(multiDatamart.contextFromRequest(req))
         : this.cubejsServer.repository;
       const statePath = diagramStatePath(repository);
 
@@ -1476,8 +2505,8 @@ export class DevServer {
     }));
 
     app.put('/playground/schema/diagram-state', catchErrors(async (req, res) => {
-      const repository = multiProject
-        ? multiProject.repository(multiProject.contextFromRequest(req))
+      const repository = multiDatamart
+        ? multiDatamart.repository(multiDatamart.contextFromRequest(req))
         : this.cubejsServer.repository;
       const statePath = diagramStatePath(repository);
       const state = sanitizeDiagramState(req.body || {});
@@ -1487,8 +2516,8 @@ export class DevServer {
 
     app.get('/playground/files', catchErrors(async (req, res) => {
       this.cubejsServer.event('Dev Server Files Load');
-      const repository = multiProject
-        ? multiProject.repository(multiProject.contextFromRequest(req))
+      const repository = multiDatamart
+        ? multiDatamart.repository(multiDatamart.contextFromRequest(req))
         : this.cubejsServer.repository;
       const files = await repository.dataSchemaFiles();
       res.json({
@@ -1501,17 +2530,17 @@ export class DevServer {
 
     app.get('/playground/schema/validation', catchErrors(async (req, res) => {
       this.cubejsServer.event('Dev Server Schema Validation Load');
-      const repository = multiProject
-        ? multiProject.repository(multiProject.contextFromRequest(req))
+      const repository = multiDatamart
+        ? multiDatamart.repository(multiDatamart.contextFromRequest(req))
         : this.cubejsServer.repository;
       const files = await repository.dataSchemaFiles();
       const requestId = getRequestIdFromRequest(req);
-      const projectContext = multiProject?.contextFromRequest(req);
+      const datamartContext = multiDatamart?.contextFromRequest(req);
       const context = {
         authInfo: null,
         securityContext: null,
         requestId,
-        ...(projectContext || {}),
+        ...(datamartContext || {}),
       };
 
       const fileByCube = new Map<string, string>();
@@ -1532,11 +2561,14 @@ export class DevServer {
       });
 
       try {
-        const compilerApi = await this.cubejsServer.getCompilerApi(context);
+        const compilerApi = await this.cubejsServer.getCompilerApi(context, { forceRefresh: true });
         await compilerApi.getCompilers({ requestId });
         return res.json({ valid: true, errors: {}, globalError: null });
       } catch (error: any) {
         const details = String(error?.plainMessage || error?.message || error || 'O schema é inválido');
+        if (/Datamart session is missing or expired|Datamart credentials are required/i.test(details)) {
+          throw error;
+        }
         const errors: Record<string, string> = {};
         let matched = false;
 
@@ -1571,8 +2603,8 @@ export class DevServer {
       }
       const cubeTargetFileName = path.join('cubes', targetFileName);
 
-      const repository = multiProject
-        ? multiProject.repository(multiProject.contextFromRequest(req))
+      const repository = multiDatamart
+        ? multiDatamart.repository(multiDatamart.contextFromRequest(req))
         : this.cubejsServer.repository;
       const files = await repository.dataSchemaFiles();
       const sourceFile = files.find(file => file.fileName === sourceFileName);
@@ -1616,12 +2648,12 @@ export class DevServer {
 
       try {
         const requestId = getRequestIdFromRequest(req);
-        const projectContext = multiProject?.contextFromRequest(req);
+        const datamartContext = multiDatamart?.contextFromRequest(req);
         const compilerApi = await this.cubejsServer.getCompilerApi({
           authInfo: null,
           securityContext: null,
           requestId,
-          ...(projectContext || {}),
+          ...(datamartContext || {}),
         });
         await compilerApi.getCompilers({ requestId });
       } catch (error: any) {
@@ -1647,8 +2679,8 @@ export class DevServer {
         return res.status(400).json({ error: 'The new file name must be different' });
       }
 
-      const repository = multiProject
-        ? multiProject.repository(multiProject.contextFromRequest(req))
+      const repository = multiDatamart
+        ? multiDatamart.repository(multiDatamart.contextFromRequest(req))
         : this.cubejsServer.repository;
       const files = await repository.dataSchemaFiles();
       const sourceFile = files.find(file => file.fileName === sourceFileName);
@@ -1715,12 +2747,12 @@ export class DevServer {
 
       try {
         const requestId = getRequestIdFromRequest(req);
-        const projectContext = multiProject?.contextFromRequest(req);
+        const datamartContext = multiDatamart?.contextFromRequest(req);
         const compilerApi = await this.cubejsServer.getCompilerApi({
           authInfo: null,
           securityContext: null,
           requestId,
-          ...(projectContext || {}),
+          ...(datamartContext || {}),
         });
         await compilerApi.getCompilers({ requestId });
       } catch (error: any) {
@@ -1758,8 +2790,8 @@ export class DevServer {
         });
       }
 
-      const repository = multiProject
-        ? multiProject.repository(multiProject.contextFromRequest(req))
+      const repository = multiDatamart
+        ? multiDatamart.repository(multiDatamart.contextFromRequest(req))
         : this.cubejsServer.repository;
       const files = await repository.dataSchemaFiles();
 
@@ -1783,12 +2815,12 @@ export class DevServer {
       repository.writeDataSchemaFile(fileName, content);
 
       const requestId = getRequestIdFromRequest(req);
-      const projectContext = multiProject?.contextFromRequest(req);
+      const datamartContext = multiDatamart?.contextFromRequest(req);
       const compilerContext = {
         authInfo: null,
         securityContext: null,
         requestId,
-        ...(projectContext || {}),
+        ...(datamartContext || {}),
       };
       try {
         const compilerApi = await this.cubejsServer.getCompilerApi(compilerContext);
@@ -1846,8 +2878,8 @@ export class DevServer {
         });
       }
 
-      const repository = multiProject
-        ? multiProject.repository(multiProject.contextFromRequest(req))
+      const repository = multiDatamart
+        ? multiDatamart.repository(multiDatamart.contextFromRequest(req))
         : this.cubejsServer.repository;
       const files = await repository.dataSchemaFiles();
 
@@ -1884,14 +2916,14 @@ export class DevServer {
       }
 
       const dataSource = req.body.dataSource || 'default';
-      const projectContext = multiProject?.contextFromRequest(req);
+      const datamartContext = multiDatamart?.contextFromRequest(req);
 
       const driver = await this.cubejsServer.getDriver({
         dataSource,
         authInfo: null,
         securityContext: null,
         requestId: getRequestIdFromRequest(req),
-        ...(projectContext || {}),
+        ...(datamartContext || {}),
       });
       const tablesSchema = req.body.tablesSchema || (await driver.tablesSchema());
 
@@ -1905,8 +2937,8 @@ export class DevServer {
       });
       const files = scaffoldingTemplate.generateFilesByTableNames(req.body.tables, { dataSource });
 
-      const schemaPath = multiProject
-        ? multiProject.registry.modelPath(projectContext!.projectId)
+      const schemaPath = multiDatamart
+        ? multiDatamart.registry.modelPath(datamartContext!.datamartId)
         : options.schemaPath;
       await fs.emptyDir(path.join(schemaPath, 'cubes'));
       await fs.emptyDir(path.join(schemaPath, 'views'));
@@ -1942,7 +2974,7 @@ export class DevServer {
 #           - city`);
       await Promise.all(files.map(file => fs.writeFile(path.join(schemaPath, 'cubes', file.fileName), file.content)));
 
-      if (multiProject) await driver.release?.();
+      if (multiDatamart) await driver.release?.();
 
       res.json({ files });
     }));
@@ -2216,9 +3248,9 @@ export class DevServer {
 
     app.post('/playground/test-connection', catchErrors(
       async (req: TestConnectionRequest, res) => {
-        if (multiProject) {
+        if (multiDatamart) {
           return res.status(409).json({
-            error: 'Use the project session endpoint to test connections in multi-project mode',
+            error: 'Use the datamart session endpoint to test connections in multi-datamart mode',
           });
         }
         const { dataSource, variables } = req.body || {};
@@ -2283,9 +3315,9 @@ export class DevServer {
     ));
 
     app.post('/playground/env', catchErrors(async (req, res) => {
-      if (multiProject) {
+      if (multiDatamart) {
         return res.status(409).json({
-          error: 'The /playground/env endpoint is disabled in multi-project mode because it writes credentials to disk',
+          error: 'The /playground/env endpoint is disabled in multi-datamart mode because it writes credentials to disk',
         });
       }
       let { variables = {} } = req.body || {};
@@ -2347,8 +3379,8 @@ export class DevServer {
 
     app.post('/playground/schema/pre-aggregation', catchErrors(async (req: Request, res: Response) => {
       const { cubeName, preAggregationName, code } = req.body;
-      const repository = multiProject
-        ? multiProject.repository(multiProject.contextFromRequest(req))
+      const repository = multiDatamart
+        ? multiDatamart.repository(multiDatamart.contextFromRequest(req))
         : this.cubejsServer.repository;
 
       /**

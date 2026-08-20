@@ -1,0 +1,28 @@
+cubes:
+  - name: tf_notas_emitente_dia
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_EMITENTE_DIA\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: fl_auditado
+        sql: "{CUBE}.\"FL_AUDITADO\""
+        type: string
+
+      - name: cd_modelo_doc_fiscal
+        sql: "{CUBE}.\"CD_MODELO_DOC_FISCAL\""
+        type: string
+
+      - name: sk_dt_emissao
+        sql: "{CUBE}.\"SK_DT_EMISSAO\""
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+

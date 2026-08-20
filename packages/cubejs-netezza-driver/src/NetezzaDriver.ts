@@ -97,6 +97,7 @@ type NetezzaConnectionOptions = {
   connectionString?: string;
   dsn?: string;
   driver?: string;
+  securityLevel?: string;
   host?: string;
   port?: number | string;
   database?: string;
@@ -117,6 +118,8 @@ export type NetezzaDriverConfiguration = NetezzaConnectionOptions & PoolUserOpti
   testConnectionTimeout?: number;
   connectionTimeout?: number;
   loginTimeout?: number;
+  /** ODBC statement timeout, in seconds. Defaults to one minute. */
+  queryTimeout?: number;
   readOnly?: boolean;
 };
 
@@ -155,12 +158,26 @@ export function buildNetezzaConnectionString(options: NetezzaConnectionOptions):
 
   return [
     entry('DRIVER', options.driver || 'NetezzaSQL'),
-    entry('SERVER', options.host),
-    entry('PORT', options.port || 5480),
-    entry('DATABASE', options.database),
-    entry('SCHEMA', options.schema),
-    entry('UID', options.user),
-    entry('PWD', options.password),
+    // The IBM driver expects these Netezza keywords in their native form.
+    // Bracing SERVER/PORT/DATABASE makes the vendor driver reject the
+    // connection when SECURITYLEVEL is present.
+    `SERVERNAME=${options.host}`,
+    `PORT=${options.port || 5480}`,
+    `DATABASE=${options.database}`,
+    // Match the IBM Netezza DSN used by the Windows clients. This keeps
+    // direct Cube connections on the same preferred-unsecured mode.
+    // Netezza expects this enum unbraced; braced ODBC values are rejected as
+    // an invalid security level by the vendor driver.
+    `SECURITYLEVEL=${options.securityLevel || 'preferredUnSecured'}`,
+    // Keep Netezza character data in UTF-8 when returned through unixODBC.
+    // node-odbc binds SQL_WCHAR metadata as UTF-16 on unixODBC.  The
+    // Netezza driver must use the same representation or catalog names are
+    // returned as pairs of bytes rendered as CJK characters.
+    'UNICODETRANSLATIONOPTION=utf16',
+    'CHARACTERTRANSLATIONOPTION=all',
+    options.schema === undefined || options.schema === '' ? undefined : `SCHEMA=${options.schema}`,
+    options.user === undefined || options.user === '' ? undefined : `USERNAME=${options.user}`,
+    options.password === undefined || options.password === '' ? undefined : `PASSWORD=${options.password}`,
   ].filter(Boolean).join(';');
 }
 
@@ -177,6 +194,8 @@ export class NetezzaDriver extends BaseDriver implements DriverInterface {
   protected readonly pool: Pool<odbc.Connection>;
 
   protected readonly config: NetezzaDriverConfiguration;
+
+  protected readonly queryTimeout: number;
 
   private enabled = false;
 
@@ -201,10 +220,11 @@ export class NetezzaDriver extends BaseDriver implements DriverInterface {
 
     this.pool = new Pool<odbc.Connection>(poolName, {
       create: async () => this.createConnection(connectionString, poolName, config),
-      validate: async (connection) => connection.connected(),
       destroy: async (connection) => {
-        if (connection.connected()) {
+        try {
           await connection.close();
+        } catch {
+          // The vendor driver may already have closed the native handle.
         }
       },
     }, {
@@ -214,7 +234,6 @@ export class NetezzaDriver extends BaseDriver implements DriverInterface {
       softIdleTimeoutMillis: config.softIdleTimeoutMillis || 30000,
       idleTimeoutMillis: config.idleTimeoutMillis || 30000,
       acquireTimeoutMillis: config.acquireTimeoutMillis || 20000,
-      testOnBorrow: true,
     });
 
     this.pool.on('factoryCreateError', (error) => this.databasePoolError(error));
@@ -224,6 +243,11 @@ export class NetezzaDriver extends BaseDriver implements DriverInterface {
       ...config,
       schema: connectionOptions.schema,
     };
+    this.queryTimeout = Number(
+      config.queryTimeout
+      || getEnv('dbQueryTimeout', { dataSource, preAggregations })
+      || 60,
+    );
     this.enabled = true;
   }
 
@@ -256,12 +280,21 @@ export class NetezzaDriver extends BaseDriver implements DriverInterface {
     return values as Array<number | string>;
   }
 
-  protected async queryResponse<R = unknown>(query: string, values: unknown[] = []): Promise<odbc.Result<R>> {
-    return this.withConnection(async (connection) => connection.query<R>(query, this.asOdbcParameters(values)));
+  protected async queryResponse<R = unknown>(
+    query: string,
+    values: unknown[] = [],
+    options?: QueryOptions,
+  ): Promise<odbc.Result<R>> {
+    const timeout = Number(options?.queryTimeout || this.queryTimeout);
+    return this.withConnection(async (connection) => connection.query<R>(
+      query,
+      this.asOdbcParameters(values),
+      { timeout } as any,
+    ) as unknown as Promise<odbc.Result<R>>);
   }
 
-  public async query<R = unknown>(query: string, values: unknown[] = [], _options?: QueryOptions): Promise<R[]> {
-    const result = await this.queryResponse<R>(query, values);
+  public async query<R = unknown>(query: string, values: unknown[] = [], options?: QueryOptions): Promise<R[]> {
+    const result = await this.queryResponse<R>(query, values, options);
     return Array.from(result);
   }
 

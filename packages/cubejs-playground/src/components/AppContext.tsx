@@ -23,9 +23,9 @@ export type PlaygroundContext = {
   coreServerVersion: string;
   isCloud: boolean;
   livePreview?: boolean;
-  multiProject?: {
+  multiDatamart?: {
     enabled: boolean;
-    activeProject: {
+    activeDatamart: {
       id: string;
       name: string;
       connectionId: string;

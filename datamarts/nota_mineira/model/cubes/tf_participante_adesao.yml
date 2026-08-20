@@ -1,0 +1,28 @@
+cubes:
+  - name: tf_participante_adesao
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TF_PARTICIPANTE_ADESAO\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: sk_dt_adesao
+        sql: "{CUBE}.\"SK_DT_ADESAO\""
+        type: time
+
+      - name: dt_inicio_adesao
+        sql: "{CUBE}.\"DT_INICIO_ADESAO\""
+        type: time
+
+      - name: dt_fim_adesao
+        sql: "{CUBE}.\"DT_FIM_ADESAO\""
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+

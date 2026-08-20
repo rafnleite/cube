@@ -1,0 +1,157 @@
+cubes:
+  - name: td_cnae
+    sql_table: NOTA_MINEIRA_ARM.TD_CNAE
+    data_source: default
+
+    dimensions:
+      - name: sk_cnaef
+        sql: '{CUBE}."SK_CNAEF"'
+        type: number
+        primary_key: true
+
+      - name: nr_cnaef
+        title: Número de CNAE
+        sql: "{CUBE}.NR_CNAEF"
+        type: number
+        primary_key: false
+
+      - name: ds_secao
+        title: Seção
+        sql: '{CUBE}."DS_SECAO"'
+        type: string
+        primary_key: false
+
+      - name: sg_secao
+        title: Seção - Sigla
+        sql: '{CUBE}."SG_SECAO"'
+        type: string
+        primary_key: false
+
+      - name: cd_secao
+        title: Seção - Código
+        sql: "{CUBE}.CD_SECAO"
+        type: number
+        primary_key: false
+
+      - name: ds_divisao
+        title: Divisão
+        sql: '{CUBE}."DS_DIVISAO"'
+        type: string
+        primary_key: false
+
+      - name: nr_divisao
+        title: Divisão - Número
+        sql: '{CUBE}."NR_DIVISAO"'
+        type: string
+        primary_key: false
+
+      - name: cd_divisao
+        title: Divisão - Código
+        sql: "{CUBE}.CD_DIVISAO"
+        type: number
+        primary_key: false
+
+      - name: ds_grupo
+        title: Grupo
+        sql: '{CUBE}."DS_GRUPO"'
+        type: string
+        primary_key: false
+
+      - name: nr_grupo
+        title: Grupo - Número
+        sql: '{CUBE}."NR_GRUPO"'
+        type: string
+        primary_key: false
+
+      - name: cd_grupo
+        title: Grupo - Código
+        sql: "{CUBE}.CD_GRUPO"
+        type: number
+        primary_key: false
+
+      - name: ds_classe
+        title: Classe
+        sql: '{CUBE}."DS_CLASSE"'
+        type: string
+        primary_key: false
+
+      - name: nr_classe
+        title: Classe - Número
+        sql: '{CUBE}."NR_CLASSE"'
+        type: string
+        primary_key: false
+
+      - name: cd_classe
+        title: Classe - Código
+        sql: "{CUBE}.CD_CLASSE"
+        type: number
+        primary_key: false
+
+      - name: ds_subclasse
+        title: Subclasse
+        sql: '{CUBE}."DS_SUBCLASSE"'
+        type: string
+        primary_key: false
+
+      - name: nr_subclasse
+        title: Subclasse - Número
+        sql: '{CUBE}."NR_SUBCLASSE"'
+        type: string
+        primary_key: false
+
+      - name: cd_subclasse
+        title: Subclasse - Código
+        sql: "{CUBE}.CD_SUBCLASSE"
+        type: number
+        primary_key: false
+
+      - name: ds_segmento
+        title: Segmento
+        sql: '{CUBE}."DS_SEGMENTO"'
+        type: string
+        primary_key: false
+
+      - name: cd_segmento
+        title: Segmento - Código
+        sql: "{CUBE}.CD_SEGMENTO"
+        type: number
+        primary_key: false
+
+      - name: ds_nicho
+        title: Nicho
+        sql: '{CUBE}."DS_NICHO"'
+        type: string
+        primary_key: false
+
+      - name: cd_nicho
+        title: Nicho - Código
+        sql: "{CUBE}.CD_NICHO"
+        type: number
+        primary_key: false
+
+      - name: dt_ini_obrigacao
+        title: Data início obrigação
+        sql: '{CUBE}."DT_INI_OBRIGACAO"'
+        type: time
+        primary_key: false
+
+      - name: dt_fim_obrigacao
+        title: Data fim obrigação
+        sql: '{CUBE}."DT_FIM_OBRIGACAO"'
+        type: time
+        primary_key: false
+
+      - name: nr_dia_fixo_arrecadacao
+        title: Dia fixo arrecadação - Número
+        sql: "{CUBE}.NR_DIA_FIXO_ARRECADACAO"
+        type: number
+        primary_key: false
+
+    measures:
+      - name: count
+        title: Contagem
+        type: count
+
+    title: CNAE
+    hierarchies: []
+    joins: []

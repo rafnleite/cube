@@ -1,0 +1,140 @@
+cubes:
+  - title: Horários
+    name: timetable
+    sql_table: bookings.timetable
+    data_source: default
+
+    pre_aggregations:
+      - name: dashboard_arrivals_map
+        type: rollup
+        external: false
+        measures:
+          - CUBE.count
+        dimensions:
+          - airports_arrival.airport_code
+          - airports_arrival.airport_name
+          - airports_arrival.city
+          - airports_arrival.country
+          - airports_arrival.coordinates
+        refresh_key:
+          every: 1 hour
+
+      - name: dashboard_flights_monthly
+        type: rollup
+        external: false
+        measures:
+          - CUBE.count
+        dimensions:
+          - airports_arrival.country
+          - CUBE.status
+          - CUBE.route_no
+          - CUBE.departure_airport
+          - CUBE.arrival_airport
+          - airplanes.model
+          - CUBE.airplane_code
+        time_dimension: CUBE.scheduled_departure
+        granularity: month
+        partition_granularity: year
+        build_range_end:
+          sql: SELECT MAX(scheduled_departure) FROM bookings.timetable
+        refresh_key:
+          every: 1 hour
+
+    joins:
+      - name: airplanes
+        sql: '{CUBE}.airplane_code = {airplanes}.airplane_code'
+        relationship: many_to_one
+
+      - name: airports_arrival
+        sql: '{CUBE}.arrival_airport = {airports_arrival}.airport_code'
+        relationship: many_to_one
+
+      - name: airports_departure
+        sql: '{CUBE}.departure_airport = {airports_departure}.airport_code'
+        relationship: many_to_one
+
+    dimensions:
+      - title: ID
+        name: id
+        sql: CONCAT({CUBE}.flight_id, '-', {CUBE}.scheduled_departure)
+        type: string
+        primary_key: true
+
+      - title: ID do voo
+        name: flight_id
+        sql: flight_id
+        type: number
+
+      - title: Código do avião
+        name: airplane_code
+        sql: airplane_code
+        type: string
+
+      - title: Aeroporto de chegada
+        name: arrival_airport
+        sql: arrival_airport
+        type: string
+
+      - title: Aeroporto de saída
+        name: departure_airport
+        sql: departure_airport
+        type: string
+
+      - title: Número da rota
+        name: route_no
+        sql: route_no
+        type: string
+
+      - title: Status
+        name: status
+        sql: status
+        type: string
+
+      - title: Horário de chegada UTC real
+        name: actual_arrival
+        sql: actual_arrival
+        type: time
+
+      - title: Horário de chegada local real
+        name: actual_arrival_local
+        sql: actual_arrival_local
+        type: time
+
+      - title: Horário de partida UTC real
+        name: actual_departure
+        sql: actual_departure
+        type: time
+
+      - title: Horário de partida local real
+        name: actual_departure_local
+        sql: actual_departure_local
+        type: time
+
+      - title: Horário de chegada UTC agendado
+        name: scheduled_arrival
+        sql: scheduled_arrival
+        type: time
+
+      - title: Horário de chegada local agendado
+        name: scheduled_arrival_local
+        sql: scheduled_arrival_local
+        type: time
+
+      - title: Horário partida UTC agendado
+        name: scheduled_departure
+        sql: scheduled_departure
+        type: time
+
+      - title: Horário de partida local agendado
+        name: scheduled_departure_local
+        sql: scheduled_departure_local
+        type: time
+
+    measures:
+      - title: Contagem
+        name: count
+        type: count
+      - title: Aeroportos ativos
+        name: active_airports
+        sql: '{CUBE}.arrival_airport'
+        type: count_distinct

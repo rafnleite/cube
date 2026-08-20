@@ -1,0 +1,52 @@
+cubes:
+  - title: Bilhetes
+    name: tickets
+    sql_table: bookings.tickets
+    data_source: default
+
+    pre_aggregations:
+      - name: dashboard_totals
+        type: rollup
+        external: false
+        measures:
+          - CUBE.count
+        refresh_key:
+          every: 1 hour
+
+    joins:
+      - name: bookings
+        sql: "{CUBE}.book_ref = {bookings}.book_ref"
+        relationship: many_to_one
+
+    dimensions:
+      - title: Número do bilhete
+        name: ticket_no
+        sql: ticket_no
+        type: string
+        primary_key: true
+
+      - title: Referência de reserva
+        name: book_ref
+        sql: book_ref
+        type: string
+
+      - title: Ida
+        name: outbound
+        sql: outbound
+        type: boolean
+
+      - title: ID do passageiro
+        name: passenger_id
+        sql: passenger_id
+        type: string
+
+      - title: Nome do passageiro
+        name: passenger_name
+        sql: passenger_name
+        type: string
+
+    measures:
+      - name: count
+        type: count
+        title: Contagem
+        drill_members: []

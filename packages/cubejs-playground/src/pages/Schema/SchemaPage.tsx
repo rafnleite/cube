@@ -1,5 +1,5 @@
 import React, { Component, useLayoutEffect, useRef, useState } from 'react';
-import { Layout, Modal, Empty, Typography, Button, Space, Popconfirm, message, notification, Input, Tooltip } from 'antd';
+import { Layout, Modal, Empty, Typography, Button, Space, message, notification, Input, Tooltip, Table, Spin } from 'antd';
 import { RouterProps } from 'react-router-dom';
 import {
   ApartmentOutlined,
@@ -11,6 +11,8 @@ import {
   TableListOutlined,
   TrashOutlined,
   LoadingOutlined,
+  ReloadOutlined,
+  RightOutlined,
   WarningFilled,
 } from '../../shared/icons/FontAwesomeIcons';
 
@@ -25,7 +27,8 @@ import { SchemaFileEditor } from './SchemaFileEditor';
 import { CubeVisualEditor } from './CubeVisualEditor';
 import { CubeRelationshipDiagram } from './CubeRelationshipDiagram';
 import { CubeSampleDataModal } from './CubeSampleDataModal';
-import styled, { createGlobalStyle } from 'styled-components';
+import { ConfirmPopover } from '../../components/ConfirmPopover';
+import styled from 'styled-components';
 import { load } from 'js-yaml';
 
 const { Content, Sider } = Layout;
@@ -71,49 +74,220 @@ const TablesPaneContent = styled.div`
 const TablesTreeScroll = styled.div`
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+
+  .ant-tree {
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .ant-tree-list,
+  .ant-tree-list-holder,
+  .ant-tree-list-holder-inner,
+  .ant-tree-treenode,
+  .ant-tree-node-content-wrapper,
+  .ant-tree-title {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .ant-tree-list-holder {
+    overflow-x: hidden !important;
+  }
+
+  .ant-tree-treenode {
+    width: 100%;
+  }
+
+  .ant-tree-node-content-wrapper {
+    flex: 1;
+    overflow: hidden;
+  }
 `;
 
 const FilesListScroll = styled(TablesTreeScroll)`
+  overflow-x: hidden;
+  overflow-y: auto;
+`;
+
+const SchemaDetails = styled.div`
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 0 24px;
+`;
+
+const SchemaDetailsHeader = styled.div`
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+`;
+
+const SchemaDetailsTitle = styled(Typography.Title)`
+  margin: 0 !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const SchemaTableCard = styled.div`
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+  margin-bottom: 16px;
   overflow: hidden;
 `;
 
-const SchemaPageOverlayStyles = createGlobalStyle`
-  .cube-remove-popconfirm .ant-popover-inner-content {
-    min-width: 190px;
-    padding: 14px 16px 12px;
-  }
+const SchemaTableHeader = styled.button`
+  align-items: center;
+  background: #fafafa;
+  border-bottom: 1px solid #f0f0f0;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  cursor: pointer;
+  display: flex;
+  font-weight: 600;
+  gap: 8px;
+  overflow: hidden;
+  padding: 10px 12px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
 
-  .cube-remove-popconfirm .ant-popover-message {
-    padding: 0 0 12px;
-  }
-
-  .cube-remove-popconfirm .ant-popover-buttons {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    margin: 0;
-  }
-
-  .cube-remove-popconfirm .ant-popover-buttons button {
-    margin-left: 0;
+  &:hover {
+    background: #f5f5f5;
   }
 `;
 
+const SchemaTableName = styled.span`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const SchemaColumnRow = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(100px, 180px);
+  gap: 16px;
+  padding: 8px 12px;
+
+  &:not(:last-child) {
+    border-bottom: 1px solid #f5f5f5;
+  }
+`;
+
+const SchemaColumnCell = styled.div`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const TableDetailsToolbar = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+`;
+
+const TableDetailsSectionTitle = styled(Typography.Title)`
+  margin: 24px 0 12px !important;
+`;
+
+const TableSampleScroll = styled.div`
+  min-width: 0;
+  overflow-x: auto;
+`;
+
+const TableMetadataCard = styled.div`
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+  overflow: hidden;
+`;
+
 const schemasMap = {};
-const schemaToTreeData = (schemas) =>
-  Object.keys(schemas).map((schemaName) => ({
-    title: schemaName,
-    key: schemaName,
-    treeData: Object.keys(schemas[schemaName]).map((tableName) => {
-      const key = `${schemaName}.${tableName}`;
-      schemasMap[key] = [schemaName, tableName];
-      return {
-        title: tableName,
-        key,
-      };
-    }),
-  }));
+const TreeItemTitle = styled.span`
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+function TreeItemLabel({ name }: { name: string }) {
+  return (
+    <Tooltip title={name} placement="topLeft">
+      <TreeItemTitle>{name}</TreeItemTitle>
+    </Tooltip>
+  );
+}
+
+function previewValue(value: unknown): string {
+  if (value == null) return '';
+  return typeof value === 'object' ? JSON.stringify(value) : String(value);
+}
+
+function tableRowValue(row: Record<string, unknown>, columnName: string): unknown {
+  if (Object.prototype.hasOwnProperty.call(row, columnName)) return row[columnName];
+  const normalizedColumnName = columnName.toLocaleLowerCase();
+  const entry = Object.entries(row).find(([key]) => key.toLocaleLowerCase() === normalizedColumnName);
+  return entry?.[1];
+}
+
+function formatRecordCount(value: string): string {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? new Intl.NumberFormat('pt-BR').format(numericValue) : value;
+}
+
+function previewColumnWidth(
+  columnName: string,
+  columnType: string | undefined,
+  rows: Record<string, unknown>[],
+): number {
+  const longestValue = Math.max(
+    columnName.length,
+    columnType?.length || 0,
+    ...rows.map(row => previewValue(tableRowValue(row, columnName)).length),
+  );
+  return Math.min(420, Math.max(120, longestValue * 8 + 32));
+}
+
+const schemaToTreeData = (schemas, search = '') => {
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+
+  return Object.keys(schemas).flatMap((schemaName) => {
+    const tables = Object.keys(schemas[schemaName]);
+    const schemaMatches = !normalizedSearch
+      || schemaName.toLocaleLowerCase().includes(normalizedSearch);
+    const matchingTables = schemaMatches
+      ? tables
+      : tables.filter(tableName => tableName.toLocaleLowerCase().includes(normalizedSearch));
+
+    if (!schemaMatches && matchingTables.length === 0) return [];
+
+    return [{
+      title: <TreeItemLabel name={schemaName} />,
+      key: schemaName,
+      treeData: matchingTables.map((tableName) => {
+        const key = `${schemaName}.${tableName}`;
+        schemasMap[key] = [schemaName, tableName];
+        return {
+          title: <TreeItemLabel name={tableName} />,
+          key,
+        };
+      }),
+    }];
+  });
+};
 
 function FileNameWithTooltip({ name }: { name: string }) {
   const nameRef = useRef<HTMLSpanElement>(null);
@@ -169,6 +343,16 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
     this.state = {
       expandedKeys: [],
       autoExpandParent: true,
+      schemaSearch: '',
+      selectedSchema: null,
+      selectedTable: null,
+      expandedSchemaTables: {},
+      tablePreview: null,
+      tablePreviewLoading: false,
+      tablePreviewError: null,
+      tablePreviewCount: null,
+      tablePreviewCountLoading: false,
+      tablePreviewCountError: null,
       checkedKeys: [],
       selectedKeys: [],
       activeTab: 'schema',
@@ -215,7 +399,108 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
   }
 
   onSelect(selectedKeys) {
-    this.setState({ selectedKeys });
+    const selectedKey = selectedKeys?.[0];
+    const tablesSchema = this.state.tablesSchema || {};
+    const selectedSchema = selectedKey && Object.prototype.hasOwnProperty.call(tablesSchema, selectedKey)
+      ? selectedKey
+      : null;
+    const tableParts = selectedKey && schemasMap[selectedKey];
+    const selectedTable = tableParts && tablesSchema[tableParts[0]]?.[tableParts[1]]
+      ? { schemaName: tableParts[0], tableName: tableParts[1] }
+      : null;
+
+    this.setState({
+      selectedKeys,
+      selectedSchema,
+      selectedTable,
+      selectedFile: null,
+      tablePreview: null,
+      tablePreviewError: null,
+      tablePreviewCount: null,
+      tablePreviewCountError: null,
+      tablePreviewLoading: Boolean(selectedTable),
+      tablePreviewCountLoading: Boolean(selectedTable),
+    }, () => {
+      if (selectedTable) {
+        void this.loadTablePreview(selectedTable);
+        void this.loadTableCount(selectedTable);
+      }
+    });
+  }
+
+  onSchemaSearchChange(event) {
+    this.setState({ schemaSearch: event.target.value });
+  }
+
+  toggleSchemaTable(schemaName: string, tableName: string) {
+    const tableKey = `${schemaName}.${tableName}`;
+    this.setState((state) => ({
+      expandedSchemaTables: {
+        ...state.expandedSchemaTables,
+        [tableKey]: !state.expandedSchemaTables[tableKey],
+      },
+    }));
+  }
+
+  tablePreviewRun = 0;
+
+  tableCountRun = 0;
+
+  async loadTablePreview(table: { schemaName: string; tableName: string }) {
+    const previewRun = ++this.tablePreviewRun;
+    this.setState({ tablePreviewLoading: true, tablePreviewError: null });
+    try {
+      const response = await playgroundFetch('playground/schema/table-preview', {
+        method: 'POST',
+        recoverSession: false,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(table),
+      });
+      if (!response.ok) throw new Error(await responseErrorMessage(response));
+      const result = await response.json();
+      if (previewRun !== this.tablePreviewRun) return;
+      this.setState({ tablePreview: result });
+    } catch (error: any) {
+      if (previewRun === this.tablePreviewRun) {
+        this.setState({ tablePreviewError: error?.message || String(error) });
+      }
+    } finally {
+      if (previewRun === this.tablePreviewRun) {
+        this.setState({ tablePreviewLoading: false });
+      }
+    }
+  }
+
+  async loadTableCount(table: { schemaName: string; tableName: string }) {
+    const countRun = ++this.tableCountRun;
+    this.setState({ tablePreviewCountLoading: true, tablePreviewCountError: null });
+    try {
+      const response = await playgroundFetch('playground/schema/table-count', {
+        method: 'POST',
+        recoverSession: false,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(table),
+      });
+      if (!response.ok) throw new Error(await responseErrorMessage(response));
+      const result = await response.json();
+      if (countRun !== this.tableCountRun) return;
+      this.setState({ tablePreviewCount: result.total == null ? null : String(result.total) });
+    } catch (error: any) {
+      if (countRun === this.tableCountRun) {
+        this.setState({ tablePreviewCountError: error?.message || String(error) });
+      }
+    } finally {
+      if (countRun === this.tableCountRun) {
+        this.setState({ tablePreviewCountLoading: false });
+      }
+    }
+  }
+
+  refreshTablePreview() {
+    const { selectedTable } = this.state;
+    if (!selectedTable) return;
+    void this.loadTablePreview(selectedTable);
+    void this.loadTableCount(selectedTable);
   }
 
   async loadDBSchema() {
@@ -268,12 +553,29 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
       return;
     }
 
+    const availableFileNames = new Set((result.files || []).map((file) => file.fileName));
+    const selectedFile = availableFileNames.has(this.state.selectedFile)
+      ? this.state.selectedFile
+      : null;
+    const editingFileName = this.state.editingFileName
+      && availableFileNames.has(this.state.editingFileName)
+      ? this.state.editingFileName
+      : null;
+    const visualEditorFileName = this.state.visualEditorFileName
+      && availableFileNames.has(this.state.visualEditorFileName)
+      ? this.state.visualEditorFileName
+      : null;
+
     this.setState({
       files: result.files,
       fileValidationErrors: {},
       fileValidationGlobalError: null,
       fileValidationCompleted: false,
       activeTab: result.files && result.files.length > 0 ? 'files' : 'schema',
+      selectedFile,
+      editingFileName,
+      editingContent: editingFileName ? this.state.editingContent : '',
+      visualEditorFileName,
     });
     void this.validateFiles();
   }
@@ -285,19 +587,41 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
       fileValidationCompleted: false,
     });
     try {
-      const response = await playgroundFetch('playground/schema/validation');
+      // Validation is informational. It must not invalidate an otherwise
+      // usable datamart session when compiler initialization is still settling.
+      const response = await fetch('playground/schema/validation');
       if (!response.ok) {
         throw new Error(await responseErrorMessage(response));
       }
       const result = await response.json();
+      const validationError = [result.globalError, ...Object.values(result.errors || {})]
+        .filter(Boolean)
+        .join('\n');
+      if (/Datamart session is missing or expired|Datamart credentials are required/i.test(validationError)) {
+        this.setState({
+          fileValidationErrors: {},
+          fileValidationGlobalError: validationError,
+          fileValidationCompleted: false,
+        });
+        return;
+      }
       if (validationRun !== this.validationRun) return;
       this.setState({
         fileValidationErrors: result.errors || {},
         fileValidationGlobalError: result.globalError || null,
         fileValidationCompleted: true,
       });
-    } catch (_error) {
-      // Validation is best-effort and must not block the editor.
+    } catch (error) {
+      // Validation is best-effort and must not log out the user, but its
+      // failure must remain visible for diagnosis.
+      const validationError = error instanceof Error ? error.message : String(error);
+      if (validationRun === this.validationRun) {
+        this.setState({
+          fileValidationErrors: {},
+          fileValidationGlobalError: validationError,
+          fileValidationCompleted: false,
+        });
+      }
     } finally {
       if (validationRun === this.validationRun) {
         this.setState({ fileValidationLoading: false });
@@ -405,10 +729,9 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
       throw new Error(await responseErrorMessage(res));
     }
 
-    const { files } = this.state;
-    this.setState({
-      files: files.map((f) => (f.fileName === fileName ? { ...f, content } : f))
-    });
+    this.setState((previousState) => ({
+      files: previousState.files.map((f) => (f.fileName === fileName ? { ...f, content } : f))
+    }));
     void this.validateFiles();
   }
 
@@ -425,7 +748,7 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
 
   recoverFromExpiredProjectSession(fileName: string, content: string, error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    if (!/Project session is missing or expired|Project credentials are required/i.test(errorMessage)) {
+    if (!/Datamart session is missing or expired|Datamart credentials are required/i.test(errorMessage)) {
       return false;
     }
 
@@ -663,10 +986,10 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
         visualEditorFileName: null,
       });
       await this.loadFiles();
-      message.success('Cubo excluído');
+      message.success('Arquivo excluído');
       playgroundAction('Delete File Success', { fileName: selectedFile });
     } catch (e: any) {
-      message.error('Não foi possível excluir o cubo');
+      message.error('Não foi possível excluir o arquivo');
       playgroundAction('Delete File Fail', {
         fileName: selectedFile,
         error: e?.toString?.() || String(e),
@@ -681,11 +1004,21 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
       schemaLoading,
       schemaLoadingError,
       tablesSchema,
+      schemaSearch,
       selectedFile,
       expandedKeys,
       autoExpandParent,
       checkedKeys,
       selectedKeys,
+      selectedSchema,
+      selectedTable,
+      expandedSchemaTables,
+      tablePreview,
+      tablePreviewLoading,
+      tablePreviewError,
+      tablePreviewCount,
+      tablePreviewCountLoading,
+      tablePreviewCountError,
       activeTab,
       isDocker,
       editingFileName,
@@ -720,8 +1053,10 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
         return <TreeNode {...item} />;
       });
 
+    const filteredTreeData = schemaToTreeData(tablesSchema || {}, schemaSearch);
+
     const renderTree = () =>
-      Object.keys(tablesSchema || {}).length > 0 ? (
+      filteredTreeData.length > 0 ? (
         <Tree
           checkable
           onExpand={this.onExpand.bind(this)}
@@ -732,8 +1067,10 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
           onSelect={this.onSelect.bind(this)}
           selectedKeys={selectedKeys}
         >
-          {renderTreeNodes(schemaToTreeData(tablesSchema || {}))}
+          {renderTreeNodes(filteredTreeData)}
         </Tree>
+      ) : schemaSearch.trim() ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nenhum schema ou tabela encontrado" />
       ) : (
         <Alert
           message="Schema do banco vazio"
@@ -754,9 +1091,169 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
         renderTree()
       );
 
+    const renderSchemaDetails = () => {
+      if (!selectedSchema || !tablesSchema?.[selectedSchema]) return null;
+
+      const tables = tablesSchema[selectedSchema];
+      const tableEntries = Object.entries(tables);
+
+      return (
+        <SchemaDetails>
+          <SchemaDetailsHeader>
+            <SchemaDetailsTitle level={3}>{selectedSchema}</SchemaDetailsTitle>
+            <Typography.Text type="secondary">
+              {tableEntries.length} {tableEntries.length === 1 ? 'tabela' : 'tabelas'}
+            </Typography.Text>
+          </SchemaDetailsHeader>
+
+          {tableEntries.map(([tableName, columns]) => (
+            <SchemaTableCard key={tableName}>
+              <SchemaTableHeader
+                type="button"
+                title={tableName}
+                aria-expanded={Boolean(expandedSchemaTables[`${selectedSchema}.${tableName}`])}
+                onClick={() => this.toggleSchemaTable(selectedSchema, tableName)}
+              >
+                <RightOutlined
+                  rotate={expandedSchemaTables[`${selectedSchema}.${tableName}`] ? 90 : 0}
+                  style={{ flexShrink: 0 }}
+                />
+                <SchemaTableName>{tableName}</SchemaTableName>
+              </SchemaTableHeader>
+              {expandedSchemaTables[`${selectedSchema}.${tableName}`] ? (
+                <>
+                  <SchemaColumnRow style={{ color: '#8c8c8c', fontSize: 12, fontWeight: 600 }}>
+                    <SchemaColumnCell>ATRIBUTO</SchemaColumnCell>
+                    <SchemaColumnCell>TIPO</SchemaColumnCell>
+                  </SchemaColumnRow>
+                  {columns.length > 0 ? columns.map((column) => (
+                    <SchemaColumnRow key={`${tableName}.${column.name}`}>
+                      <SchemaColumnCell title={column.name}>{column.name}</SchemaColumnCell>
+                      <SchemaColumnCell title={column.type || 'Desconhecido'}>
+                        {column.type || 'Desconhecido'}
+                      </SchemaColumnCell>
+                    </SchemaColumnRow>
+                  )) : (
+                    <SchemaColumnRow>
+                      <SchemaColumnCell>Sem atributos</SchemaColumnCell>
+                    </SchemaColumnRow>
+                  )}
+                </>
+              ) : null}
+            </SchemaTableCard>
+          ))}
+        </SchemaDetails>
+      );
+    };
+
+    const renderTableDetails = () => {
+      if (!selectedTable || !tablesSchema?.[selectedTable.schemaName]?.[selectedTable.tableName]) return null;
+
+      const metadataColumns = tablesSchema[selectedTable.schemaName][selectedTable.tableName] || [];
+      const sampleRows = tablePreview?.rows || [];
+      const sampleColumns = tablePreview?.columns?.length
+        ? tablePreview.columns
+        : metadataColumns.map((column) => column.name);
+
+      return (
+        <SchemaDetails>
+          <SchemaDetailsHeader>
+            <SchemaDetailsTitle level={3} style={{ marginBottom: 0 }}>
+              {selectedTable.schemaName}.{selectedTable.tableName}
+            </SchemaDetailsTitle>
+          </SchemaDetailsHeader>
+
+          <TableDetailsSectionTitle level={4}>Metadados</TableDetailsSectionTitle>
+          <TableMetadataCard>
+            <SchemaColumnRow style={{ color: '#8c8c8c', fontSize: 12, fontWeight: 600 }}>
+              <SchemaColumnCell>COLUNA</SchemaColumnCell>
+              <SchemaColumnCell>TIPO</SchemaColumnCell>
+            </SchemaColumnRow>
+            {metadataColumns.length > 0 ? metadataColumns.map((column) => (
+              <SchemaColumnRow key={column.name}>
+                <SchemaColumnCell title={column.name}>{column.name}</SchemaColumnCell>
+                <SchemaColumnCell title={column.type || 'Desconhecido'}>
+                  {column.type || 'Desconhecido'}
+                </SchemaColumnCell>
+              </SchemaColumnRow>
+            )) : (
+              <SchemaColumnRow>
+                <SchemaColumnCell>Sem colunas disponíveis</SchemaColumnCell>
+              </SchemaColumnRow>
+            )}
+          </TableMetadataCard>
+
+          <TableDetailsSectionTitle level={4}>Amostra de dados</TableDetailsSectionTitle>
+          <TableDetailsToolbar>
+            <Typography.Text type="secondary">
+              {tablePreviewCountLoading ? 'Contando registros...' : tablePreviewCount !== null
+                ? Number(tablePreviewCount) <= 25
+                  ? `Mostrando ${formatRecordCount(tablePreviewCount)} Registros`
+                  : (
+                    <>Mostrando {sampleRows.length} de <strong>{formatRecordCount(tablePreviewCount)}</strong> registros</>
+                  )
+                : tablePreviewCountError
+                  ? `Mostrando ${sampleRows.length} registros (total indisponível)`
+                  : `Mostrando ${sampleRows.length} registros`}
+            </Typography.Text>
+            <Button
+              style={{ marginLeft: 'auto' }}
+              icon={<ReloadOutlined />}
+              loading={tablePreviewLoading || tablePreviewCountLoading}
+              onClick={() => this.refreshTablePreview()}
+            >
+              Gerar nova amostra
+            </Button>
+          </TableDetailsToolbar>
+          {tablePreviewError ? (
+            <Alert
+              type="error"
+              showIcon
+              message="Não foi possível carregar a amostra"
+              description={tablePreviewError}
+            />
+          ) : tablePreviewLoading && !tablePreview ? (
+            <div style={{ minHeight: 160, display: 'grid', placeItems: 'center' }}>
+              <Spin tip="Consultando dados..." />
+            </div>
+          ) : (
+            <TableSampleScroll>
+              <Table
+                size="small"
+                bordered
+                loading={tablePreviewLoading}
+                pagination={false}
+                scroll={{ x: 'max-content' }}
+                rowKey={(_row, index) => String(index)}
+                dataSource={sampleRows}
+                locale={{ emptyText: 'Nenhum registro encontrado' }}
+                columns={sampleColumns.map((columnName) => {
+                  const columnType = metadataColumns.find((column) => (
+                    column.name.toLocaleLowerCase() === columnName.toLocaleLowerCase()
+                  ))?.type;
+                  return {
+                    title: (
+                      <div style={{ lineHeight: 1.2 }}>
+                        <div>{columnName}</div>
+                        <Typography.Text type="secondary" style={{ display: 'block', marginTop: 3, fontSize: 11, fontWeight: 400 }}>
+                          {columnType || ''}
+                        </Typography.Text>
+                      </div>
+                    ),
+                    key: columnName,
+                    width: previewColumnWidth(columnName, columnType, sampleRows),
+                    render: (_value, row) => previewValue(tableRowValue(row, columnName)),
+                  };
+                })}
+              />
+            </TableSampleScroll>
+          )}
+        </SchemaDetails>
+      );
+    };
+
     return (
       <>
-        <SchemaPageOverlayStyles />
         <Layout style={{ height: '100%' }}>
         <Sider width={340} className="schema-sidebar">
           <Tabs
@@ -804,6 +1301,15 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
                     </ButtonDropdown>
                   </div>
                 ) : null}
+                <div style={{ padding: '8px 12px', flexShrink: 0 }}>
+                  <Input
+                    allowClear
+                    prefix={<SearchOutlined />}
+                    placeholder="Buscar schemas e tabelas"
+                    value={schemaSearch}
+                    onChange={this.onSchemaSearchChange.bind(this)}
+                  />
+                </div>
                 <TablesTreeScroll>
                   {schemaLoading ? <CubeLoader /> : renderTreeOrError()}
                 </TablesTreeScroll>
@@ -818,7 +1324,9 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
 
         <Content
           style={{
-            minHeight: 280,
+            height: '100%',
+            minHeight: 0,
+            overflow: 'hidden',
             padding: 24,
           }}
         >
@@ -881,9 +1389,8 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
                   >
                     Ver amostra de dados
                   </Button>
-                  <Popconfirm
-                    title="Excluir este cubo?"
-                    overlayClassName="cube-remove-popconfirm"
+                  <ConfirmPopover
+                    title="Excluir este arquivo?"
                     okText="Excluir"
                     cancelText="Cancelar"
                     okButtonProps={{ danger: true, loading: deletingFile }}
@@ -896,9 +1403,9 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
                       loading={deletingFile}
                       disabled={savingFile || fileDialogLoading}
                     >
-                      Excluir cubo
+                      Excluir arquivo
                     </Button>
-                  </Popconfirm>
+                  </ConfirmPopover>
                 </Space>
               </div>
 
@@ -948,6 +1455,7 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
                   visible
                   fileName={selectedFile}
                   yamlContent={editingFileName === selectedFile ? editingContent : this.selectedFileContent()}
+                  files={this.state.files}
                   tablesSchema={tablesSchema}
                   onClose={() => this.setState({ visualEditorFileName: null })}
                   onSave={async (content) => {
@@ -956,10 +1464,19 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
                       this.setState({ editingContent: content });
                     }
                   }}
+                  onSaveFiles={async (changes) => {
+                    for (const change of changes) {
+                      await this.persistFileContent(change.fileName, change.content);
+                    }
+                  }}
                 />
               )}
 
             </>
+          ) : selectedTable ? (
+            renderTableDetails()
+          ) : selectedSchema ? (
+            renderSchemaDetails()
           ) : (
             <Empty
               style={{ marginTop: 50 }}
@@ -969,7 +1486,7 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
 
           <CubeRelationshipDiagram
             visible={relationshipDiagramVisible}
-            projectId={playgroundContext.multiProject?.activeProject?.id}
+            datamartId={playgroundContext.multiDatamart?.activeDatamart?.id}
             tablesSchema={tablesSchema}
             onClose={() => this.setState({ relationshipDiagramVisible: false })}
             onChanged={() => this.loadFiles()}

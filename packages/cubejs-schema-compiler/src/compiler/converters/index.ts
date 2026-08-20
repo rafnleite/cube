@@ -4,3 +4,4 @@ export * from './CubeRelationshipConverter';
 export * from './CubePrimaryKeyConverter';
 export * from './CubeDimensionConverter';
 export * from './CubeSchemaItemConverter';
+export * from './CubeSchemaSnapshotConverter';

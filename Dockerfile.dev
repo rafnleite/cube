@@ -1,8 +1,16 @@
 FROM node:24.18-bookworm
 
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    LC_CTYPE=C.UTF-8 \
+    ODBCSYSINI=/usr/local/nz/etc \
+    ODBCINI=/workspace/config/netezza-odbc.ini \
+    NZ_ODBC_INI_PATH=/usr/local/nz/etc \
+    NZ_ENCODING=UTF8
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential clang cmake curl git libclang-dev libssl-dev \
-    pkg-config protobuf-compiler unixodbc unixodbc-dev \
+    pkg-config protobuf-compiler unixodbc unixodbc-dev odbcinst \
   && rm -rf /var/lib/apt/lists/*
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \

@@ -1,0 +1,97 @@
+{
+  "version": 2,
+  "activeViewId": "default",
+  "views": {
+    "default": {
+      "id": "default",
+      "name": "Visão principal",
+      "backgroundColor": "#f7f8fc",
+      "visibility": {
+        "airplanes": true,
+        "airports_arrival": true,
+        "airports_departure": true,
+        "boarding_passes": true,
+        "bookings": true,
+        "seats": true,
+        "segments": true,
+        "tickets": true,
+        "timetable": true
+      },
+      "cubes": {
+        "airplanes": {
+          "name": "airplanes",
+          "source": "bookings.airplanes",
+          "position": {
+            "x": 1149.1635259545687,
+            "y": 762.2917040323473
+          }
+        },
+        "airports_arrival": {
+          "name": "airports_arrival",
+          "source": "bookings.airports",
+          "position": {
+            "x": 1105.8510357419655,
+            "y": 1356.3148705892422
+          }
+        },
+        "airports_departure": {
+          "name": "airports_departure",
+          "source": "bookings.airports",
+          "position": {
+            "x": -32.52946131168076,
+            "y": 535.0073813348324
+          }
+        },
+        "boarding_passes": {
+          "name": "boarding_passes",
+          "source": "bookings.boarding_passes",
+          "position": {
+            "x": -613.9350348746236,
+            "y": 976.5334340208884
+          }
+        },
+        "bookings": {
+          "name": "bookings",
+          "source": "bookings.bookings",
+          "position": {
+            "x": -1129.2508762773432,
+            "y": 1576.250857467884
+          }
+        },
+        "seats": {
+          "name": "seats",
+          "source": "bookings.seats",
+          "position": {
+            "x": 1731.9694016919445,
+            "y": 965.2119830058884
+          }
+        },
+        "segments": {
+          "name": "segments",
+          "source": "bookings.segments",
+          "position": {
+            "x": -13.394008488487572,
+            "y": 1389.407069376411
+          }
+        },
+        "tickets": {
+          "name": "tickets",
+          "source": "bookings.tickets",
+          "position": {
+            "x": -623.2362584323616,
+            "y": 1661.1451039843473
+          }
+        },
+        "timetable": {
+          "name": "timetable",
+          "source": "bookings.timetable",
+          "position": {
+            "x": 544.6783175888246,
+            "y": 883.1649839834982
+          }
+        }
+      }
+    }
+  },
+  "cubes": {}
+}

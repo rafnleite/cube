@@ -1,15 +1,17 @@
 import {
+  ArrowRightOutlined,
   FileFilled,
   MenuOutlined,
-  SlackOutlined,
 } from '@ant-design/icons';
-import { Dropdown, Layout, Menu } from 'antd';
+import { Dropdown, Layout, Menu, message } from 'antd';
+import { useState } from 'react';
 import { useMediaQuery } from 'react-responsive';
 import { Link } from 'react-router-dom';
 import styled from 'styled-components';
 
 import { StyledMenu, StyledMenuButton, StyledMenuItem } from './Menu';
-import { RunOnCubeCloud } from './RunOnCubeCloud';
+import { ConfirmPopover } from '../ConfirmPopover';
+import { usePlaygroundContext } from '../../hooks';
 
 const StyledHeader = styled(Layout.Header)`
   && {
@@ -25,7 +27,59 @@ type Props = {
   selectedKeys: string[];
 };
 
+async function leaveActiveProject() {
+  const response = await fetch('playground/datamarts/session', { method: 'DELETE' });
+  if (!response.ok) {
+    throw new Error('Não foi possível sair do projeto');
+  }
+
+  window.location.reload();
+}
+
+function LeaveProjectAction({ mobile = false }: { mobile?: boolean }) {
+  const [leaving, setLeaving] = useState(false);
+
+  async function handleConfirm() {
+    setLeaving(true);
+    try {
+      await leaveActiveProject();
+    } catch (error) {
+      setLeaving(false);
+      message.error(error instanceof Error ? error.message : 'Não foi possível sair do projeto');
+    }
+  }
+
+  const action = mobile ? (
+    <span>
+      <ArrowRightOutlined />
+      Sair do projeto
+    </span>
+  ) : (
+    <StyledMenuButton
+      as="button"
+      type="button"
+      noMargin
+      disabled={leaving}
+      aria-label="Sair do projeto ativo"
+    >
+      <ArrowRightOutlined />
+      Sair do projeto
+    </StyledMenuButton>
+  );
+
+  return (
+    <ConfirmPopover
+      title="Sair do projeto ativo?"
+      onConfirm={handleConfirm}
+      okButtonProps={{ loading: leaving }}
+    >
+      {action}
+    </ConfirmPopover>
+  );
+}
+
 export default function Header({ selectedKeys }: Props) {
+  const playgroundContext = usePlaygroundContext();
   const isDesktopOrLaptop = useMediaQuery({
     query: '(min-width: 992px)',
   });
@@ -33,6 +87,11 @@ export default function Header({ selectedKeys }: Props) {
   const isMobileOrTable = useMediaQuery({
     query: '(max-width: 991px)',
   });
+
+  const hasActiveProject = Boolean(
+    playgroundContext.multiDatamart?.enabled
+    && playgroundContext.multiDatamart.activeDatamart
+  );
 
   return (
     <StyledHeader>
@@ -62,14 +121,7 @@ export default function Header({ selectedKeys }: Props) {
             <Link to="/cube-bi">Cube BI</Link>
           </StyledMenuItem>
 
-          <StyledMenuButton
-            key="slack"
-            href="https://slack.cube.dev"
-            target="_blank"
-          >
-            <SlackOutlined />
-            Slack
-          </StyledMenuButton>
+          {hasActiveProject && <LeaveProjectAction />}
 
           <StyledMenuButton
             key="docs"
@@ -79,8 +131,6 @@ export default function Header({ selectedKeys }: Props) {
             <FileFilled />
             Documentação
           </StyledMenuButton>
-
-          <RunOnCubeCloud />
         </StyledMenu>
       )}
 
@@ -96,6 +146,12 @@ export default function Header({ selectedKeys }: Props) {
                 <Menu.Item key="/schema">
                   <Link to="/schema">Modelo de dados</Link>
                 </Menu.Item>
+
+                {hasActiveProject && (
+                  <Menu.Item key="leave-project">
+                    <LeaveProjectAction mobile />
+                  </Menu.Item>
+                )}
               </Menu>
             }
           >

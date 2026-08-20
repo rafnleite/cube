@@ -17,16 +17,42 @@ export async function responseErrorMessage(response: Response, includeDetails = 
   }
 }
 
+let datamartSessionRecoveryStarted = false;
+
+export function recoverExpiredDatamartSession(errorText: string) {
+  if (
+    datamartSessionRecoveryStarted
+    || !/Datamart session is missing or expired|Datamart credentials are required/i.test(errorText)
+  ) {
+    return;
+  }
+
+  datamartSessionRecoveryStarted = true;
+  void fetch('playground/datamarts/session', { method: 'DELETE' })
+    .catch(() => undefined)
+    .finally(() => window.location.reload());
+}
+
 export function playgroundFetch(url, options: any = {}) {
-  const { retries = 0, ...restOptions } = options;
+  const { retries = 0, recoverSession = true, ...restOptions } = options;
 
   return fetch(url, restOptions)
     .then(async (r) => {
+      if (recoverSession && (r.status === 401 || r.status === 500)) {
+        let errorText = await r.clone().text();
+        try {
+          const json = JSON.parse(errorText);
+          errorText = [json.error, json.details].filter(Boolean).join('\n') || errorText;
+        } catch (e: any) {
+          // Nothing
+        }
+        recoverExpiredDatamartSession(errorText);
+      }
       if (r.status === 500) {
         let errorText = await r.text();
         try {
           const json = JSON.parse(errorText);
-          errorText = json.error;
+          errorText = json.error || errorText;
         } catch (e: any) {
           // Nothing
         }
@@ -36,7 +62,7 @@ export function playgroundFetch(url, options: any = {}) {
     })
     .catch((e) => {
       if (e.message === 'Network request failed' && retries > 0) {
-        return playgroundFetch(url, { options, retries: retries - 1 });
+        return playgroundFetch(url, { ...restOptions, recoverSession, retries: retries - 1 });
       }
       throw e;
     });

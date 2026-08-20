@@ -1,0 +1,95 @@
+cubes:
+  - name: tf_notas_emitente_dia
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_EMITENTE_DIA\""
+    data_source: default
+
+    joins:
+      - name: td_regiao_fiscal
+        sql: "{CUBE}.sk_regiao_fiscal = {td_regiao_fiscal}.sk_regiao_fiscal"
+        relationship: many_to_one
+
+      - name: td_municipio
+        sql: "{CUBE}.sk_municipio = {td_municipio}.sk_municipio"
+        relationship: many_to_one
+
+      - name: td_cnae
+        sql: "{CUBE}.sk_cnaef = {td_cnae}.sk_cnaef"
+        relationship: many_to_one
+
+      - name: td_segmentacao_nfm
+        sql: "{CUBE}.sk_segmentacao_nfm = {td_segmentacao_nfm}.sk_segmentacao_nfm"
+        relationship: many_to_one
+
+      - name: td_periodo
+        sql: "{CUBE}.SK_DT_EMISSAO = {td_periodo}.DATA"
+        relationship: many_to_one
+
+    dimensions:
+      - name: id
+        title: ID
+        sql: COALESCE({CUBE}."SK_DT_EMISSAO" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_REGIAO_FISCAL" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_MUNICIPIO" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_CNAEF" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_SEGMENTACAO_NFM" || '', '')
+
+        type: string
+        primary_key: true
+
+      - name: sk_municipio
+        sql: '{CUBE}."SK_MUNICIPIO"'
+        type: number
+        primary_key: false
+
+      - name: sk_regiao_fiscal
+        sql: '{CUBE}."SK_REGIAO_FISCAL"'
+        type: number
+        primary_key: false
+
+      - name: sk_cnaef
+        sql: '{CUBE}."SK_CNAEF"'
+        type: number
+        primary_key: false
+
+      - name: sk_segmentacao_nfm
+        sql: '{CUBE}."SK_SEGMENTACAO_NFM"'
+        type: number
+        primary_key: false
+
+      - name: sk_dt_emissao
+        sql: '{CUBE}."SK_DT_EMISSAO"'
+        type: time
+        primary_key: false
+
+      - name: fl_auditado
+        title: Flag auditado
+        sql: '{CUBE}."FL_AUDITADO"'
+        type: string
+        primary_key: false
+
+      - name: cd_modelo_doc_fiscal
+        title: Código do modelo do documento fiscal
+        sql: '{CUBE}."CD_MODELO_DOC_FISCAL"'
+        type: string
+        primary_key: false
+
+    measures:
+      - name: count
+        title: Contagem
+        type: count
+
+      - name: qtd_nfm_dia
+        title: Quantidade NFM dia
+        sql: '{CUBE}."QTD_NFM_DIA"'
+        type: sum
+
+      - name: vlr_nfm_total_dia
+        sql: '{CUBE}."VLR_NFM_TOTAL_DIA"'
+        type: sum
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Fato - Notas emitente dia
+    hierarchies: []

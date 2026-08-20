@@ -3,70 +3,25 @@ import MonacoEditor, { OnMount } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import autocompleteConfig from '../../config/schema-autocomplete.json';
 import { TablesSchema, resolveColumnsForTable, TableColumn } from './cubeSchemaUtils';
+import {
+  SCHEMA_AUTOCOMPLETE,
+  toMonacoCompletionItems,
+} from './autocomplete/autocompleteDefinitions';
+import { registerCaseYamlCompletionProvider } from './CaseEditor';
 
 const SQL_COLUMN_SECTIONS = new Set(['dimensions', 'measures', 'segments']);
+let schemaEditorId = 0;
+
+function nextSchemaEditorPath() {
+  schemaEditorId += 1;
+  return `inmemory://cube-schema/${schemaEditorId}`;
+}
 
 /** Resolves the current cube's table columns from its `sql_table` value. */
 function resolveCubeColumns(model: Monaco.editor.ITextModel, tablesSchema?: TablesSchema): TableColumn[] {
   const match = model.getValue().match(/^\s*sql_table:\s*(.+?)\s*$/m);
   return resolveColumnsForTable(match?.[1], tablesSchema);
 }
-
-const CUBE_YAML_SNIPPETS = [
-  {
-    label: 'cube',
-    insertText: 'cubes:\n  - name: ${1:orders}\n    sql_table: ${2:public.orders}\n\n    dimensions:\n      - name: ${3:id}\n        sql: ${4:id}\n        type: ${5:number}\n        primary_key: true\n\n    measures:\n      - name: ${6:count}\n        type: count\n',
-    detail: 'Cube YAML skeleton'
-  },
-  {
-    label: 'dimension',
-    insertText: '- name: ${1:created_at}\n  sql: ${2:created_at}\n  type: ${3:time}\n',
-    detail: 'Dimension'
-  },
-  {
-    label: 'measure',
-    insertText: '- name: ${1:total_amount}\n  sql: ${2:amount}\n  type: ${3:sum}\n',
-    detail: 'Measure'
-  },
-  {
-    label: 'join',
-    insertText: '- name: ${1:customers}\n  relationship: ${2:many_to_one}\n  sql: ${3:${CUBE}.customer_id} = ${4:${customers}.id}\n',
-    detail: 'Join'
-  },
-  {
-    label: 'pre_aggregations',
-    insertText: 'pre_aggregations:\n  - name: ${1:main}\n    measures:\n      - ${2:CUBE.count}\n    dimensions:\n      - ${3:CUBE.status}\n    time_dimension: ${4:CUBE.created_at}\n    granularity: ${5:day}\n',
-    detail: 'Pre-aggregation'
-  }
-];
-
-const CUBE_JS_SNIPPETS = [
-  {
-    label: 'cube',
-    insertText: "cube('${1:Orders}', {\n  sql: `SELECT * FROM public.orders`,\n\n  measures: {\n    count: {\n      type: 'count'\n    }\n  },\n\n  dimensions: {\n    id: {\n      sql: 'id',\n      type: 'number',\n      primaryKey: true\n    },\n    createdAt: {\n      sql: 'created_at',\n      type: 'time'\n    }\n  }\n});\n",
-    detail: 'Cube JS skeleton'
-  },
-  {
-    label: 'dimension',
-    insertText: "${1:name}: {\n  sql: '${2:column_name}',\n  type: '${3:string}'\n}",
-    detail: 'Dimension'
-  },
-  {
-    label: 'measure',
-    insertText: "${1:totalAmount}: {\n  sql: '${2:amount}',\n  type: '${3:sum}'\n}",
-    detail: 'Measure'
-  },
-  {
-    label: 'join',
-    insertText: "${1:Customers}: {\n  relationship: '${2:many_to_one}',\n  sql: `${CUBE}.customer_id = ${Customers}.id`\n}",
-    detail: 'Join'
-  },
-  {
-    label: 'preAggregations',
-    insertText: "preAggregations: {\n  ${1:main}: {\n    type: 'rollup',\n    measureReferences: [count],\n    dimensionReferences: [status],\n    timeDimensionReference: createdAt,\n    granularity: '${2:day}'\n  }\n}",
-    detail: 'Pre-aggregation'
-  }
-];
 
 type SchemaSectionConfig = {
   keys: string[];
@@ -286,6 +241,7 @@ type Props = {
 
 export function SchemaFileEditor({ fileName, value, onChange, onSave, readOnly = false, tablesSchema }: Props) {
   const language = useMemo(() => languageFromFileName(fileName), [fileName]);
+  const path = useMemo(nextSchemaEditorPath, []);
 
   // `onMount` only runs once, so the latest `tablesSchema` must be read from a
   // ref inside completion callbacks instead of the closure (see readOnly bug).
@@ -300,6 +256,8 @@ export function SchemaFileEditor({ fileName, value, onChange, onSave, readOnly =
   }, [onSave]);
 
   const onMount = useCallback<OnMount>((editor, monaco) => {
+    registerCaseYamlCompletionProvider(monaco);
+
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
       if (!editor.getOption(monaco.editor.EditorOption.readOnly)) {
         void onSaveRef.current?.();
@@ -349,19 +307,6 @@ export function SchemaFileEditor({ fileName, value, onChange, onSave, readOnly =
         endColumn: word.endColumn,
       };
     };
-
-    const toSuggestions = (
-      snippets: { label: string; insertText: string; detail: string }[],
-      range: Monaco.IRange
-    ): Monaco.languages.CompletionItem[] => snippets.map((snippet) => ({
-      label: snippet.label,
-      kind: monaco.languages.CompletionItemKind.Snippet,
-      insertText: snippet.insertText,
-      insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-      documentation: snippet.detail,
-      detail: 'Cube snippet',
-      range
-    }));
 
     const valueSuggestions = (values: string[], linePrefix: string, range: Monaco.IRange): Monaco.languages.CompletionItem[] => values.map((item) => ({
       label: item,
@@ -431,6 +376,12 @@ export function SchemaFileEditor({ fileName, value, onChange, onSave, readOnly =
     const yamlProvider = monaco.languages.registerCompletionItemProvider('yaml', {
       triggerCharacters: [':', '-', ' '],
       provideCompletionItems: (model, position) => {
+        // The case editor also uses YAML syntax, but has its own scoped
+        // completion provider. Do not leak full schema snippets into it.
+        if (!model.uri.toString().startsWith('inmemory://cube-schema/')) {
+          return { suggestions: [] };
+        }
+
         const { linePrefix, lines, sectionName, sectionIndent } = currentContext(model, position);
         const range = completionRange(model, position);
 
@@ -463,7 +414,7 @@ export function SchemaFileEditor({ fileName, value, onChange, onSave, readOnly =
           } else {
             suggestions.push(...keySuggestions(schemaAutocomplete.yaml.root.keys, range));
             if (schemaAutocomplete.yaml.enableSnippets) {
-              suggestions.push(...toSuggestions(CUBE_YAML_SNIPPETS, range));
+              suggestions.push(...toMonacoCompletionItems(monaco, range, SCHEMA_AUTOCOMPLETE.yamlSnippets));
             }
           }
         }
@@ -494,7 +445,7 @@ export function SchemaFileEditor({ fileName, value, onChange, onSave, readOnly =
         }
 
         if (!suggestions.length && !sectionName && schemaAutocomplete.yaml.enableSnippets) {
-          suggestions.push(...toSuggestions(CUBE_YAML_SNIPPETS, range));
+          suggestions.push(...toMonacoCompletionItems(monaco, range, SCHEMA_AUTOCOMPLETE.yamlSnippets));
         }
 
         return { suggestions };
@@ -503,9 +454,13 @@ export function SchemaFileEditor({ fileName, value, onChange, onSave, readOnly =
 
     const jsProvider = monaco.languages.registerCompletionItemProvider('javascript', {
       provideCompletionItems: (model, position) => {
+        if (!model.uri.toString().startsWith('inmemory://cube-schema/')) {
+          return { suggestions: [] };
+        }
+
         const range = completionRange(model, position);
         return {
-          suggestions: toSuggestions(CUBE_JS_SNIPPETS, range)
+          suggestions: toMonacoCompletionItems(monaco, range, SCHEMA_AUTOCOMPLETE.javascriptSnippets)
         };
       }
     });
@@ -559,6 +514,7 @@ export function SchemaFileEditor({ fileName, value, onChange, onSave, readOnly =
 
   return (
     <MonacoEditor
+      path={path}
       language={language}
       theme="vs"
       value={value}

@@ -1,0 +1,30 @@
+cubes:
+  - name: td_segmentacao_nfm
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_SEGMENTACAO_NFM\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: sk_segmentacao_nfm
+        sql: '{CUBE}."SK_SEGMENTACAO_NFM"'
+        type: number
+        primary_key: true
+
+      - name: ds_segmentacao_nfm
+        title: Segmentação NFM
+        sql: '{CUBE}."DS_SEGMENTACAO_NFM"'
+        type: string
+        primary_key: false
+
+    measures:
+      - name: count
+        title: Contagem
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Segmentação NFM
+    hierarchies: []

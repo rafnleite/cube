@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Empty, Popconfirm } from 'antd';
+import { Button, Empty } from 'antd';
 import styled from 'styled-components';
 import { DragDropContext, Draggable, Droppable, DropResult } from 'react-beautiful-dnd';
 import {
@@ -8,6 +8,7 @@ import {
   PrimaryKeyFontAwesomeIcon,
   RightOutlined,
 } from '../../shared/icons/FontAwesomeIcons';
+import { ConfirmPopover } from '../../components/ConfirmPopover';
 
 const SortableList = styled.div`
   overflow: hidden;
@@ -170,13 +171,12 @@ export function SchemaItemList({
                           ) : null}
                         </SortableItemTitle>
                         <SortableItemActions>
-                          <Popconfirm
+                          <ConfirmPopover
                             title="Remover este item?"
-                            overlayClassName="cube-remove-popconfirm"
                             onConfirm={() => onRemove(index)}
                           >
                             <Button danger size="small" onClick={(event) => event.stopPropagation()}>Remover</Button>
-                          </Popconfirm>
+                          </ConfirmPopover>
                         </SortableItemActions>
                       </Header>
                       {expanded ? <SortableItemBody>{renderItemForm(item, index)}</SortableItemBody> : null}

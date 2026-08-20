@@ -1,0 +1,41 @@
+cubes:
+  - name: td_regiao_fiscal
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: sk_regiao_fiscal
+        sql: '{CUBE}."SK_REGIAO_FISCAL"'
+        type: number
+        primary_key: true
+
+      - name: cd_regiao_fiscal
+        title: Código da Região Fiscal
+        sql: "{CUBE}.CD_REGIAO_FISCAL"
+        type: number
+        primary_key: false
+
+      - name: nm_regiao_fiscal
+        title: Região Fiscal
+        sql: '{CUBE}."NM_REGIAO_FISCAL"'
+        type: string
+        primary_key: false
+
+    measures:
+      - name: populacao
+        title: População
+        sql: "{CUBE}.POPULACAO"
+        type: sum
+
+      - name: count
+        title: Contagem
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Região Fiscal
+    hierarchies: []

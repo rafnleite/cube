@@ -28,6 +28,8 @@ export type CubeDiagramRelationship = {
   targetCube: string;
   sourceColumn?: string;
   targetColumn?: string;
+  sourceColumns?: string[];
+  targetColumns?: string[];
   relationship: string;
   sql: string;
 };
@@ -40,6 +42,12 @@ export type CubeDiagramMember = {
   primaryKey?: boolean;
 };
 
+export type CubeDiagramHierarchy = {
+  name: string;
+  title?: string;
+  levels: string[];
+};
+
 export type CubeDiagramModel = {
   name: string;
   title?: string;
@@ -50,6 +58,7 @@ export type CubeDiagramModel = {
   source?: string;
   dimensions?: CubeDiagramMember[];
   measures?: CubeDiagramMember[];
+  hierarchies?: CubeDiagramHierarchy[];
 };
 
 function jsPropertyName(property: t.ObjectMethod | t.ObjectProperty | t.SpreadElement): string | null {
@@ -159,6 +168,62 @@ function readYamlMembers(cubeDefinition: YAMLMap, section: string): CubeDiagramM
   });
 }
 
+function readJsHierarchies(cubeDefinition: t.ObjectExpression): CubeDiagramHierarchy[] {
+  const sectionProperty = jsProperty(cubeDefinition, ['hierarchies']);
+  if (!sectionProperty || !t.isObjectExpression(sectionProperty.value) && !t.isArrayExpression(sectionProperty.value)) {
+    return [];
+  }
+
+  const hierarchies: CubeDiagramHierarchy[] = [];
+  const readHierarchy = (name: string | undefined, value: t.Node | null | undefined) => {
+    if (!name || !t.isObjectExpression(value)) return;
+    const levelsProperty = jsProperty(value, ['levels']);
+    if (!levelsProperty || !t.isArrayExpression(levelsProperty.value)) return;
+    const levels = levelsProperty.value.elements.flatMap(level => {
+      const levelName = jsStaticString(level);
+      return levelName ? [levelName] : [];
+    });
+    hierarchies.push({
+      name,
+      title: jsStaticString(jsProperty(value, ['title'])?.value),
+      levels,
+    });
+  };
+
+  if (t.isObjectExpression(sectionProperty.value)) {
+    sectionProperty.value.properties.forEach(property => {
+      if (t.isObjectProperty(property)) readHierarchy(jsPropertyName(property) || undefined, property.value);
+    });
+  } else {
+    sectionProperty.value.elements.forEach(element => {
+      if (!t.isObjectExpression(element)) return;
+      readHierarchy(jsStaticString(jsProperty(element, ['name'])?.value), element);
+    });
+  }
+  return hierarchies;
+}
+
+function readYamlHierarchies(cubeDefinition: YAMLMap): CubeDiagramHierarchy[] {
+  const sectionPair = yamlPair(cubeDefinition, ['hierarchies']);
+  if (!sectionPair || !isSeq(sectionPair.value)) return [];
+
+  return sectionPair.value.items.flatMap(item => {
+    if (!isMap(item)) return [];
+    const name = yamlStaticString(yamlPair(item, ['name']));
+    const levelsPair = yamlPair(item, ['levels']);
+    if (!name || !levelsPair || !isSeq(levelsPair.value)) return [];
+    const levels = levelsPair.value.items.flatMap(level => {
+      const levelName = isScalar(level) ? String(level.value || '') : '';
+      return levelName ? [levelName] : [];
+    });
+    return [{
+      name,
+      title: yamlStaticString(yamlPair(item, ['title'])),
+      levels,
+    }];
+  });
+}
+
 function setYamlScalar(object: YAMLMap, name: string, value: string): void {
   const existing = yamlPair(object, [name]);
   if (existing && isScalar(existing.value)) {
@@ -188,8 +253,9 @@ function parseColumnIdentifier(value: string): string | undefined {
   return undefined;
 }
 
-function parseColumnReference(reference: string, cubeName: string): string | undefined {
-  const cube = escapeRegExp(cubeName);
+function parseColumnReference(reference: string, cubeNames: string | string[]): string | undefined {
+  const names = Array.isArray(cubeNames) ? cubeNames : [cubeNames];
+  const cube = names.map(name => escapeRegExp(name)).join('|');
   const identifier = '([A-Za-z_][A-Za-z0-9_$]*)';
   const rawReference = new RegExp(`^(?:\\{${cube}\\}|\\$\\{${cube}\\})\\.(.+)$`);
   const memberReference = new RegExp(
@@ -207,30 +273,50 @@ function parseColumnReference(reference: string, cubeName: string): string | und
 
 function parseJoinColumns(
   sql: string,
+  sourceCube: string,
   targetCube: string
-): { sourceColumn?: string; targetColumn?: string } {
+): {
+  sourceColumn?: string;
+  targetColumn?: string;
+  sourceColumns?: string[];
+  targetColumns?: string[];
+} {
   const trimmed = sql.trim();
   const expression = trimmed.startsWith('`') && trimmed.endsWith('`')
     ? trimmed.slice(1, -1).replace(/\\`/g, '`').replace(/\\\\/g, '\\').trim()
     : trimmed;
-  const equality = expression.match(/^(.+?)\s*=\s*(.+)$/);
+  const sourceColumns: string[] = [];
+  const targetColumns: string[] = [];
+  const equalities = expression.split(/\s+AND\s+/i);
 
-  if (!equality) return {};
+  equalities.forEach(equalityExpression => {
+    const equality = equalityExpression.match(/^(.+?)\s*=\s*(.+)$/);
+    if (!equality) return;
 
-  const [, left, right] = equality;
-  const leftSource = parseColumnReference(left, 'CUBE');
-  const rightTarget = parseColumnReference(right, targetCube);
-  if (leftSource && rightTarget) {
-    return { sourceColumn: leftSource, targetColumn: rightTarget };
-  }
+    const [, left, right] = equality;
+    const leftSource = parseColumnReference(left, [sourceCube, 'CUBE']);
+    const rightTarget = parseColumnReference(right, targetCube);
+    if (leftSource && rightTarget) {
+      sourceColumns.push(leftSource);
+      targetColumns.push(rightTarget);
+      return;
+    }
 
-  const leftTarget = parseColumnReference(left, targetCube);
-  const rightSource = parseColumnReference(right, 'CUBE');
-  if (leftTarget && rightSource) {
-    return { sourceColumn: rightSource, targetColumn: leftTarget };
-  }
+    const leftTarget = parseColumnReference(left, targetCube);
+    const rightSource = parseColumnReference(right, [sourceCube, 'CUBE']);
+    if (leftTarget && rightSource) {
+      sourceColumns.push(rightSource);
+      targetColumns.push(leftTarget);
+    }
+  });
 
-  return {};
+  if (!sourceColumns.length || sourceColumns.length !== targetColumns.length) return {};
+  return {
+    sourceColumn: sourceColumns[0],
+    targetColumn: targetColumns[0],
+    sourceColumns,
+    targetColumns,
+  };
 }
 
 function createJoinSql(
@@ -559,6 +645,7 @@ export class CubeRelationshipReader implements CubeConverterInterface {
       source,
       dimensions: readJsMembers(cubeDefinition, 'dimensions'),
       measures: readJsMembers(cubeDefinition, 'measures'),
+      hierarchies: readJsHierarchies(cubeDefinition),
     });
 
     const joinsProperty = jsProperty(cubeDefinition, ['joins']);
@@ -604,7 +691,7 @@ export class CubeRelationshipReader implements CubeConverterInterface {
       targetCube,
       relationship,
       sql: sqlValue,
-      ...parseJoinColumns(sqlValue, targetCube),
+      ...parseJoinColumns(sqlValue, sourceCube, targetCube),
     });
   }
 
@@ -625,6 +712,7 @@ export class CubeRelationshipReader implements CubeConverterInterface {
       source: yamlStaticString(sqlTable || sql),
       dimensions: readYamlMembers(cubeDefinition, 'dimensions'),
       measures: readYamlMembers(cubeDefinition, 'measures'),
+      hierarchies: readYamlHierarchies(cubeDefinition),
     });
 
     const joinsPair = yamlPair(cubeDefinition, ['joins']);
@@ -646,8 +734,49 @@ export class CubeRelationshipReader implements CubeConverterInterface {
         targetCube,
         relationship,
         sql: sqlValue,
-        ...parseJoinColumns(sqlValue, targetCube),
+        ...parseJoinColumns(sqlValue, cubeName, targetCube),
       });
     });
+  }
+}
+
+/** Keeps primary-key dimensions first without changing the relative order of the other dimensions. */
+export class CubeDimensionOrderConverter implements CubeConverterInterface {
+  public convert(astByCubeName: AstByCubeName): void {
+    Object.values(astByCubeName).forEach(cubeDefSet => {
+      if ('ast' in cubeDefSet) {
+        const dimensionsProperty = jsProperty(cubeDefSet.cubeDefinition, ['dimensions']);
+        if (!dimensionsProperty) return;
+        if (t.isArrayExpression(dimensionsProperty.value)) {
+          dimensionsProperty.value.elements = this.primaryKeyFirst(
+            dimensionsProperty.value.elements,
+            element => t.isObjectExpression(element)
+              && Boolean(jsStaticBoolean(jsProperty(element, ['primaryKey', 'primary_key'])?.value))
+          );
+        } else if (t.isObjectExpression(dimensionsProperty.value)) {
+          dimensionsProperty.value.properties = this.primaryKeyFirst(
+            dimensionsProperty.value.properties,
+            property => t.isObjectProperty(property)
+              && t.isObjectExpression(property.value)
+              && Boolean(jsStaticBoolean(jsProperty(property.value, ['primaryKey', 'primary_key'])?.value))
+          );
+        }
+        return;
+      }
+
+      const dimensionsPair = yamlPair(cubeDefSet.cubeDefinition, ['dimensions']);
+      if (!dimensionsPair || !isSeq(dimensionsPair.value)) return;
+      dimensionsPair.value.items = this.primaryKeyFirst(
+        dimensionsPair.value.items,
+        item => isMap(item) && Boolean(yamlStaticString(yamlPair(item, ['primary_key', 'primaryKey'])) === 'true')
+      );
+    });
+  }
+
+  private primaryKeyFirst<T>(items: T[], isPrimaryKey: (item: T) => boolean): T[] {
+    return items
+      .map((item, index) => ({ item, index, primary: isPrimaryKey(item) }))
+      .sort((left, right) => Number(right.primary) - Number(left.primary) || left.index - right.index)
+      .map(entry => entry.item);
   }
 }

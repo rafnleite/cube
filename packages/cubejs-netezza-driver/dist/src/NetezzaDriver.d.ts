@@ -12,6 +12,7 @@ type NetezzaConnectionOptions = {
     connectionString?: string;
     dsn?: string;
     driver?: string;
+    securityLevel?: string;
     host?: string;
     port?: number | string;
     database?: string;
@@ -31,6 +32,8 @@ export type NetezzaDriverConfiguration = NetezzaConnectionOptions & PoolUserOpti
     testConnectionTimeout?: number;
     connectionTimeout?: number;
     loginTimeout?: number;
+    /** ODBC statement timeout, in seconds. Defaults to one minute. */
+    queryTimeout?: number;
     readOnly?: boolean;
 };
 /** Escapes an ODBC connection-string value using ODBC brace escaping. */
@@ -46,13 +49,14 @@ export declare class NetezzaDriver extends BaseDriver implements DriverInterface
     static dialectClass(): typeof NetezzaQuery;
     protected readonly pool: Pool<odbc.Connection>;
     protected readonly config: NetezzaDriverConfiguration;
+    protected readonly queryTimeout: number;
     private enabled;
     constructor(config?: NetezzaDriverConfiguration);
     protected createConnection(connectionString: string, poolName: string, config: NetezzaDriverConfiguration): Promise<odbc.Connection>;
     protected withConnection<T>(fn: (connection: odbc.Connection) => Promise<T>): Promise<T>;
     protected asOdbcParameters(values?: unknown[]): Array<number | string>;
-    protected queryResponse<R = unknown>(query: string, values?: unknown[]): Promise<odbc.Result<R>>;
-    query<R = unknown>(query: string, values?: unknown[], _options?: QueryOptions): Promise<R[]>;
+    protected queryResponse<R = unknown>(query: string, values?: unknown[], options?: QueryOptions): Promise<odbc.Result<R>>;
+    query<R = unknown>(query: string, values?: unknown[], options?: QueryOptions): Promise<R[]>;
     testConnection(): Promise<void>;
     protected mapOdbcColumns(columns?: odbc.ColumnDefinition[]): TableStructure;
     downloadQueryResults(query: string, values: unknown[] | undefined, options: DownloadQueryResultsOptions): Promise<DownloadQueryResultsResult>;

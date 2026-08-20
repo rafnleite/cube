@@ -6,7 +6,16 @@ services:
       dockerfile: Dockerfile.dev
     working_dir: /workspace
     env_file:
-      - .env.multi-project
+      - .env.multi-datamart
+    environment:
+      LD_LIBRARY_PATH: /usr/local/nz/lib64:/usr/local/nz/lib
+      ODBCSYSINI: /usr/local/nz/etc
+      ODBCINI: /workspace/config/netezza-odbc.ini
+      NZ_ODBC_INI_PATH: /usr/local/nz/etc
+      NZ_ENCODING: UTF8
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      LC_CTYPE: C.UTF-8
     ports:
       - "4000:4000"
       - "3030:3030"
@@ -23,6 +32,7 @@ services:
       # Keep the Linux native addon from the image visible when the Windows
       # source tree is bind-mounted over /workspace.
       - cube_native:/workspace/packages/cubejs-backend-native/native
+      - cube_netezza_driver:/usr/local/nz
     tmpfs:
       # Nx creates pseudo-IPC sockets here; a tmpfs prevents stale sockets
       # from surviving container stop/start cycles.
@@ -36,3 +46,4 @@ volumes:
   cube_cargo_cache:
   cube_target:
   cube_native:
+  cube_netezza_driver:

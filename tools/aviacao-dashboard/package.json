@@ -1,0 +1,14 @@
+{
+  "name": "cube-core-aviacao-dashboard",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4173",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "echarts": "^6.1.0",
+    "leaflet": "^1.9.4"
+  }
+}

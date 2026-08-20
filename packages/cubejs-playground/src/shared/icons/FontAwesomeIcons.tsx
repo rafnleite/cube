@@ -31,6 +31,7 @@ import {
   FaDiagramProject,
   FaEllipsis,
   FaEye,
+  FaEyeSlash,
   FaFile,
   FaFilter,
   FaFolder,
@@ -215,3 +216,4 @@ export const TimeIcon = makeIcon(FaCalendar);
 export const BooleanIcon = makeIcon(FaToggleOn);
 export const UpIcon = makeIcon(FaArrowUp);
 export const ViewIcon = makeIcon(FaEye);
+export const ViewOffIcon = makeIcon(FaEyeSlash);

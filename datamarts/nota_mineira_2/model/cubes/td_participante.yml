@@ -1,0 +1,120 @@
+cubes:
+  - name: td_participante
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_PARTICIPANTE\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: sk_participante
+        sql: '{CUBE}."SK_PARTICIPANTE"'
+        type: number
+        primary_key: true
+
+      - name: id_participante
+        title: CPF Participante
+        sql: '{CUBE}."ID_PARTICIPANTE"'
+        type: string
+        primary_key: false
+
+      - name: nm_participante
+        title: Nome do participante
+        sql: '{CUBE}."NM_PARTICIPANTE"'
+        type: string
+        primary_key: false
+
+      - name: fl_mobile
+        title: Flag - Mobile
+        sql: '{CUBE}."FL_MOBILE"'
+        type: string
+        primary_key: false
+
+      - name: nr_mobile_recup_cad
+        title: Número mobile recuperação de cadastro
+        sql: '{CUBE}."NR_MOBILE_RECUP_CAD"'
+        type: string
+        primary_key: false
+
+      - name: nr_telefone_fixo
+        title: Nùmero de telefone fixo
+        sql: '{CUBE}."NR_TELEFONE_FIXO"'
+        type: string
+        primary_key: false
+
+      - name: nr_celular
+        title: Número de celular
+        sql: '{CUBE}."NR_CELULAR"'
+        type: string
+        primary_key: false
+
+      - name: ds_email
+        title: E-mail
+        sql: '{CUBE}."DS_EMAIL"'
+        type: string
+        primary_key: false
+
+      - name: nm_logradouro
+        title: Endereço - Logradouro
+        sql: '{CUBE}."NM_LOGRADOURO"'
+        type: string
+        primary_key: false
+
+      - name: nr_endereco
+        title: Endereço - Número
+        sql: '{CUBE}."NR_ENDERECO"'
+        type: string
+        primary_key: false
+
+      - name: ds_endereco_complemento
+        title: Endereço - Complemento
+        sql: '{CUBE}."DS_ENDERECO_COMPLEMENTO"'
+        type: string
+        primary_key: false
+
+      - name: nm_bairro
+        title: Endereço - Bairro
+        sql: '{CUBE}."NM_BAIRRO"'
+        type: string
+        primary_key: false
+
+      - name: cep
+        title: Endereço - CEP
+        sql: "{CUBE}.CEP"
+        type: number
+        primary_key: false
+
+      - name: id_localidade
+        title: ID Localidade
+        sql: "{CUBE}.ID_LOCALIDADE"
+        type: number
+        primary_key: false
+
+      - name: dt_alteracao
+        title: Data alteração
+        sql: '{CUBE}."DT_ALTERACAO"'
+        type: time
+        primary_key: false
+
+      - name: dt_inclusao
+        title: Data inclusão
+        sql: '{CUBE}."DT_INCLUSAO"'
+        type: time
+        primary_key: false
+
+      - name: dt_carga_dados
+        title: Data de carga dos dados
+        sql: '{CUBE}."DT_CARGA_DADOS"'
+        type: time
+        primary_key: false
+
+    measures:
+      - name: count
+        title: Contagem
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Participante
+    hierarchies: []

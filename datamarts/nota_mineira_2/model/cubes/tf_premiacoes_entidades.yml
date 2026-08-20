@@ -1,0 +1,157 @@
+cubes:
+  - name: tf_premiacoes_entidades
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_ENTIDADES\""
+    data_source: default
+
+    joins:
+      - name: td_sorteio
+        sql: "{CUBE}.sk_sorteio = {td_sorteio}.sk_sorteio"
+        relationship: many_to_one
+
+      - name: td_periodo
+        sql: "{CUBE}.dt_sorteio = {td_periodo}.data"
+        relationship: many_to_one
+
+      - name: td_bilhetagem
+        sql: "{CUBE}.sk_bilhetagem = {td_bilhetagem}.sk_bilhetagem"
+        relationship: many_to_one
+
+      - name: td_municipio
+        sql: "{CUBE}.sk_municipio = {td_municipio}.sk_municipio"
+        relationship: many_to_one
+
+      - name: td_regiao_fiscal
+        sql: "{CUBE}.sk_regiao_fiscal = {td_regiao_fiscal}.sk_regiao_fiscal"
+        relationship: many_to_one
+
+      - name: td_premio_status
+        sql: "{CUBE}.sk_premio_status = {td_premio_status}.sk_premio_status"
+        relationship: many_to_one
+
+      - name: td_entidade_social
+        sql: "{CUBE}.SK_ENTIDADE_PREMIADA = {td_entidade_social}.SK_ENTIDADE_SOCIAL"
+        relationship: many_to_one
+
+      - name: td_participante
+        sql: "{CUBE}.SK_PARTICIPANTE_PREMIADO = {td_participante}.SK_PARTICIPANTE"
+        relationship: many_to_one
+
+    dimensions:
+      - name: id
+        title: ID
+        sql: COALESCE({CUBE}."SK_PREMIADO" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_SORTEIO" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_BILHETAGEM" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_MUNICIPIO" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_REGIAO_FISCAL" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_PARTICIPANTE_PREMIADO" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_ENTIDADE_PREMIADA" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_PREMIO_STATUS" || '', '')
+
+        type: string
+        primary_key: true
+
+      - name: sk_sorteio
+        sql: '{CUBE}."SK_SORTEIO"'
+        type: number
+        primary_key: false
+
+      - name: sk_bilhetagem
+        sql: '{CUBE}."SK_BILHETAGEM"'
+        type: number
+        primary_key: false
+
+      - name: sk_municipio
+        sql: '{CUBE}."SK_MUNICIPIO"'
+        type: number
+        primary_key: false
+
+      - name: sk_regiao_fiscal
+        sql: '{CUBE}."SK_REGIAO_FISCAL"'
+        type: number
+        primary_key: false
+
+      - name: sk_premio_status
+        sql: '{CUBE}."SK_PREMIO_STATUS"'
+        type: number
+        primary_key: false
+
+      - name: dt_sorteio
+        sql: '{CUBE}."DT_SORTEIO"'
+        type: time
+        primary_key: false
+
+      - name: sk_participante_premiado
+        sql: '{CUBE}."SK_PARTICIPANTE_PREMIADO"'
+        type: number
+        primary_key: false
+
+      - name: sk_entidade_premiada
+        sql: '{CUBE}."SK_ENTIDADE_PREMIADA"'
+        type: number
+        primary_key: false
+
+      - name: sk_premiado
+        sql: '{CUBE}."SK_PREMIADO"'
+        type: string
+        primary_key: false
+
+      - name: dt_bilhetagem
+        sql: '{CUBE}."DT_BILHETAGEM"'
+        type: time
+        primary_key: false
+
+      - name: fl_entidade_indicada
+        sql: '{CUBE}."FL_ENTIDADE_INDICADA"'
+        type: number
+        primary_key: false
+
+      - name: dt_premio_primeira_requisicao
+        sql: '{CUBE}."DT_PREMIO_PRIMEIRA_REQUISICAO"'
+        type: time
+        primary_key: false
+
+      - name: dt_premio_ultima_requisicao
+        sql: '{CUBE}."DT_PREMIO_ULTIMA_REQUISICAO"'
+        type: time
+        primary_key: false
+
+      - name: fl_premio_pago
+        sql: '{CUBE}."FL_PREMIO_PAGO"'
+        type: number
+        primary_key: false
+
+      - name: dt_premio_pagamento
+        sql: '{CUBE}."DT_PREMIO_PAGAMENTO"'
+        type: time
+        primary_key: false
+
+      - name: cd_requisicao_premio
+        sql: '{CUBE}."CD_REQUISICAO_PREMIO"'
+        type: string
+        primary_key: false
+
+      - name: nr_chave_acesso
+        sql: '{CUBE}."NR_CHAVE_ACESSO"'
+        type: string
+        primary_key: false
+
+    measures:
+      - name: count
+        title: Contagem
+        type: count
+
+      - name: vlr_premio_entidade
+        sql: '{CUBE}."VLR_PREMIO_ENTIDADE"'
+        type: sum
+
+      - name: qtd_requisicoes
+        sql: '{CUBE}."QTD_REQUISICOES"'
+        type: sum
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Fato - Premiação Entidade
+    hierarchies: []

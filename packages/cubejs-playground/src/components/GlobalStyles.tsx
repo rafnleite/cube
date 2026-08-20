@@ -108,20 +108,41 @@ const GlobalStyles = createGlobalStyle`
 
   .schema-sidebar,
   .schema-sidebar .ant-tabs,
-  .schema-sidebar .ant-tabs-content {
+  .schema-sidebar .ant-tabs-content,
+  .schema-sidebar .ant-tabs-content-holder,
+  .schema-sidebar .ant-tabs-tabpane {
     height: 100%;
+    min-height: 0;
   }
 
   .schema-sidebar {
     background: #fff;
     border-right: 1px solid #eee;
     padding: 0;
+    min-height: 0;
+    overflow: hidden;
   }
 
+  .schema-sidebar .ant-tabs {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .schema-sidebar .ant-tabs-content {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .schema-sidebar .ant-tabs-content-holder,
+  .schema-sidebar .ant-tabs-content,
   .schema-sidebar .ant-tabs-tabpane {
-    /* TODO: replace with flexbox */
-    height: 85%;
-    overflow: auto;
+    overflow: hidden;
+  }
+
+  .schema-sidebar .ant-tabs-content-holder {
+    flex: 1;
   }
 
   .ant-popover-disabled-compatible-wrapper {

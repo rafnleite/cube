@@ -7,6 +7,7 @@ export type SchemaEntityFormProps = {
   onChange: (key: string, value: any) => void;
   columns?: TableColumn[];
   tablesSchema?: TablesSchema;
+  dimensionOptions?: Array<{ name: string; title?: string }>;
   examples?: Record<string, string>;
 };
 
@@ -27,13 +28,34 @@ export const MEASURE_FIELDS = [
   'rolling_window', 'filters', 'case', 'meta',
 ];
 
-export const HIERARCHY_FIELDS = ['name', 'title', 'public', 'levels'];
-export const SEGMENT_FIELDS = ['name', 'sql', 'title', 'description', 'public'];
+export const HIERARCHY_FIELDS = ['title', 'name', 'public', 'levels'];
+export const SEGMENT_FIELDS = ['title', 'name', 'sql', 'description', 'public'];
 export const JOIN_FIELDS = ['name', 'sql', 'relationship'];
 export const PRE_AGGREGATION_FIELDS = [
   'name', 'type', 'measures', 'dimensions', 'time_dimension', 'granularity',
   'partition_granularity', 'refresh_key', 'external', 'scheduled_refresh', 'indexes',
 ];
+
+/**
+ * The schema compiler expects measure filters in the form
+ * `filters: [{ sql: '...' }]`. The visual editors use one SQL text box for
+ * this field, so normalize that representation at the editor boundary.
+ */
+export function normalizeMeasureFilters(value: unknown): Array<{ sql: string }> | undefined {
+  const values = Array.isArray(value) ? value : [value];
+  const filters = values
+    .map((item) => {
+      if (typeof item === 'string') return item.trim();
+      if (item && typeof item === 'object' && 'sql' in item) {
+        return String((item as { sql?: unknown }).sql || '').trim();
+      }
+      return '';
+    })
+    .filter(Boolean)
+    .map(sql => ({ sql }));
+
+  return filters.length ? filters : undefined;
+}
 
 export const FORM_EXAMPLES: Record<string, Record<string, string>> = {
   cubes: {

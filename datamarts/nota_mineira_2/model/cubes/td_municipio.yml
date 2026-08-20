@@ -1,0 +1,161 @@
+cubes:
+  - name: td_municipio
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: sk_municipio
+        sql: '{CUBE}."SK_MUNICIPIO"'
+        type: number
+        primary_key: true
+
+      - name: id_municipio_siare
+        title: ID SIARE
+        sql: "{CUBE}.ID_MUNICIPIO_SIARE"
+        type: number
+        primary_key: false
+
+      - name: id_municipio_ibge
+        title: ID IBGE
+        sql: "{CUBE}.ID_MUNICIPIO_IBGE"
+        type: number
+        primary_key: false
+
+      - name: ds_municipio_siare
+        title: Nome - SIARE
+        sql: '{CUBE}."DS_MUNICIPIO_SIARE"'
+        type: string
+        primary_key: false
+
+      - name: ds_municipio_ibge
+        title: Nome - IBGE
+        sql: '{CUBE}."DS_MUNICIPIO_IBGE"'
+        type: string
+        primary_key: false
+
+      - name: ds_municipio_cognos
+        title: Nome - Cognos
+        sql: '{CUBE}."DS_MUNICIPIO_COGNOS"'
+        type: string
+        primary_key: false
+
+      - name: id_uf_siare
+        title: UF - ID SIARE
+        sql: "{CUBE}.ID_UF_SIARE"
+        type: number
+        primary_key: false
+
+      - name: sg_uf_siare
+        title: UF - Sigla
+        sql: '{CUBE}."SG_UF_SIARE"'
+        type: string
+        primary_key: false
+
+      - name: ds_nome_uf
+        title: UF - Nome
+        sql: '{CUBE}."DS_NOME_UF"'
+        type: string
+        primary_key: false
+
+      - name: ds_regiao_metropolitana
+        title: Região metropolitana
+        sql: '{CUBE}."DS_REGIAO_METROPOLITANA"'
+        type: string
+        primary_key: false
+
+      - name: id_cep_siare
+        title: CEP - SIARE
+        sql: "{CUBE}.ID_CEP_SIARE"
+        type: number
+        primary_key: false
+
+      - name: ds_territorio
+        title: Território
+        sql: '{CUBE}."DS_TERRITORIO"'
+        type: string
+        primary_key: false
+
+      - name: id_territorio
+        title: Território - ID
+        sql: "{CUBE}.ID_TERRITORIO"
+        type: number
+        primary_key: false
+
+      - name: ds_mesorregiao
+        title: Mesorregião
+        sql: '{CUBE}."DS_MESORREGIAO"'
+        type: string
+        primary_key: false
+
+      - name: cd_mesorregiao
+        title: Mesorregião - Código
+        sql: "{CUBE}.CD_MESORREGIAO"
+        type: number
+        primary_key: false
+
+      - name: ds_microrregiao
+        title: Microrregião
+        sql: '{CUBE}."DS_MICRORREGIAO"'
+        type: string
+        primary_key: false
+
+      - name: cd_microrregiao
+        title: Microrregião - Código
+        sql: "{CUBE}.CD_MICRORREGIAO"
+        type: number
+        primary_key: false
+
+      - name: cd_df_circunscricao
+        title: Código de delegacia fiscal de circunscrição
+        sql: '{CUBE}."CD_DF_CIRCUNSCRICAO"'
+        type: string
+        primary_key: false
+
+      - name: ds_df_circunscricao
+        title: Delegacia fiscal de circunscrição
+        sql: '{CUBE}."DS_DF_CIRCUNSCRICAO"'
+        type: string
+        primary_key: false
+
+      - name: cd_af_circunscricao
+        title: Código de administração fazendária de circunscrição
+        sql: '{CUBE}."CD_AF_CIRCUNSCRICAO"'
+        type: string
+        primary_key: false
+
+      - name: ds_af_circunscricao
+        title: Administração fazendária de circunscrição
+        sql: '{CUBE}."DS_AF_CIRCUNSCRICAO"'
+        type: string
+        primary_key: false
+
+      - name: sk_localidade
+        title: SK localidade
+        sql: '{CUBE}."SK_LOCALIDADE"'
+        type: number
+        primary_key: false
+
+      - name: sk_regiao_fiscal
+        title: SK Região Fiscal
+        sql: '{CUBE}."SK_REGIAO_FISCAL"'
+        type: number
+        primary_key: false
+
+    measures:
+      - name: populacao
+        title: População
+        sql: "{CUBE}.POPULACAO"
+        type: sum
+
+      - name: count
+        title: Contagem
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Município
+    hierarchies: []

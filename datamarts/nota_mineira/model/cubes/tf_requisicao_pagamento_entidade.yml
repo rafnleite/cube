@@ -1,0 +1,28 @@
+cubes:
+  - name: tf_requisicao_pagamento_entidade
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_ENTIDADE\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: sk_premiado
+        sql: "{CUBE}.\"SK_PREMIADO\""
+        type: string
+
+      - name: dt_requisicao
+        sql: "{CUBE}.\"DT_REQUISICAO\""
+        type: time
+
+      - name: dt_retorno_proc_pag_grp
+        sql: "{CUBE}.\"DT_RETORNO_PROC_PAG_GRP\""
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+

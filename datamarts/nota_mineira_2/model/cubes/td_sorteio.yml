@@ -1,0 +1,71 @@
+cubes:
+  - name: td_sorteio
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: sk_sorteio
+        sql: '{CUBE}."SK_SORTEIO"'
+        type: number
+        primary_key: true
+
+      - name: ds_sorteio
+        title: Descrição
+        sql: '{CUBE}."DS_SORTEIO"'
+        type: string
+        primary_key: false
+
+      - name: sk_bilhetagem
+        sql: '{CUBE}."SK_BILHETAGEM"'
+        type: number
+        primary_key: false
+
+      - name: dt_previsao_sorteio
+        title: Data prevista
+        sql: '{CUBE}."DT_PREVISAO_SORTEIO"'
+        type: time
+        primary_key: false
+
+      - name: dt_inicio_ref_compra
+        title: Data início do período de referência de compra
+        sql: '{CUBE}."DT_INICIO_REF_COMPRA"'
+        type: time
+        primary_key: false
+
+      - name: dt_fim_ref_compra
+        title: Data final do período de referência de compra
+        sql: '{CUBE}."DT_FIM_REF_COMPRA"'
+        type: time
+        primary_key: false
+
+      - name: dt_cancelamento
+        title: Data de cancelamento
+        sql: '{CUBE}."DT_CANCELAMENTO"'
+        type: time
+        primary_key: false
+
+      - name: ds_motivo_cancelamento
+        title: Motivo de cancelamento
+        sql: '{CUBE}."DS_MOTIVO_CANCELAMENTO"'
+        type: string
+        primary_key: false
+
+      - name: dt_sorteio
+        title: Data de sorteio
+        sql: '{CUBE}."DT_SORTEIO"'
+        type: time
+        primary_key: false
+
+    measures:
+      - name: count
+        title: Contagem
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Sorteio
+    hierarchies: []

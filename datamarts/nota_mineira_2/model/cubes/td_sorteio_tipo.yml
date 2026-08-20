@@ -1,0 +1,30 @@
+cubes:
+  - name: td_sorteio_tipo
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_TIPO\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: sk_sorteio_tipo
+        sql: '{CUBE}."SK_SORTEIO_TIPO"'
+        type: number
+        primary_key: true
+
+      - name: ds_sorteio_tipo
+        title: Descrição- Tipo de sorteio
+        sql: '{CUBE}."DS_SORTEIO_TIPO"'
+        type: string
+        primary_key: false
+
+    measures:
+      - name: count
+        title: Contagem
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Tipo de sorteio
+    hierarchies: []

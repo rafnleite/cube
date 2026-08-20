@@ -1,0 +1,72 @@
+cubes:
+  - name: td_participante
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_PARTICIPANTE\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: id_participante
+        sql: "{CUBE}.\"ID_PARTICIPANTE\""
+        type: string
+
+      - name: nm_participante
+        sql: "{CUBE}.\"NM_PARTICIPANTE\""
+        type: string
+
+      - name: fl_mobile
+        sql: "{CUBE}.\"FL_MOBILE\""
+        type: string
+
+      - name: nr_mobile_recup_cad
+        sql: "{CUBE}.\"NR_MOBILE_RECUP_CAD\""
+        type: string
+
+      - name: nr_telefone_fixo
+        sql: "{CUBE}.\"NR_TELEFONE_FIXO\""
+        type: string
+
+      - name: nr_celular
+        sql: "{CUBE}.\"NR_CELULAR\""
+        type: string
+
+      - name: ds_email
+        sql: "{CUBE}.\"DS_EMAIL\""
+        type: string
+
+      - name: nm_logradouro
+        sql: "{CUBE}.\"NM_LOGRADOURO\""
+        type: string
+
+      - name: ds_endereco_complemento
+        sql: "{CUBE}.\"DS_ENDERECO_COMPLEMENTO\""
+        type: string
+
+      - name: nr_endereco
+        sql: "{CUBE}.\"NR_ENDERECO\""
+        type: string
+
+      - name: nm_bairro
+        sql: "{CUBE}.\"NM_BAIRRO\""
+        type: string
+
+      - name: dt_alteracao
+        sql: "{CUBE}.\"DT_ALTERACAO\""
+        type: time
+
+      - name: dt_inclusao
+        sql: "{CUBE}.\"DT_INCLUSAO\""
+        type: time
+
+      - name: dt_carga_dados
+        sql: "{CUBE}.\"DT_CARGA_DADOS\""
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+

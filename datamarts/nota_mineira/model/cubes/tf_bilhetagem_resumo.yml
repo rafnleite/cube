@@ -1,0 +1,20 @@
+cubes:
+  - name: tf_bilhetagem_resumo
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TF_BILHETAGEM_RESUMO\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: ds_bilhetagem
+        sql: "{CUBE}.\"DS_BILHETAGEM\""
+        type: string
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+

@@ -1,0 +1,72 @@
+cubes:
+  - name: td_cnae
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_CNAE\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: sg_secao
+        sql: "{CUBE}.\"SG_SECAO\""
+        type: string
+
+      - name: ds_secao
+        sql: "{CUBE}.\"DS_SECAO\""
+        type: string
+
+      - name: nr_divisao
+        sql: "{CUBE}.\"NR_DIVISAO\""
+        type: string
+
+      - name: ds_divisao
+        sql: "{CUBE}.\"DS_DIVISAO\""
+        type: string
+
+      - name: nr_grupo
+        sql: "{CUBE}.\"NR_GRUPO\""
+        type: string
+
+      - name: ds_grupo
+        sql: "{CUBE}.\"DS_GRUPO\""
+        type: string
+
+      - name: nr_classe
+        sql: "{CUBE}.\"NR_CLASSE\""
+        type: string
+
+      - name: ds_classe
+        sql: "{CUBE}.\"DS_CLASSE\""
+        type: string
+
+      - name: nr_subclasse
+        sql: "{CUBE}.\"NR_SUBCLASSE\""
+        type: string
+
+      - name: ds_subclasse
+        sql: "{CUBE}.\"DS_SUBCLASSE\""
+        type: string
+
+      - name: ds_segmento
+        sql: "{CUBE}.\"DS_SEGMENTO\""
+        type: string
+
+      - name: ds_nicho
+        sql: "{CUBE}.\"DS_NICHO\""
+        type: string
+
+      - name: dt_ini_obrigacao
+        sql: "{CUBE}.\"DT_INI_OBRIGACAO\""
+        type: time
+
+      - name: dt_fim_obrigacao
+        sql: "{CUBE}.\"DT_FIM_OBRIGACAO\""
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+

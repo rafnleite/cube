@@ -1,0 +1,74 @@
+cubes:
+  - name: tf_notas_participante_dia
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_PARTICIPANTE_DIA\""
+    data_source: default
+
+    joins:
+      - name: td_regiao_fiscal
+        sql: "{CUBE}.sk_regiao_fiscal = {td_regiao_fiscal}.sk_regiao_fiscal"
+        relationship: many_to_one
+
+      - name: td_municipio
+        sql: "{CUBE}.sk_municipio = {td_municipio}.sk_municipio"
+        relationship: many_to_one
+
+      - name: td_participante
+        sql: "{CUBE}.sk_participante = {td_participante}.sk_participante"
+        relationship: many_to_one
+
+      - name: td_periodo
+        sql: "{CUBE}.SK_DT_EMISSAO = {td_periodo}.DATA"
+        relationship: many_to_one
+
+    dimensions:
+      - name: id
+        title: ID
+        sql: COALESCE({CUBE}."SK_DT_EMISSAO" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_REGIAO_FISCAL" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_MUNICIPIO" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_PARTICIPANTE" || '', '')
+
+        type: string
+        primary_key: true
+
+      - name: sk_regiao_fiscal
+        sql: '{CUBE}."SK_REGIAO_FISCAL"'
+        type: number
+        primary_key: false
+
+      - name: sk_municipio
+        sql: '{CUBE}."SK_MUNICIPIO"'
+        type: number
+        primary_key: false
+
+      - name: sk_participante
+        sql: '{CUBE}."SK_PARTICIPANTE"'
+        type: number
+        primary_key: false
+
+      - name: sk_dt_emissao
+        sql: '{CUBE}."SK_DT_EMISSAO"'
+        type: time
+        primary_key: false
+
+    measures:
+      - name: count
+        title: Contagem
+        type: count
+
+      - name: qtd_nfce_dia
+        title: Quantidade de NFCe dia
+        sql: '{CUBE}."QTD_NFCE_DIA"'
+        type: sum
+
+      - name: vlr_nfce_total_dia
+        title: Valor total
+        sql: '{CUBE}."VLR_NFCE_TOTAL_DIA"'
+        type: sum
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Fato - Notas participante dia
+    hierarchies: []

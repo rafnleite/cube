@@ -15,6 +15,8 @@ export type CubeSchemaItemDefinition = {
   cubeName: string;
   section: CubeSchemaItemSection;
   itemName?: string;
+  /** Zero-based occurrence among items with the same name, ignoring case. */
+  itemIndex?: number;
   values: Record<string, unknown>;
   operation?: 'upsert' | 'delete';
 };
@@ -89,6 +91,10 @@ function yamlName(item: YAMLMap): string | undefined {
   return pair?.value && typeof (pair.value as any).value !== 'undefined' ? String((pair.value as any).value) : undefined;
 }
 
+function sameMemberName(left: unknown, right: unknown): boolean {
+  return String(left || '').trim().toLowerCase() === String(right || '').trim().toLowerCase();
+}
+
 function yamlSectionName(section: CubeSchemaItemSection): string {
   return section;
 }
@@ -120,13 +126,22 @@ export class CubeSchemaItemConverter implements CubeConverterInterface {
       if (!lookupName) throw new Error('A schema item name is required for deletion');
       if (t.isObjectExpression(sectionProperty.value)) {
         sectionProperty.value.properties = sectionProperty.value.properties.filter(
-          property => jsPropertyName(property) !== lookupName
+          property => !sameMemberName(jsPropertyName(property), lookupName)
         );
       } else if (t.isArrayExpression(sectionProperty.value)) {
-        sectionProperty.value.elements = sectionProperty.value.elements.filter(element => (
-          !(t.isObjectExpression(element) && jsProperty(element, ['name'])
-            && String((jsProperty(element, ['name'])!.value as t.StringLiteral).value) === lookupName)
-        ));
+        let occurrence = 0;
+        let removed = false;
+        sectionProperty.value.elements = sectionProperty.value.elements.filter(element => {
+          const isMatch = t.isObjectExpression(element) && jsProperty(element, ['name'])
+            && sameMemberName((jsProperty(element, ['name'])!.value as t.StringLiteral).value, lookupName);
+          if (!isMatch) return true;
+          if (this.definition.itemIndex === undefined) return false;
+          if (occurrence++ === this.definition.itemIndex && !removed) {
+            removed = true;
+            return false;
+          }
+          return true;
+        });
       }
       return;
     }
@@ -145,7 +160,7 @@ export class CubeSchemaItemConverter implements CubeConverterInterface {
 
     if (t.isObjectExpression(sectionProperty.value)) {
       const lookupName = this.definition.itemName || requestedName;
-      const existing = sectionProperty.value.properties.find(property => jsPropertyName(property) === lookupName);
+      const existing = sectionProperty.value.properties.find(property => sameMemberName(jsPropertyName(property), lookupName));
       if (existing && t.isObjectProperty(existing) && t.isObjectExpression(existing.value)) {
         existing.key = jsKey(requestedName);
         updateJsObject(existing.value, values, false);
@@ -159,10 +174,14 @@ export class CubeSchemaItemConverter implements CubeConverterInterface {
 
     if (t.isArrayExpression(sectionProperty.value)) {
       const lookupName = this.definition.itemName || requestedName;
-      const existing = sectionProperty.value.elements.find(element => (
-        t.isObjectExpression(element) && jsProperty(element, ['name'])
-          && String((jsProperty(element, ['name'])!.value as t.StringLiteral).value) === lookupName
-      ));
+      let occurrence = 0;
+      const existing = sectionProperty.value.elements.find(element => {
+        const isMatch = t.isObjectExpression(element) && jsProperty(element, ['name'])
+          && sameMemberName((jsProperty(element, ['name'])!.value as t.StringLiteral).value, lookupName);
+        if (!isMatch) return false;
+        if (this.definition.itemIndex === undefined || occurrence++ === this.definition.itemIndex) return true;
+        return false;
+      });
       if (t.isObjectExpression(existing)) {
         updateJsObject(existing, values, true);
       } else {
@@ -194,7 +213,18 @@ export class CubeSchemaItemConverter implements CubeConverterInterface {
       if (!sequence) return;
       const lookupName = this.definition.itemName;
       if (!lookupName) throw new Error('A schema item name is required for deletion');
-      sequence.items = sequence.items.filter(candidate => !(isMap(candidate) && yamlName(candidate) === lookupName));
+      let occurrence = 0;
+      let removed = false;
+      sequence.items = sequence.items.filter(candidate => {
+        const isMatch = isMap(candidate) && sameMemberName(yamlName(candidate), lookupName);
+        if (!isMatch) return true;
+        if (this.definition.itemIndex === undefined) return false;
+        if (occurrence++ === this.definition.itemIndex && !removed) {
+          removed = true;
+          return false;
+        }
+        return true;
+      });
       if (sequence.items.length === 0 && sectionPair) cubeDefinition.delete(section);
       return;
     }
@@ -208,7 +238,13 @@ export class CubeSchemaItemConverter implements CubeConverterInterface {
     const requestedName = String(values.name || this.definition.itemName || '');
     if (!requestedName) throw new Error('A schema item name is required');
     const lookupName = this.definition.itemName || requestedName;
-    let item = sequence.items.find(candidate => isMap(candidate) && yamlName(candidate) === lookupName) as YAMLMap | undefined;
+    let occurrence = 0;
+    let item = sequence.items.find(candidate => {
+      const isMatch = isMap(candidate) && sameMemberName(yamlName(candidate), lookupName);
+      if (!isMatch) return false;
+      if (this.definition.itemIndex === undefined || occurrence++ === this.definition.itemIndex) return true;
+      return false;
+    }) as YAMLMap | undefined;
     if (!item) {
       item = yaml.createNode({}) as YAMLMap;
       sequence.items.unshift(item);

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Input, Select, Tooltip } from 'antd';
+import { Button, Input, Select, Tooltip } from 'antd';
 import schemaAutocomplete from '../../config/schema-autocomplete.json';
 import { QuestionOutlined } from '../../shared/icons/FontAwesomeIcons';
 import { TableColumn, TablesSchema } from './cubeSchemaUtils';
@@ -13,6 +13,7 @@ import {
 } from './SchemaFieldComponents';
 import { SqlExpressionAutocomplete } from './SqlExpressionAutocomplete';
 import { CaseEditor } from './CaseEditor';
+import { MeasureFilterEditor } from './MeasureFilterEditor';
 
 export type SchemaFormLayoutProps = {
   section: string;
@@ -21,6 +22,7 @@ export type SchemaFormLayoutProps = {
   onChange: (key: string, value: any) => void;
   columns?: TableColumn[];
   tablesSchema?: TablesSchema;
+  dimensionOptions?: Array<{ name: string; title?: string }>;
   examples?: Record<string, string>;
   optionOverrides?: Record<string, string[]>;
   multilineFields?: Set<string>;
@@ -50,6 +52,7 @@ function fieldControl(
   onChange: (value: any) => void,
   columns: TableColumn[],
   tablesSchema: TablesSchema,
+  dimensionOptions: Array<{ name: string; title?: string }>,
   optionOverrides?: Record<string, string[]>,
   multilineFields: Set<string> = new Set<string>(),
 ) {
@@ -89,6 +92,17 @@ function fieldControl(
     );
   }
 
+  if (key === 'filters' && section === 'measures') {
+    return (
+      <MeasureFilterEditor
+        value={value}
+        onChange={onChange}
+        columns={columns}
+        tablesSchema={tablesSchema}
+      />
+    );
+  }
+
   if (key === 'description' || key === 'case') {
     return (
       <Input.TextArea
@@ -109,6 +123,83 @@ function fieldControl(
         onChange={(event) => onChange(event.target.value)}
         style={{ fontFamily: 'monospace' }}
       />
+    );
+  }
+
+  if (key === 'levels' && dimensionOptions.length > 0) {
+    const normalizeLevel = (level: any): string => {
+      if (typeof level === 'string') return level.trim();
+      if (level && typeof level === 'object') {
+        return String(level.name || level.value || '').trim();
+      }
+      return level == null ? '' : String(level).trim();
+    };
+    const selectedLevels = Array.isArray(value)
+      ? value.map(normalizeLevel).filter(Boolean)
+      : String(value || '').split(',').map(level => level.trim()).filter(Boolean);
+    const labels = new Map(dimensionOptions.map(dimension => [dimension.name, dimension]));
+    const availableDimensions = dimensionOptions.filter(dimension => !selectedLevels.includes(dimension.name));
+    const moveLevel = (index: number, offset: number) => {
+      const next = [...selectedLevels];
+      const targetIndex = index + offset;
+      if (targetIndex < 0 || targetIndex >= next.length) return;
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      onChange(next.length ? next : undefined);
+    };
+
+    return (
+      <div>
+        <Select
+          showSearch
+          style={{ width: '100%' }}
+          value={undefined}
+          placeholder="Adicionar dimensão"
+          optionFilterProp="children"
+          onChange={(next) => {
+            const normalized = normalizeLevel(next);
+            if (normalized && !selectedLevels.includes(normalized)) {
+              onChange([...selectedLevels, normalized]);
+            }
+          }}
+        >
+          {availableDimensions.map(dimension => (
+            <Select.Option key={dimension.name} value={dimension.name}>
+              {dimension.title && dimension.title !== dimension.name
+                ? `${dimension.title} (${dimension.name})`
+                : dimension.name}
+            </Select.Option>
+          ))}
+        </Select>
+        {selectedLevels.length ? (
+          <div style={{ marginTop: 8, border: '1px solid #f0f0f0', borderRadius: 4 }}>
+            {selectedLevels.map((level, index) => {
+              const dimension = labels.get(level);
+              return (
+                <div
+                  key={`${level}-${index}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '5px 8px',
+                    borderBottom: index < selectedLevels.length - 1 ? '1px solid #f0f0f0' : undefined,
+                  }}
+                >
+                  <span style={{ width: 22, color: '#8c8c8c', fontSize: 12 }}>{index + 1}.</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    {dimension?.title && dimension.title !== dimension.name ? dimension.title : level}
+                    {dimension?.title && dimension.title !== dimension.name ? (
+                      <span style={{ marginLeft: 6, color: '#8c8c8c', fontSize: 11 }}>({level})</span>
+                    ) : null}
+                  </span>
+                  <Button type="text" size="small" disabled={index === 0} onClick={() => moveLevel(index, -1)} aria-label="Mover nível para cima">↑</Button>
+                  <Button type="text" size="small" disabled={index === selectedLevels.length - 1} onClick={() => moveLevel(index, 1)} aria-label="Mover nível para baixo">↓</Button>
+                  <Button type="text" size="small" danger onClick={() => onChange(selectedLevels.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Remover ${level}`}>×</Button>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
     );
   }
 
@@ -164,6 +255,7 @@ export function SchemaFormLayout({
   onChange,
   columns = [],
   tablesSchema = {},
+  dimensionOptions = [],
   examples = {},
   optionOverrides,
   multilineFields = new Set<string>(),
@@ -228,7 +320,7 @@ export function SchemaFormLayout({
           <SchemaFieldRow key={key}>
             <SchemaFieldLabel>{label}</SchemaFieldLabel>
             <SchemaFieldInputCell>
-              {fieldControl(section, key, values[key], value => onChange(key, value), columns, tablesSchema, optionOverrides, multilineFields)}
+              {fieldControl(section, key, values[key], value => onChange(key, value), columns, tablesSchema, dimensionOptions, optionOverrides, multilineFields)}
             </SchemaFieldInputCell>
             <Tooltip title={tooltip}>
               <SchemaFieldHelp><QuestionOutlined /></SchemaFieldHelp>

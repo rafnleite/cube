@@ -1,0 +1,103 @@
+cubes:
+  - name: tf_bilhetagem_resumo
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TF_BILHETAGEM_RESUMO\""
+    data_source: default
+
+    joins:
+      - name: td_bilhetagem
+        sql: "{CUBE}.sk_bilhetagem = {td_bilhetagem}.sk_bilhetagem"
+        relationship: many_to_one
+
+      - name: td_municipio
+        sql: "{CUBE}.sk_municipio = {td_municipio}.sk_municipio"
+        relationship: many_to_one
+
+      - name: td_regiao_fiscal
+        sql: "{CUBE}.sk_regiao_fiscal = {td_regiao_fiscal}.sk_regiao_fiscal"
+        relationship: many_to_one
+
+      - name: td_faixa_histograma_bilhete
+        sql: "{CUBE}.SK_FAIXA_QTD_BILHETE = {td_faixa_histograma_bilhete}.SK_FAIXA"
+        relationship: many_to_one
+
+      - name: td_faixa_histograma_participante
+        sql: "{CUBE}.SK_FAIXA_QTD_PARTICIPANTE =
+          {td_faixa_histograma_participante}.SK_FAIXA"
+
+        relationship: many_to_one
+
+    dimensions:
+      - name: id
+        title: ID
+        sql: COALESCE({CUBE}."SK_BILHETAGEM" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_TIPO_SORTEIO" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_MUNICIPIO" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_REGIAO_FISCAL" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_FAIXA_QTD_PARTICIPANTE" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_FAIXA_QTD_BILHETE" || '', '')
+
+        type: string
+        primary_key: true
+
+      - name: sk_bilhetagem
+        sql: '{CUBE}."SK_BILHETAGEM"'
+        type: number
+        primary_key: false
+
+      - name: sk_municipio
+        sql: '{CUBE}."SK_MUNICIPIO"'
+        type: number
+        primary_key: false
+
+      - name: sk_regiao_fiscal
+        sql: '{CUBE}."SK_REGIAO_FISCAL"'
+        type: number
+        primary_key: false
+
+      - name: sk_faixa_qtd_participante
+        sql: '{CUBE}."SK_FAIXA_QTD_PARTICIPANTE"'
+        type: number
+        primary_key: false
+
+      - name: sk_faixa_qtd_bilhete
+        sql: '{CUBE}."SK_FAIXA_QTD_BILHETE"'
+        type: number
+        primary_key: false
+
+      - name: sk_tipo_sorteio
+        sql: '{CUBE}."SK_TIPO_SORTEIO"'
+        type: number
+        primary_key: false
+
+      - name: ds_bilhetagem
+        title: Descrição bilhetagem
+        sql: '{CUBE}."DS_BILHETAGEM"'
+        type: string
+        primary_key: false
+
+    measures:
+      - name: populacao
+        title: População
+        sql: "{CUBE}.POPULACAO"
+        type: sum
+
+      - name: count
+        title: Contagem
+        type: count
+
+      - name: qtd_participante
+        title: Quantidade de participantes
+        sql: '{CUBE}."QTD_PARTICIPANTE"'
+        type: sum
+
+      - name: qtd_bilhete
+        title: Quantidade de bilhetes
+        sql: '{CUBE}."QTD_BILHETE"'
+        type: sum
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Fato - Bilhetagem resumo
+    hierarchies: []

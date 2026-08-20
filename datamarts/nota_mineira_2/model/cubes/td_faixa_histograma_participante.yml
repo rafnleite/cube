@@ -1,0 +1,48 @@
+cubes:
+  - name: td_faixa_histograma_participante
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_PARTICIPANTE\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: sk_faixa
+        sql: '{CUBE}."SK_FAIXA"'
+        type: number
+        primary_key: true
+
+      - name: ds_faixa
+        title: Descrição faixa
+        sql: '{CUBE}."DS_FAIXA"'
+        type: string
+        primary_key: false
+
+      - name: ds_faixa_completo
+        title: Descrição faixa completo
+        sql: '{CUBE}."DS_FAIXA_COMPLETO"'
+        type: string
+        primary_key: false
+
+      - name: vlr_min
+        title: Mínimo
+        sql: "{CUBE}.VLR_MIN"
+        type: number
+        primary_key: false
+
+      - name: vlr_max
+        title: Máximo
+        sql: "{CUBE}.VLR_MAX"
+        type: number
+        primary_key: false
+
+    measures:
+      - name: count
+        title: Contagem
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Faixa histograma participante
+    hierarchies: []

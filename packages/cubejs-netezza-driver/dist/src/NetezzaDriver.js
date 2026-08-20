@@ -97,12 +97,26 @@ function buildNetezzaConnectionString(options) {
     }
     return [
         entry('DRIVER', options.driver || 'NetezzaSQL'),
-        entry('SERVER', options.host),
-        entry('PORT', options.port || 5480),
-        entry('DATABASE', options.database),
-        entry('SCHEMA', options.schema),
-        entry('UID', options.user),
-        entry('PWD', options.password),
+        // The IBM driver expects these Netezza keywords in their native form.
+        // Bracing SERVER/PORT/DATABASE makes the vendor driver reject the
+        // connection when SECURITYLEVEL is present.
+        `SERVERNAME=${options.host}`,
+        `PORT=${options.port || 5480}`,
+        `DATABASE=${options.database}`,
+        // Match the IBM Netezza DSN used by the Windows clients. This keeps
+        // direct Cube connections on the same preferred-unsecured mode.
+        // Netezza expects this enum unbraced; braced ODBC values are rejected as
+        // an invalid security level by the vendor driver.
+        `SECURITYLEVEL=${options.securityLevel || 'preferredUnSecured'}`,
+        // Keep Netezza character data in UTF-8 when returned through unixODBC.
+        // node-odbc binds SQL_WCHAR metadata as UTF-16 on unixODBC.  The
+        // Netezza driver must use the same representation or catalog names are
+        // returned as pairs of bytes rendered as CJK characters.
+        'UNICODETRANSLATIONOPTION=utf16',
+        'CHARACTERTRANSLATIONOPTION=all',
+        options.schema === undefined || options.schema === '' ? undefined : `SCHEMA=${options.schema}`,
+        options.user === undefined || options.user === '' ? undefined : `USERNAME=${options.user}`,
+        options.password === undefined || options.password === '' ? undefined : `PASSWORD=${options.password}`,
     ].filter(Boolean).join(';');
 }
 exports.buildNetezzaConnectionString = buildNetezzaConnectionString;
@@ -116,6 +130,7 @@ class NetezzaDriver extends base_driver_1.BaseDriver {
     }
     pool;
     config;
+    queryTimeout;
     enabled = false;
     constructor(config = {}) {
         super({ testConnectionTimeout: config.testConnectionTimeout });
@@ -136,10 +151,12 @@ class NetezzaDriver extends base_driver_1.BaseDriver {
         const poolName = (0, base_driver_1.createPoolName)('netezza', dataSource, preAggregations);
         this.pool = new shared_1.Pool(poolName, {
             create: async () => this.createConnection(connectionString, poolName, config),
-            validate: async (connection) => connection.connected(),
             destroy: async (connection) => {
-                if (connection.connected()) {
+                try {
                     await connection.close();
+                }
+                catch {
+                    // The vendor driver may already have closed the native handle.
                 }
             },
         }, {
@@ -149,7 +166,6 @@ class NetezzaDriver extends base_driver_1.BaseDriver {
             softIdleTimeoutMillis: config.softIdleTimeoutMillis || 30000,
             idleTimeoutMillis: config.idleTimeoutMillis || 30000,
             acquireTimeoutMillis: config.acquireTimeoutMillis || 20000,
-            testOnBorrow: true,
         });
         this.pool.on('factoryCreateError', (error) => this.databasePoolError(error));
         this.pool.on('factoryDestroyError', (error) => this.databasePoolError(error));
@@ -158,6 +174,9 @@ class NetezzaDriver extends base_driver_1.BaseDriver {
             ...config,
             schema: connectionOptions.schema,
         };
+        this.queryTimeout = Number(config.queryTimeout
+            || (0, shared_1.getEnv)('dbQueryTimeout', { dataSource, preAggregations })
+            || 60);
         this.enabled = true;
     }
     async createConnection(connectionString, poolName, config) {
@@ -184,11 +203,12 @@ class NetezzaDriver extends base_driver_1.BaseDriver {
     asOdbcParameters(values = []) {
         return values;
     }
-    async queryResponse(query, values = []) {
-        return this.withConnection(async (connection) => connection.query(query, this.asOdbcParameters(values)));
+    async queryResponse(query, values = [], options) {
+        const timeout = Number(options?.queryTimeout || this.queryTimeout);
+        return this.withConnection(async (connection) => connection.query(query, this.asOdbcParameters(values), { timeout }));
     }
-    async query(query, values = [], _options) {
-        const result = await this.queryResponse(query, values);
+    async query(query, values = [], options) {
+        const result = await this.queryResponse(query, values, options);
         return Array.from(result);
     }
     async testConnection() {

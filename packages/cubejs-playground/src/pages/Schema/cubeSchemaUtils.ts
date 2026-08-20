@@ -25,25 +25,78 @@ export function expressionReferencesColumn(expression: unknown, columnName: stri
   return localReference.test(expression) || bareReference.test(expression);
 }
 
+function splitTableReference(reference: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let quote: string | null = null;
+
+  for (let index = 0; index < reference.length; index += 1) {
+    const character = reference[index];
+    if (quote) {
+      if (character === quote) {
+        if (reference[index + 1] === quote) {
+          current += character;
+          index += 1;
+        } else {
+          quote = null;
+        }
+      } else {
+        current += character;
+      }
+      continue;
+    }
+
+    if (character === '"' || character === '`' || character === '[') {
+      quote = character === '[' ? ']' : character;
+      continue;
+    }
+    if (character === '.') {
+      parts.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += character;
+  }
+
+  if (current.trim()) parts.push(current.trim());
+  return parts.filter(Boolean);
+}
+
+function findTableColumns(
+  schema: Record<string, TableColumn[]> | undefined,
+  tableName: string,
+): TableColumn[] | undefined {
+  if (!schema) return undefined;
+  const tableKey = Object.keys(schema).find(key => key.toLowerCase() === tableName.toLowerCase());
+  return tableKey ? schema[tableKey] : undefined;
+}
+
+function findSchema(
+  tablesSchema: TablesSchema,
+  schemaName: string,
+): Record<string, TableColumn[]> | undefined {
+  const schemaKey = Object.keys(tablesSchema).find(key => key.toLowerCase() === schemaName.toLowerCase());
+  return schemaKey ? tablesSchema[schemaKey] : undefined;
+}
+
 /** Resolves a `schema.table` (or bare `table`) reference against the loaded DB schema. */
 export function resolveColumnsForTable(sqlTable: string | undefined, tablesSchema?: TablesSchema): TableColumn[] {
   if (!tablesSchema || !sqlTable) {
     return [];
   }
 
-  const tableRef = sqlTable.trim().replace(/^['"]|['"]$/g, '');
-  const parts = tableRef.split('.');
+  const parts = splitTableReference(sqlTable.trim());
   const tableName = parts[parts.length - 1];
   const schemaName = parts.length >= 2 ? parts[parts.length - 2] : null;
 
-  if (schemaName && tablesSchema[schemaName]?.[tableName]) {
-    return tablesSchema[schemaName][tableName];
+  if (schemaName) {
+    const columns = findTableColumns(findSchema(tablesSchema, schemaName), tableName);
+    if (columns) return columns;
   }
 
   for (const schema of Object.keys(tablesSchema)) {
-    if (tablesSchema[schema]?.[tableName]) {
-      return tablesSchema[schema][tableName];
-    }
+    const columns = findTableColumns(tablesSchema[schema], tableName);
+    if (columns) return columns;
   }
 
   return [];

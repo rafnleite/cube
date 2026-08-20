@@ -1,0 +1,3166 @@
+{
+  "version": 2,
+  "activeViewId": "view-1787081898728",
+  "views": {
+    "default": {
+      "id": "default",
+      "name": "Visão principal",
+      "backgroundColor": "#f7f8fc",
+      "visibility": {
+        "td_bilhetagem": true,
+        "td_cnae": true,
+        "td_entidade_social": true,
+        "td_faixa_histograma_bilhete": true,
+        "td_faixa_histograma_participante": true,
+        "td_municipio": true,
+        "td_pagamento_retorno_status": true,
+        "td_participante": true,
+        "td_periodo": true,
+        "td_premio_status": true,
+        "td_regiao_fiscal": true,
+        "td_segmentacao_nfm": true,
+        "td_sorteio": true,
+        "td_sorteio_status": true,
+        "td_sorteio_tipo": true,
+        "tf_bilhetagem_resumo": true,
+        "tf_notas_emitente_dia": true,
+        "tf_notas_participante_dia": true,
+        "tf_partic_ent_indicacoes": true,
+        "tf_participante_adesao": true,
+        "tf_premiacoes_entidades": true,
+        "tf_premiacoes_participantes": true,
+        "tf_qt_nfce_dia": true,
+        "tf_quantidade_bilhetes_participante": true,
+        "tf_requisicao_pagamento_entidade": true,
+        "tf_requisicao_pagamento_participante": true
+      },
+      "cubes": {
+        "td_bilhetagem": {
+          "name": "td_bilhetagem",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_BILHETAGEM\"",
+          "position": {
+            "x": -1204.7413492435967,
+            "y": 1711.2138210787898
+          }
+        },
+        "td_cnae": {
+          "name": "td_cnae",
+          "source": "NOTA_MINEIRA_ARM.TD_CNAE",
+          "position": {
+            "x": 2698.495992668328,
+            "y": 2568.470202511259
+          }
+        },
+        "td_entidade_social": {
+          "name": "td_entidade_social",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_ENTIDADE_SOCIAL\"",
+          "position": {
+            "x": 4340.962331488154,
+            "y": 2424.2988282478727
+          }
+        },
+        "td_faixa_histograma_bilhete": {
+          "name": "td_faixa_histograma_bilhete",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_BILHETE\"",
+          "position": {
+            "x": 5353.39019748703,
+            "y": 3196.2007024532163
+          }
+        },
+        "td_faixa_histograma_participante": {
+          "name": "td_faixa_histograma_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_PARTICIPANTE\"",
+          "position": {
+            "x": 5154.999999999999,
+            "y": 2470.8749999999995
+          }
+        },
+        "td_municipio": {
+          "name": "td_municipio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": 1587.1723507452891,
+            "y": 2509.426095481293
+          }
+        },
+        "td_pagamento_retorno_status": {
+          "name": "td_pagamento_retorno_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PAGAMENTO_RETORNO_STATUS\"",
+          "position": {
+            "x": 225,
+            "y": 1598
+          }
+        },
+        "td_participante": {
+          "name": "td_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PARTICIPANTE\"",
+          "position": {
+            "x": 3589.999999999996,
+            "y": 4152.999999999997
+          }
+        },
+        "td_periodo": {
+          "name": "td_periodo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PERIODO\"",
+          "position": {
+            "x": 4790.564149102494,
+            "y": 1662.166958405706
+          }
+        },
+        "td_premio_status": {
+          "name": "td_premio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PREMIO_STATUS\"",
+          "position": {
+            "x": 2495,
+            "y": 4462
+          }
+        },
+        "td_regiao_fiscal": {
+          "name": "td_regiao_fiscal",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 1605.8894149074088,
+            "y": 3472.6319107646354
+          }
+        },
+        "td_segmentacao_nfm": {
+          "name": "td_segmentacao_nfm",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SEGMENTACAO_NFM\"",
+          "position": {
+            "x": 2341.0991560355073,
+            "y": 3581.087835662302
+          }
+        },
+        "td_sorteio": {
+          "name": "td_sorteio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO\"",
+          "position": {
+            "x": -1692.5569675357829,
+            "y": 4151.048652089953
+          }
+        },
+        "td_sorteio_status": {
+          "name": "td_sorteio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_STATUS\"",
+          "position": {
+            "x": 4462.5,
+            "y": 4073.4999999999995
+          }
+        },
+        "td_sorteio_tipo": {
+          "name": "td_sorteio_tipo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_TIPO\"",
+          "position": {
+            "x": 5850,
+            "y": 4181
+          }
+        },
+        "tf_bilhetagem_resumo": {
+          "name": "tf_bilhetagem_resumo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_BILHETAGEM_RESUMO\"",
+          "position": {
+            "x": -175.56657389527118,
+            "y": 2901.5857866142483
+          }
+        },
+        "tf_notas_emitente_dia": {
+          "name": "tf_notas_emitente_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_EMITENTE_DIA\"",
+          "position": {
+            "x": 2145.102221212448,
+            "y": 2857.4862064883228
+          }
+        },
+        "tf_notas_participante_dia": {
+          "name": "tf_notas_participante_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_PARTICIPANTE_DIA\"",
+          "position": {
+            "x": 4399.151143008799,
+            "y": 3215.8365578349594
+          }
+        },
+        "tf_partic_ent_indicacoes": {
+          "name": "tf_partic_ent_indicacoes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTIC_ENT_INDICACOES\"",
+          "position": {
+            "x": 3535.782464732251,
+            "y": 3010.8109740780546
+          }
+        },
+        "tf_participante_adesao": {
+          "name": "tf_participante_adesao",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTICIPANTE_ADESAO\"",
+          "position": {
+            "x": 3238.1743416840577,
+            "y": 2145.4027981594113
+          }
+        },
+        "tf_premiacoes_entidades": {
+          "name": "tf_premiacoes_entidades",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_ENTIDADES\"",
+          "position": {
+            "x": 852.3992563002784,
+            "y": 3520.357018962756
+          }
+        },
+        "tf_premiacoes_participantes": {
+          "name": "tf_premiacoes_participantes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_PARTICIPANTES\"",
+          "position": {
+            "x": 331.5728845083924,
+            "y": 2748.9171038646755
+          }
+        },
+        "tf_qt_nfce_dia": {
+          "name": "tf_qt_nfce_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QT_NFCE_DIA\"",
+          "position": {
+            "x": 972.669972168581,
+            "y": 2655.4254396783954
+          }
+        },
+        "tf_quantidade_bilhetes_participante": {
+          "name": "tf_quantidade_bilhetes_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QUANTIDADE_BILHETES_PARTICIPANTE\"",
+          "position": {
+            "x": -815,
+            "y": 3023
+          }
+        },
+        "tf_requisicao_pagamento_entidade": {
+          "name": "tf_requisicao_pagamento_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_ENTIDADE\"",
+          "position": {
+            "x": -1428.3333333333333,
+            "y": 2988.1111111111104
+          }
+        },
+        "tf_requisicao_pagamento_participante": {
+          "name": "tf_requisicao_pagamento_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_PARTICIPANTE\"",
+          "position": {
+            "x": -2143.8985915415833,
+            "y": 3005.198518677387
+          }
+        }
+      }
+    },
+    "view-1787079643179": {
+      "id": "view-1787079643179",
+      "name": "Fato - Premiação participante",
+      "backgroundColor": "#eef7ee",
+      "visibility": {
+        "td_bilhetagem": true,
+        "td_cnae": false,
+        "td_entidade_social": false,
+        "td_faixa_histograma_bilhete": false,
+        "td_faixa_histograma_participante": false,
+        "td_municipio": true,
+        "td_pagamento_retorno_status": false,
+        "td_participante": true,
+        "td_periodo": true,
+        "td_premio_status": true,
+        "td_regiao_fiscal": true,
+        "td_segmentacao_nfm": false,
+        "td_sorteio": true,
+        "td_sorteio_status": false,
+        "td_sorteio_tipo": false,
+        "tf_bilhetagem_resumo": false,
+        "tf_notas_emitente_dia": false,
+        "tf_notas_participante_dia": false,
+        "tf_partic_ent_indicacoes": false,
+        "tf_participante_adesao": false,
+        "tf_premiacoes_entidades": false,
+        "tf_premiacoes_participantes": true,
+        "tf_qt_nfce_dia": false,
+        "tf_quantidade_bilhetes_participante": false,
+        "tf_requisicao_pagamento_entidade": false,
+        "tf_requisicao_pagamento_participante": true
+      },
+      "cubes": {
+        "td_bilhetagem": {
+          "name": "td_bilhetagem",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_BILHETAGEM\"",
+          "position": {
+            "x": -343.72014437773953,
+            "y": 2739.2226913106233
+          }
+        },
+        "td_cnae": {
+          "name": "td_cnae",
+          "source": "NOTA_MINEIRA_ARM.TD_CNAE",
+          "position": {
+            "x": 2783.515365142318,
+            "y": 1897.5889887340772
+          }
+        },
+        "td_entidade_social": {
+          "name": "td_entidade_social",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_ENTIDADE_SOCIAL\"",
+          "position": {
+            "x": 4340.962331488154,
+            "y": 2424.2988282478727
+          }
+        },
+        "td_faixa_histograma_bilhete": {
+          "name": "td_faixa_histograma_bilhete",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_BILHETE\"",
+          "position": {
+            "x": 5353.39019748703,
+            "y": 3196.2007024532163
+          }
+        },
+        "td_faixa_histograma_participante": {
+          "name": "td_faixa_histograma_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_PARTICIPANTE\"",
+          "position": {
+            "x": 5154.999999999999,
+            "y": 2470.8749999999995
+          }
+        },
+        "td_municipio": {
+          "name": "td_municipio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": 1666.0815213505982,
+            "y": 2436.924065651666
+          }
+        },
+        "td_pagamento_retorno_status": {
+          "name": "td_pagamento_retorno_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PAGAMENTO_RETORNO_STATUS\"",
+          "position": {
+            "x": 225,
+            "y": 1598
+          }
+        },
+        "td_participante": {
+          "name": "td_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PARTICIPANTE\"",
+          "position": {
+            "x": -273.9354184370716,
+            "y": 3241.3317109233753
+          }
+        },
+        "td_periodo": {
+          "name": "td_periodo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PERIODO\"",
+          "position": {
+            "x": 1070.2366725026927,
+            "y": 3879.8039058275667
+          }
+        },
+        "td_premio_status": {
+          "name": "td_premio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PREMIO_STATUS\"",
+          "position": {
+            "x": 1314.8575171809348,
+            "y": 3506.6005450889734
+          }
+        },
+        "td_regiao_fiscal": {
+          "name": "td_regiao_fiscal",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 1678.838431151789,
+            "y": 3211.9894087641874
+          }
+        },
+        "td_segmentacao_nfm": {
+          "name": "td_segmentacao_nfm",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SEGMENTACAO_NFM\"",
+          "position": {
+            "x": 2859.0896341909074,
+            "y": 2570.661011265922
+          }
+        },
+        "td_sorteio": {
+          "name": "td_sorteio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO\"",
+          "position": {
+            "x": -262.17757613161376,
+            "y": 2047.5230920716485
+          }
+        },
+        "td_sorteio_status": {
+          "name": "td_sorteio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_STATUS\"",
+          "position": {
+            "x": 4462.5,
+            "y": 4073.4999999999995
+          }
+        },
+        "td_sorteio_tipo": {
+          "name": "td_sorteio_tipo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_TIPO\"",
+          "position": {
+            "x": 5850,
+            "y": 4181
+          }
+        },
+        "tf_bilhetagem_resumo": {
+          "name": "tf_bilhetagem_resumo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_BILHETAGEM_RESUMO\"",
+          "position": {
+            "x": -175.56657389527118,
+            "y": 2901.5857866142483
+          }
+        },
+        "tf_notas_emitente_dia": {
+          "name": "tf_notas_emitente_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_EMITENTE_DIA\"",
+          "position": {
+            "x": 2145.102221212448,
+            "y": 2857.4862064883228
+          }
+        },
+        "tf_notas_participante_dia": {
+          "name": "tf_notas_participante_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_PARTICIPANTE_DIA\"",
+          "position": {
+            "x": 4399.151143008799,
+            "y": 3215.8365578349594
+          }
+        },
+        "tf_partic_ent_indicacoes": {
+          "name": "tf_partic_ent_indicacoes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTIC_ENT_INDICACOES\"",
+          "position": {
+            "x": 3535.782464732251,
+            "y": 3010.8109740780546
+          }
+        },
+        "tf_participante_adesao": {
+          "name": "tf_participante_adesao",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTICIPANTE_ADESAO\"",
+          "position": {
+            "x": 2768.302206065835,
+            "y": 2941.1539955773696
+          }
+        },
+        "tf_premiacoes_entidades": {
+          "name": "tf_premiacoes_entidades",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_ENTIDADES\"",
+          "position": {
+            "x": 1522.7231900382933,
+            "y": 2945.7936471873145
+          }
+        },
+        "tf_premiacoes_participantes": {
+          "name": "tf_premiacoes_participantes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_PARTICIPANTES\"",
+          "position": {
+            "x": 331.5728845083924,
+            "y": 2748.9171038646755
+          }
+        },
+        "tf_qt_nfce_dia": {
+          "name": "tf_qt_nfce_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QT_NFCE_DIA\"",
+          "position": {
+            "x": 972.669972168581,
+            "y": 2655.4254396783954
+          }
+        },
+        "tf_quantidade_bilhetes_participante": {
+          "name": "tf_quantidade_bilhetes_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QUANTIDADE_BILHETES_PARTICIPANTE\"",
+          "position": {
+            "x": -815,
+            "y": 3023
+          }
+        },
+        "tf_requisicao_pagamento_entidade": {
+          "name": "tf_requisicao_pagamento_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_ENTIDADE\"",
+          "position": {
+            "x": 2579.4363978913752,
+            "y": 1900.3355278478066
+          }
+        },
+        "tf_requisicao_pagamento_participante": {
+          "name": "tf_requisicao_pagamento_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_PARTICIPANTE\"",
+          "position": {
+            "x": 1098.5592005094509,
+            "y": 1999.7912799768278
+          }
+        }
+      }
+    },
+    "view-1787080149965": {
+      "id": "view-1787080149965",
+      "name": "Fato - Bilhetagem resumo",
+      "backgroundColor": "#edf7ff",
+      "visibility": {
+        "td_bilhetagem": true,
+        "td_cnae": false,
+        "td_entidade_social": false,
+        "td_faixa_histograma_bilhete": true,
+        "td_faixa_histograma_participante": true,
+        "td_municipio": true,
+        "td_pagamento_retorno_status": false,
+        "td_participante": false,
+        "td_periodo": false,
+        "td_premio_status": false,
+        "td_regiao_fiscal": true,
+        "td_segmentacao_nfm": false,
+        "td_sorteio": false,
+        "td_sorteio_status": false,
+        "td_sorteio_tipo": true,
+        "tf_bilhetagem_resumo": true,
+        "tf_notas_emitente_dia": false,
+        "tf_notas_participante_dia": false,
+        "tf_partic_ent_indicacoes": false,
+        "tf_participante_adesao": false,
+        "tf_premiacoes_entidades": false,
+        "tf_premiacoes_participantes": false,
+        "tf_qt_nfce_dia": false,
+        "tf_quantidade_bilhetes_participante": false,
+        "tf_requisicao_pagamento_entidade": false,
+        "tf_requisicao_pagamento_participante": false
+      },
+      "cubes": {
+        "td_bilhetagem": {
+          "name": "td_bilhetagem",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_BILHETAGEM\"",
+          "position": {
+            "x": 300.065539650437,
+            "y": 3455.1859858043113
+          }
+        },
+        "td_cnae": {
+          "name": "td_cnae",
+          "source": "NOTA_MINEIRA_ARM.TD_CNAE",
+          "position": {
+            "x": 2698.495992668328,
+            "y": 2568.470202511259
+          }
+        },
+        "td_entidade_social": {
+          "name": "td_entidade_social",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_ENTIDADE_SOCIAL\"",
+          "position": {
+            "x": 4340.962331488154,
+            "y": 2424.2988282478727
+          }
+        },
+        "td_faixa_histograma_bilhete": {
+          "name": "td_faixa_histograma_bilhete",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_BILHETE\"",
+          "position": {
+            "x": 253.07504801019883,
+            "y": 4559.15262747688
+          }
+        },
+        "td_faixa_histograma_participante": {
+          "name": "td_faixa_histograma_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_PARTICIPANTE\"",
+          "position": {
+            "x": 105.10444342085725,
+            "y": 4012.238476953498
+          }
+        },
+        "td_municipio": {
+          "name": "td_municipio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": 1892.714898592149,
+            "y": 4008.2349063197667
+          }
+        },
+        "td_pagamento_retorno_status": {
+          "name": "td_pagamento_retorno_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PAGAMENTO_RETORNO_STATUS\"",
+          "position": {
+            "x": 225,
+            "y": 1598
+          }
+        },
+        "td_participante": {
+          "name": "td_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PARTICIPANTE\"",
+          "position": {
+            "x": 3589.999999999996,
+            "y": 4152.999999999997
+          }
+        },
+        "td_periodo": {
+          "name": "td_periodo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PERIODO\"",
+          "position": {
+            "x": 4790.564149102494,
+            "y": 1662.166958405706
+          }
+        },
+        "td_premio_status": {
+          "name": "td_premio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PREMIO_STATUS\"",
+          "position": {
+            "x": 2495,
+            "y": 4462
+          }
+        },
+        "td_regiao_fiscal": {
+          "name": "td_regiao_fiscal",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 1495.1498878556924,
+            "y": 4435.007673957059
+          }
+        },
+        "td_segmentacao_nfm": {
+          "name": "td_segmentacao_nfm",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SEGMENTACAO_NFM\"",
+          "position": {
+            "x": 2758.4253106598726,
+            "y": 3343.191766842616
+          }
+        },
+        "td_sorteio": {
+          "name": "td_sorteio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO\"",
+          "position": {
+            "x": -1692.5569675357829,
+            "y": 4151.048652089953
+          }
+        },
+        "td_sorteio_status": {
+          "name": "td_sorteio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_STATUS\"",
+          "position": {
+            "x": 4462.5,
+            "y": 4073.4999999999995
+          }
+        },
+        "td_sorteio_tipo": {
+          "name": "td_sorteio_tipo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_TIPO\"",
+          "position": {
+            "x": -244.66693137407344,
+            "y": 3238.9079729762607
+          }
+        },
+        "tf_bilhetagem_resumo": {
+          "name": "tf_bilhetagem_resumo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_BILHETAGEM_RESUMO\"",
+          "position": {
+            "x": 841.8294990243672,
+            "y": 3915.8800908365965
+          }
+        },
+        "tf_notas_emitente_dia": {
+          "name": "tf_notas_emitente_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_EMITENTE_DIA\"",
+          "position": {
+            "x": 2145.102221212448,
+            "y": 2857.4862064883228
+          }
+        },
+        "tf_notas_participante_dia": {
+          "name": "tf_notas_participante_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_PARTICIPANTE_DIA\"",
+          "position": {
+            "x": 4399.151143008799,
+            "y": 3215.8365578349594
+          }
+        },
+        "tf_partic_ent_indicacoes": {
+          "name": "tf_partic_ent_indicacoes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTIC_ENT_INDICACOES\"",
+          "position": {
+            "x": 3535.782464732251,
+            "y": 3010.8109740780546
+          }
+        },
+        "tf_participante_adesao": {
+          "name": "tf_participante_adesao",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTICIPANTE_ADESAO\"",
+          "position": {
+            "x": 3238.1743416840577,
+            "y": 2145.4027981594113
+          }
+        },
+        "tf_premiacoes_entidades": {
+          "name": "tf_premiacoes_entidades",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_ENTIDADES\"",
+          "position": {
+            "x": 1223.862289908187,
+            "y": 3493.650343031314
+          }
+        },
+        "tf_premiacoes_participantes": {
+          "name": "tf_premiacoes_participantes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_PARTICIPANTES\"",
+          "position": {
+            "x": 1709.1044242954194,
+            "y": 3068.769067542982
+          }
+        },
+        "tf_qt_nfce_dia": {
+          "name": "tf_qt_nfce_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QT_NFCE_DIA\"",
+          "position": {
+            "x": 972.669972168581,
+            "y": 2655.4254396783954
+          }
+        },
+        "tf_quantidade_bilhetes_participante": {
+          "name": "tf_quantidade_bilhetes_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QUANTIDADE_BILHETES_PARTICIPANTE\"",
+          "position": {
+            "x": 1141.2193990593023,
+            "y": 2659.546177942945
+          }
+        },
+        "tf_requisicao_pagamento_entidade": {
+          "name": "tf_requisicao_pagamento_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_ENTIDADE\"",
+          "position": {
+            "x": -1428.3333333333333,
+            "y": 2988.1111111111104
+          }
+        },
+        "tf_requisicao_pagamento_participante": {
+          "name": "tf_requisicao_pagamento_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_PARTICIPANTE\"",
+          "position": {
+            "x": -2143.8985915415833,
+            "y": 3005.198518677387
+          }
+        }
+      }
+    },
+    "view-1787081003469": {
+      "id": "view-1787081003469",
+      "name": "Fato - Premiações entidades",
+      "backgroundColor": "#f9f0ff",
+      "visibility": {
+        "td_bilhetagem": true,
+        "td_cnae": false,
+        "td_entidade_social": true,
+        "td_faixa_histograma_bilhete": false,
+        "td_faixa_histograma_participante": false,
+        "td_municipio": true,
+        "td_pagamento_retorno_status": false,
+        "td_participante": true,
+        "td_periodo": true,
+        "td_premio_status": true,
+        "td_regiao_fiscal": true,
+        "td_segmentacao_nfm": false,
+        "td_sorteio": true,
+        "td_sorteio_status": false,
+        "td_sorteio_tipo": false,
+        "tf_bilhetagem_resumo": false,
+        "tf_notas_emitente_dia": false,
+        "tf_notas_participante_dia": false,
+        "tf_partic_ent_indicacoes": false,
+        "tf_participante_adesao": false,
+        "tf_premiacoes_entidades": true,
+        "tf_premiacoes_participantes": false,
+        "tf_qt_nfce_dia": false,
+        "tf_quantidade_bilhetes_participante": false,
+        "tf_requisicao_pagamento_entidade": false,
+        "tf_requisicao_pagamento_participante": false
+      },
+      "cubes": {
+        "td_bilhetagem": {
+          "name": "td_bilhetagem",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_BILHETAGEM\"",
+          "position": {
+            "x": -685.6260544618435,
+            "y": 2700.811314051961
+          }
+        },
+        "td_cnae": {
+          "name": "td_cnae",
+          "source": "NOTA_MINEIRA_ARM.TD_CNAE",
+          "position": {
+            "x": 2783.515365142318,
+            "y": 1897.5889887340772
+          }
+        },
+        "td_entidade_social": {
+          "name": "td_entidade_social",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_ENTIDADE_SOCIAL\"",
+          "position": {
+            "x": -275.7204491597445,
+            "y": 3576.5196990231516
+          }
+        },
+        "td_faixa_histograma_bilhete": {
+          "name": "td_faixa_histograma_bilhete",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_BILHETE\"",
+          "position": {
+            "x": 5353.39019748703,
+            "y": 3196.2007024532163
+          }
+        },
+        "td_faixa_histograma_participante": {
+          "name": "td_faixa_histograma_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_PARTICIPANTE\"",
+          "position": {
+            "x": 5154.999999999999,
+            "y": 2470.8749999999995
+          }
+        },
+        "td_municipio": {
+          "name": "td_municipio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": -737.2894085820093,
+            "y": 3219.979488916548
+          }
+        },
+        "td_pagamento_retorno_status": {
+          "name": "td_pagamento_retorno_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PAGAMENTO_RETORNO_STATUS\"",
+          "position": {
+            "x": 225,
+            "y": 1598
+          }
+        },
+        "td_participante": {
+          "name": "td_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PARTICIPANTE\"",
+          "position": {
+            "x": 1095.5179218053136,
+            "y": 3344.6584546029203
+          }
+        },
+        "td_periodo": {
+          "name": "td_periodo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PERIODO\"",
+          "position": {
+            "x": 1541.0658607141606,
+            "y": 3142.558334453803
+          }
+        },
+        "td_premio_status": {
+          "name": "td_premio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PREMIO_STATUS\"",
+          "position": {
+            "x": 1215.998956872093,
+            "y": 2674.9755454054493
+          }
+        },
+        "td_regiao_fiscal": {
+          "name": "td_regiao_fiscal",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 995.5608997777726,
+            "y": 2151.760648182046
+          }
+        },
+        "td_segmentacao_nfm": {
+          "name": "td_segmentacao_nfm",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SEGMENTACAO_NFM\"",
+          "position": {
+            "x": 2859.0896341909074,
+            "y": 2570.661011265922
+          }
+        },
+        "td_sorteio": {
+          "name": "td_sorteio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO\"",
+          "position": {
+            "x": -566.5809244363265,
+            "y": 1976.9046053280845
+          }
+        },
+        "td_sorteio_status": {
+          "name": "td_sorteio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_STATUS\"",
+          "position": {
+            "x": 4462.5,
+            "y": 4073.4999999999995
+          }
+        },
+        "td_sorteio_tipo": {
+          "name": "td_sorteio_tipo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_TIPO\"",
+          "position": {
+            "x": 5850,
+            "y": 4181
+          }
+        },
+        "tf_bilhetagem_resumo": {
+          "name": "tf_bilhetagem_resumo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_BILHETAGEM_RESUMO\"",
+          "position": {
+            "x": -175.56657389527118,
+            "y": 2901.5857866142483
+          }
+        },
+        "tf_notas_emitente_dia": {
+          "name": "tf_notas_emitente_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_EMITENTE_DIA\"",
+          "position": {
+            "x": 2145.102221212448,
+            "y": 2857.4862064883228
+          }
+        },
+        "tf_notas_participante_dia": {
+          "name": "tf_notas_participante_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_PARTICIPANTE_DIA\"",
+          "position": {
+            "x": 4399.151143008799,
+            "y": 3215.8365578349594
+          }
+        },
+        "tf_partic_ent_indicacoes": {
+          "name": "tf_partic_ent_indicacoes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTIC_ENT_INDICACOES\"",
+          "position": {
+            "x": 3535.782464732251,
+            "y": 3010.8109740780546
+          }
+        },
+        "tf_participante_adesao": {
+          "name": "tf_participante_adesao",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTICIPANTE_ADESAO\"",
+          "position": {
+            "x": 2768.302206065835,
+            "y": 2941.1539955773696
+          }
+        },
+        "tf_premiacoes_entidades": {
+          "name": "tf_premiacoes_entidades",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_ENTIDADES\"",
+          "position": {
+            "x": 343.14021216881247,
+            "y": 2693.307658613245
+          }
+        },
+        "tf_premiacoes_participantes": {
+          "name": "tf_premiacoes_participantes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_PARTICIPANTES\"",
+          "position": {
+            "x": 331.5728845083924,
+            "y": 2748.9171038646755
+          }
+        },
+        "tf_qt_nfce_dia": {
+          "name": "tf_qt_nfce_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QT_NFCE_DIA\"",
+          "position": {
+            "x": 972.669972168581,
+            "y": 2655.4254396783954
+          }
+        },
+        "tf_quantidade_bilhetes_participante": {
+          "name": "tf_quantidade_bilhetes_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QUANTIDADE_BILHETES_PARTICIPANTE\"",
+          "position": {
+            "x": -815,
+            "y": 3023
+          }
+        },
+        "tf_requisicao_pagamento_entidade": {
+          "name": "tf_requisicao_pagamento_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_ENTIDADE\"",
+          "position": {
+            "x": -1515,
+            "y": 3016.9999999999995
+          }
+        },
+        "tf_requisicao_pagamento_participante": {
+          "name": "tf_requisicao_pagamento_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_PARTICIPANTE\"",
+          "position": {
+            "x": -2143.8985915415833,
+            "y": 3005.198518677387
+          }
+        }
+      }
+    },
+    "view-1787081898728": {
+      "id": "view-1787081898728",
+      "name": "Fato - Participante adesão",
+      "backgroundColor": "#fff8e8",
+      "visibility": {
+        "td_bilhetagem": false,
+        "td_cnae": false,
+        "td_entidade_social": false,
+        "td_faixa_histograma_bilhete": false,
+        "td_faixa_histograma_participante": false,
+        "td_municipio": true,
+        "td_pagamento_retorno_status": false,
+        "td_participante": true,
+        "td_periodo": true,
+        "td_premio_status": false,
+        "td_regiao_fiscal": true,
+        "td_segmentacao_nfm": false,
+        "td_sorteio": false,
+        "td_sorteio_status": false,
+        "td_sorteio_tipo": false,
+        "tf_bilhetagem_resumo": false,
+        "tf_notas_emitente_dia": false,
+        "tf_notas_participante_dia": false,
+        "tf_partic_ent_indicacoes": false,
+        "tf_participante_adesao": true,
+        "tf_premiacoes_entidades": false,
+        "tf_premiacoes_participantes": false,
+        "tf_qt_nfce_dia": false,
+        "tf_quantidade_bilhetes_participante": false,
+        "tf_requisicao_pagamento_entidade": false,
+        "tf_requisicao_pagamento_participante": false
+      },
+      "cubes": {
+        "td_bilhetagem": {
+          "name": "td_bilhetagem",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_BILHETAGEM\"",
+          "position": {
+            "x": -1184.7413492435967,
+            "y": 1431.2138210787898
+          }
+        },
+        "td_cnae": {
+          "name": "td_cnae",
+          "source": "NOTA_MINEIRA_ARM.TD_CNAE",
+          "position": {
+            "x": 2867.92569398771,
+            "y": 1207.598497641818
+          }
+        },
+        "td_entidade_social": {
+          "name": "td_entidade_social",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_ENTIDADE_SOCIAL\"",
+          "position": {
+            "x": 4340.962331488154,
+            "y": 2424.2988282478727
+          }
+        },
+        "td_faixa_histograma_bilhete": {
+          "name": "td_faixa_histograma_bilhete",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_BILHETE\"",
+          "position": {
+            "x": 5353.39019748703,
+            "y": 3196.2007024532163
+          }
+        },
+        "td_faixa_histograma_participante": {
+          "name": "td_faixa_histograma_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_PARTICIPANTE\"",
+          "position": {
+            "x": 5154.999999999999,
+            "y": 2470.8749999999995
+          }
+        },
+        "td_municipio": {
+          "name": "td_municipio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": 1940.3594093485444,
+            "y": 2230.8947590377525
+          }
+        },
+        "td_pagamento_retorno_status": {
+          "name": "td_pagamento_retorno_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PAGAMENTO_RETORNO_STATUS\"",
+          "position": {
+            "x": 225,
+            "y": 1598
+          }
+        },
+        "td_participante": {
+          "name": "td_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PARTICIPANTE\"",
+          "position": {
+            "x": 3423.088385088252,
+            "y": 2518.6598635520936
+          }
+        },
+        "td_periodo": {
+          "name": "td_periodo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PERIODO\"",
+          "position": {
+            "x": 3442.276451671839,
+            "y": 3269.2406341230176
+          }
+        },
+        "td_premio_status": {
+          "name": "td_premio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PREMIO_STATUS\"",
+          "position": {
+            "x": 2495,
+            "y": 4462
+          }
+        },
+        "td_regiao_fiscal": {
+          "name": "td_regiao_fiscal",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 1894.9808961221083,
+            "y": 3499.8335381317083
+          }
+        },
+        "td_segmentacao_nfm": {
+          "name": "td_segmentacao_nfm",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SEGMENTACAO_NFM\"",
+          "position": {
+            "x": 2859.0896341909074,
+            "y": 2570.661011265922
+          }
+        },
+        "td_sorteio": {
+          "name": "td_sorteio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO\"",
+          "position": {
+            "x": -1692.5569675357829,
+            "y": 4151.048652089953
+          }
+        },
+        "td_sorteio_status": {
+          "name": "td_sorteio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_STATUS\"",
+          "position": {
+            "x": 4462.5,
+            "y": 4073.4999999999995
+          }
+        },
+        "td_sorteio_tipo": {
+          "name": "td_sorteio_tipo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_TIPO\"",
+          "position": {
+            "x": 5850,
+            "y": 4181
+          }
+        },
+        "tf_bilhetagem_resumo": {
+          "name": "tf_bilhetagem_resumo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_BILHETAGEM_RESUMO\"",
+          "position": {
+            "x": -175.56657389527118,
+            "y": 2901.5857866142483
+          }
+        },
+        "tf_notas_emitente_dia": {
+          "name": "tf_notas_emitente_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_EMITENTE_DIA\"",
+          "position": {
+            "x": 2145.102221212448,
+            "y": 2857.4862064883228
+          }
+        },
+        "tf_notas_participante_dia": {
+          "name": "tf_notas_participante_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_PARTICIPANTE_DIA\"",
+          "position": {
+            "x": 4399.151143008799,
+            "y": 3215.8365578349594
+          }
+        },
+        "tf_partic_ent_indicacoes": {
+          "name": "tf_partic_ent_indicacoes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTIC_ENT_INDICACOES\"",
+          "position": {
+            "x": 3535.782464732251,
+            "y": 3010.8109740780546
+          }
+        },
+        "tf_participante_adesao": {
+          "name": "tf_participante_adesao",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTICIPANTE_ADESAO\"",
+          "position": {
+            "x": 2768.302206065835,
+            "y": 2941.1539955773696
+          }
+        },
+        "tf_premiacoes_entidades": {
+          "name": "tf_premiacoes_entidades",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_ENTIDADES\"",
+          "position": {
+            "x": 1522.7231900382933,
+            "y": 2945.7936471873145
+          }
+        },
+        "tf_premiacoes_participantes": {
+          "name": "tf_premiacoes_participantes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_PARTICIPANTES\"",
+          "position": {
+            "x": 331.5728845083924,
+            "y": 2748.9171038646755
+          }
+        },
+        "tf_qt_nfce_dia": {
+          "name": "tf_qt_nfce_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QT_NFCE_DIA\"",
+          "position": {
+            "x": 972.669972168581,
+            "y": 2655.4254396783954
+          }
+        },
+        "tf_quantidade_bilhetes_participante": {
+          "name": "tf_quantidade_bilhetes_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QUANTIDADE_BILHETES_PARTICIPANTE\"",
+          "position": {
+            "x": -815,
+            "y": 3023
+          }
+        },
+        "tf_requisicao_pagamento_entidade": {
+          "name": "tf_requisicao_pagamento_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_ENTIDADE\"",
+          "position": {
+            "x": -1428.3333333333333,
+            "y": 2988.1111111111104
+          }
+        },
+        "tf_requisicao_pagamento_participante": {
+          "name": "tf_requisicao_pagamento_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_PARTICIPANTE\"",
+          "position": {
+            "x": -2143.8985915415833,
+            "y": 3005.198518677387
+          }
+        }
+      }
+    },
+    "view-1787082138562": {
+      "id": "view-1787082138562",
+      "name": "Fato - Quantidade de NFCe por dia",
+      "backgroundColor": "#fff0f3",
+      "visibility": {
+        "td_bilhetagem": false,
+        "td_cnae": false,
+        "td_entidade_social": false,
+        "td_faixa_histograma_bilhete": false,
+        "td_faixa_histograma_participante": false,
+        "td_municipio": true,
+        "td_pagamento_retorno_status": false,
+        "td_participante": false,
+        "td_periodo": true,
+        "td_premio_status": false,
+        "td_regiao_fiscal": false,
+        "td_segmentacao_nfm": false,
+        "td_sorteio": false,
+        "td_sorteio_status": false,
+        "td_sorteio_tipo": false,
+        "tf_bilhetagem_resumo": false,
+        "tf_notas_emitente_dia": false,
+        "tf_notas_participante_dia": false,
+        "tf_partic_ent_indicacoes": false,
+        "tf_participante_adesao": false,
+        "tf_premiacoes_entidades": false,
+        "tf_premiacoes_participantes": false,
+        "tf_qt_nfce_dia": true,
+        "tf_quantidade_bilhetes_participante": false,
+        "tf_requisicao_pagamento_entidade": false,
+        "tf_requisicao_pagamento_participante": false
+      },
+      "cubes": {
+        "td_bilhetagem": {
+          "name": "td_bilhetagem",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_BILHETAGEM\"",
+          "position": {
+            "x": -1184.7413492435967,
+            "y": 1431.2138210787898
+          }
+        },
+        "td_cnae": {
+          "name": "td_cnae",
+          "source": "NOTA_MINEIRA_ARM.TD_CNAE",
+          "position": {
+            "x": 2867.92569398771,
+            "y": 1207.598497641818
+          }
+        },
+        "td_entidade_social": {
+          "name": "td_entidade_social",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_ENTIDADE_SOCIAL\"",
+          "position": {
+            "x": 4340.962331488154,
+            "y": 2424.2988282478727
+          }
+        },
+        "td_faixa_histograma_bilhete": {
+          "name": "td_faixa_histograma_bilhete",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_BILHETE\"",
+          "position": {
+            "x": 5353.39019748703,
+            "y": 3196.2007024532163
+          }
+        },
+        "td_faixa_histograma_participante": {
+          "name": "td_faixa_histograma_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_PARTICIPANTE\"",
+          "position": {
+            "x": 5154.999999999999,
+            "y": 2470.8749999999995
+          }
+        },
+        "td_municipio": {
+          "name": "td_municipio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": 1573.9788292919598,
+            "y": 2376.0587501437353
+          }
+        },
+        "td_pagamento_retorno_status": {
+          "name": "td_pagamento_retorno_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PAGAMENTO_RETORNO_STATUS\"",
+          "position": {
+            "x": 225,
+            "y": 1598
+          }
+        },
+        "td_participante": {
+          "name": "td_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PARTICIPANTE\"",
+          "position": {
+            "x": 3589.999999999996,
+            "y": 4152.999999999997
+          }
+        },
+        "td_periodo": {
+          "name": "td_periodo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PERIODO\"",
+          "position": {
+            "x": 475.22485701965445,
+            "y": 2594.060397395556
+          }
+        },
+        "td_premio_status": {
+          "name": "td_premio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PREMIO_STATUS\"",
+          "position": {
+            "x": 2495,
+            "y": 4462
+          }
+        },
+        "td_regiao_fiscal": {
+          "name": "td_regiao_fiscal",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 834.9808961221083,
+            "y": 4214.833538131708
+          }
+        },
+        "td_segmentacao_nfm": {
+          "name": "td_segmentacao_nfm",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SEGMENTACAO_NFM\"",
+          "position": {
+            "x": 2859.0896341909074,
+            "y": 2570.661011265922
+          }
+        },
+        "td_sorteio": {
+          "name": "td_sorteio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO\"",
+          "position": {
+            "x": -1692.5569675357829,
+            "y": 4151.048652089953
+          }
+        },
+        "td_sorteio_status": {
+          "name": "td_sorteio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_STATUS\"",
+          "position": {
+            "x": 4462.5,
+            "y": 4073.4999999999995
+          }
+        },
+        "td_sorteio_tipo": {
+          "name": "td_sorteio_tipo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_TIPO\"",
+          "position": {
+            "x": 5850,
+            "y": 4181
+          }
+        },
+        "tf_bilhetagem_resumo": {
+          "name": "tf_bilhetagem_resumo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_BILHETAGEM_RESUMO\"",
+          "position": {
+            "x": -175.56657389527118,
+            "y": 2901.5857866142483
+          }
+        },
+        "tf_notas_emitente_dia": {
+          "name": "tf_notas_emitente_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_EMITENTE_DIA\"",
+          "position": {
+            "x": 2145.102221212448,
+            "y": 2857.4862064883228
+          }
+        },
+        "tf_notas_participante_dia": {
+          "name": "tf_notas_participante_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_PARTICIPANTE_DIA\"",
+          "position": {
+            "x": 4399.151143008799,
+            "y": 3215.8365578349594
+          }
+        },
+        "tf_partic_ent_indicacoes": {
+          "name": "tf_partic_ent_indicacoes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTIC_ENT_INDICACOES\"",
+          "position": {
+            "x": 3535.782464732251,
+            "y": 3010.8109740780546
+          }
+        },
+        "tf_participante_adesao": {
+          "name": "tf_participante_adesao",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTICIPANTE_ADESAO\"",
+          "position": {
+            "x": 2768.302206065835,
+            "y": 2941.1539955773696
+          }
+        },
+        "tf_premiacoes_entidades": {
+          "name": "tf_premiacoes_entidades",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_ENTIDADES\"",
+          "position": {
+            "x": 1522.7231900382933,
+            "y": 2945.7936471873145
+          }
+        },
+        "tf_premiacoes_participantes": {
+          "name": "tf_premiacoes_participantes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_PARTICIPANTES\"",
+          "position": {
+            "x": 331.5728845083924,
+            "y": 2748.9171038646755
+          }
+        },
+        "tf_qt_nfce_dia": {
+          "name": "tf_qt_nfce_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QT_NFCE_DIA\"",
+          "position": {
+            "x": 972.669972168581,
+            "y": 2655.4254396783954
+          }
+        },
+        "tf_quantidade_bilhetes_participante": {
+          "name": "tf_quantidade_bilhetes_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QUANTIDADE_BILHETES_PARTICIPANTE\"",
+          "position": {
+            "x": -815,
+            "y": 3023
+          }
+        },
+        "tf_requisicao_pagamento_entidade": {
+          "name": "tf_requisicao_pagamento_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_ENTIDADE\"",
+          "position": {
+            "x": -1428.3333333333333,
+            "y": 2988.1111111111104
+          }
+        },
+        "tf_requisicao_pagamento_participante": {
+          "name": "tf_requisicao_pagamento_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_PARTICIPANTE\"",
+          "position": {
+            "x": -2143.8985915415833,
+            "y": 3005.198518677387
+          }
+        }
+      }
+    },
+    "view-1787082162218": {
+      "id": "view-1787082162218",
+      "name": "Fato - Quantidade de bilhetes participantes",
+      "backgroundColor": "#f1f5e9",
+      "visibility": {
+        "td_bilhetagem": true,
+        "td_cnae": false,
+        "td_entidade_social": false,
+        "td_faixa_histograma_bilhete": false,
+        "td_faixa_histograma_participante": false,
+        "td_municipio": true,
+        "td_pagamento_retorno_status": false,
+        "td_participante": true,
+        "td_periodo": true,
+        "td_premio_status": false,
+        "td_regiao_fiscal": true,
+        "td_segmentacao_nfm": false,
+        "td_sorteio": false,
+        "td_sorteio_status": false,
+        "td_sorteio_tipo": false,
+        "tf_bilhetagem_resumo": false,
+        "tf_notas_emitente_dia": false,
+        "tf_notas_participante_dia": false,
+        "tf_partic_ent_indicacoes": false,
+        "tf_participante_adesao": false,
+        "tf_premiacoes_entidades": false,
+        "tf_premiacoes_participantes": false,
+        "tf_qt_nfce_dia": false,
+        "tf_quantidade_bilhetes_participante": true,
+        "tf_requisicao_pagamento_entidade": false,
+        "tf_requisicao_pagamento_participante": false
+      },
+      "cubes": {
+        "td_bilhetagem": {
+          "name": "td_bilhetagem",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_BILHETAGEM\"",
+          "position": {
+            "x": 450.2586507564032,
+            "y": 2491.21382107879
+          }
+        },
+        "td_cnae": {
+          "name": "td_cnae",
+          "source": "NOTA_MINEIRA_ARM.TD_CNAE",
+          "position": {
+            "x": 2867.92569398771,
+            "y": 1207.598497641818
+          }
+        },
+        "td_entidade_social": {
+          "name": "td_entidade_social",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_ENTIDADE_SOCIAL\"",
+          "position": {
+            "x": 4340.962331488154,
+            "y": 2424.2988282478727
+          }
+        },
+        "td_faixa_histograma_bilhete": {
+          "name": "td_faixa_histograma_bilhete",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_BILHETE\"",
+          "position": {
+            "x": 5353.39019748703,
+            "y": 3196.2007024532163
+          }
+        },
+        "td_faixa_histograma_participante": {
+          "name": "td_faixa_histograma_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_PARTICIPANTE\"",
+          "position": {
+            "x": 5154.999999999999,
+            "y": 2470.8749999999995
+          }
+        },
+        "td_municipio": {
+          "name": "td_municipio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": 1967.4239140750717,
+            "y": 2987.348813446469
+          }
+        },
+        "td_pagamento_retorno_status": {
+          "name": "td_pagamento_retorno_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PAGAMENTO_RETORNO_STATUS\"",
+          "position": {
+            "x": 225,
+            "y": 1598
+          }
+        },
+        "td_participante": {
+          "name": "td_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PARTICIPANTE\"",
+          "position": {
+            "x": 1760.3554352333329,
+            "y": 2229.295789961397
+          }
+        },
+        "td_periodo": {
+          "name": "td_periodo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PERIODO\"",
+          "position": {
+            "x": 1599.091893301236,
+            "y": 3181.559474772209
+          }
+        },
+        "td_premio_status": {
+          "name": "td_premio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PREMIO_STATUS\"",
+          "position": {
+            "x": 2495,
+            "y": 4462
+          }
+        },
+        "td_regiao_fiscal": {
+          "name": "td_regiao_fiscal",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 439.98089612210845,
+            "y": 3054.8335381317083
+          }
+        },
+        "td_segmentacao_nfm": {
+          "name": "td_segmentacao_nfm",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SEGMENTACAO_NFM\"",
+          "position": {
+            "x": 2859.0896341909074,
+            "y": 2570.661011265922
+          }
+        },
+        "td_sorteio": {
+          "name": "td_sorteio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO\"",
+          "position": {
+            "x": -1692.5569675357829,
+            "y": 4151.048652089953
+          }
+        },
+        "td_sorteio_status": {
+          "name": "td_sorteio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_STATUS\"",
+          "position": {
+            "x": 4462.5,
+            "y": 4073.4999999999995
+          }
+        },
+        "td_sorteio_tipo": {
+          "name": "td_sorteio_tipo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_TIPO\"",
+          "position": {
+            "x": 5850,
+            "y": 4181
+          }
+        },
+        "tf_bilhetagem_resumo": {
+          "name": "tf_bilhetagem_resumo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_BILHETAGEM_RESUMO\"",
+          "position": {
+            "x": -175.56657389527118,
+            "y": 2901.5857866142483
+          }
+        },
+        "tf_notas_emitente_dia": {
+          "name": "tf_notas_emitente_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_EMITENTE_DIA\"",
+          "position": {
+            "x": 2145.102221212448,
+            "y": 2857.4862064883228
+          }
+        },
+        "tf_notas_participante_dia": {
+          "name": "tf_notas_participante_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_PARTICIPANTE_DIA\"",
+          "position": {
+            "x": 4399.151143008799,
+            "y": 3215.8365578349594
+          }
+        },
+        "tf_partic_ent_indicacoes": {
+          "name": "tf_partic_ent_indicacoes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTIC_ENT_INDICACOES\"",
+          "position": {
+            "x": 3535.782464732251,
+            "y": 3010.8109740780546
+          }
+        },
+        "tf_participante_adesao": {
+          "name": "tf_participante_adesao",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTICIPANTE_ADESAO\"",
+          "position": {
+            "x": 2768.302206065835,
+            "y": 2941.1539955773696
+          }
+        },
+        "tf_premiacoes_entidades": {
+          "name": "tf_premiacoes_entidades",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_ENTIDADES\"",
+          "position": {
+            "x": 1522.7231900382933,
+            "y": 2945.7936471873145
+          }
+        },
+        "tf_premiacoes_participantes": {
+          "name": "tf_premiacoes_participantes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_PARTICIPANTES\"",
+          "position": {
+            "x": 331.5728845083924,
+            "y": 2748.9171038646755
+          }
+        },
+        "tf_qt_nfce_dia": {
+          "name": "tf_qt_nfce_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QT_NFCE_DIA\"",
+          "position": {
+            "x": 972.669972168581,
+            "y": 2655.4254396783954
+          }
+        },
+        "tf_quantidade_bilhetes_participante": {
+          "name": "tf_quantidade_bilhetes_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QUANTIDADE_BILHETES_PARTICIPANTE\"",
+          "position": {
+            "x": 1009.9999999999999,
+            "y": 2578
+          }
+        },
+        "tf_requisicao_pagamento_entidade": {
+          "name": "tf_requisicao_pagamento_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_ENTIDADE\"",
+          "position": {
+            "x": -1428.3333333333333,
+            "y": 2988.1111111111104
+          }
+        },
+        "tf_requisicao_pagamento_participante": {
+          "name": "tf_requisicao_pagamento_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_PARTICIPANTE\"",
+          "position": {
+            "x": -2143.8985915415833,
+            "y": 3005.198518677387
+          }
+        }
+      }
+    },
+    "view-1787083269472": {
+      "id": "view-1787083269472",
+      "name": "Fato - Indicações entidades",
+      "backgroundColor": "#eaf4ff",
+      "visibility": {
+        "td_bilhetagem": false,
+        "td_cnae": false,
+        "td_entidade_social": true,
+        "td_faixa_histograma_bilhete": false,
+        "td_faixa_histograma_participante": false,
+        "td_municipio": false,
+        "td_pagamento_retorno_status": false,
+        "td_participante": true,
+        "td_periodo": true,
+        "td_premio_status": false,
+        "td_regiao_fiscal": false,
+        "td_segmentacao_nfm": false,
+        "td_sorteio": false,
+        "td_sorteio_status": false,
+        "td_sorteio_tipo": false,
+        "tf_bilhetagem_resumo": false,
+        "tf_notas_emitente_dia": false,
+        "tf_notas_participante_dia": false,
+        "tf_partic_ent_indicacoes": true,
+        "tf_participante_adesao": false,
+        "tf_premiacoes_entidades": false,
+        "tf_premiacoes_participantes": false,
+        "tf_qt_nfce_dia": false,
+        "tf_quantidade_bilhetes_participante": false,
+        "tf_requisicao_pagamento_entidade": false,
+        "tf_requisicao_pagamento_participante": false
+      },
+      "cubes": {
+        "td_bilhetagem": {
+          "name": "td_bilhetagem",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_BILHETAGEM\"",
+          "position": {
+            "x": 450.2586507564032,
+            "y": 2491.21382107879
+          }
+        },
+        "td_cnae": {
+          "name": "td_cnae",
+          "source": "NOTA_MINEIRA_ARM.TD_CNAE",
+          "position": {
+            "x": 2867.92569398771,
+            "y": 1207.598497641818
+          }
+        },
+        "td_entidade_social": {
+          "name": "td_entidade_social",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_ENTIDADE_SOCIAL\"",
+          "position": {
+            "x": 4204.360586251471,
+            "y": 2695.657165428638
+          }
+        },
+        "td_faixa_histograma_bilhete": {
+          "name": "td_faixa_histograma_bilhete",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_BILHETE\"",
+          "position": {
+            "x": 5353.39019748703,
+            "y": 3196.2007024532163
+          }
+        },
+        "td_faixa_histograma_participante": {
+          "name": "td_faixa_histograma_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_PARTICIPANTE\"",
+          "position": {
+            "x": 5154.999999999999,
+            "y": 2470.8749999999995
+          }
+        },
+        "td_municipio": {
+          "name": "td_municipio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": 1768.2256955872797,
+            "y": 2620.9752922377306
+          }
+        },
+        "td_pagamento_retorno_status": {
+          "name": "td_pagamento_retorno_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PAGAMENTO_RETORNO_STATUS\"",
+          "position": {
+            "x": 225,
+            "y": 1598
+          }
+        },
+        "td_participante": {
+          "name": "td_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PARTICIPANTE\"",
+          "position": {
+            "x": 2699.1240740735807,
+            "y": 2705.6412909823634
+          }
+        },
+        "td_periodo": {
+          "name": "td_periodo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PERIODO\"",
+          "position": {
+            "x": 2925.2825409371767,
+            "y": 3518.8705792404567
+          }
+        },
+        "td_premio_status": {
+          "name": "td_premio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PREMIO_STATUS\"",
+          "position": {
+            "x": 2495,
+            "y": 4462
+          }
+        },
+        "td_regiao_fiscal": {
+          "name": "td_regiao_fiscal",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 439.98089612210845,
+            "y": 3054.8335381317083
+          }
+        },
+        "td_segmentacao_nfm": {
+          "name": "td_segmentacao_nfm",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SEGMENTACAO_NFM\"",
+          "position": {
+            "x": 2859.0896341909074,
+            "y": 2570.661011265922
+          }
+        },
+        "td_sorteio": {
+          "name": "td_sorteio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO\"",
+          "position": {
+            "x": -1692.5569675357829,
+            "y": 4151.048652089953
+          }
+        },
+        "td_sorteio_status": {
+          "name": "td_sorteio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_STATUS\"",
+          "position": {
+            "x": 4462.5,
+            "y": 4073.4999999999995
+          }
+        },
+        "td_sorteio_tipo": {
+          "name": "td_sorteio_tipo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_TIPO\"",
+          "position": {
+            "x": 5850,
+            "y": 4181
+          }
+        },
+        "tf_bilhetagem_resumo": {
+          "name": "tf_bilhetagem_resumo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_BILHETAGEM_RESUMO\"",
+          "position": {
+            "x": -175.56657389527118,
+            "y": 2901.5857866142483
+          }
+        },
+        "tf_notas_emitente_dia": {
+          "name": "tf_notas_emitente_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_EMITENTE_DIA\"",
+          "position": {
+            "x": 2145.102221212448,
+            "y": 2857.4862064883228
+          }
+        },
+        "tf_notas_participante_dia": {
+          "name": "tf_notas_participante_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_PARTICIPANTE_DIA\"",
+          "position": {
+            "x": 4399.151143008799,
+            "y": 3215.8365578349594
+          }
+        },
+        "tf_partic_ent_indicacoes": {
+          "name": "tf_partic_ent_indicacoes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTIC_ENT_INDICACOES\"",
+          "position": {
+            "x": 3535.782464732251,
+            "y": 3010.8109740780546
+          }
+        },
+        "tf_participante_adesao": {
+          "name": "tf_participante_adesao",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTICIPANTE_ADESAO\"",
+          "position": {
+            "x": 2768.302206065835,
+            "y": 2941.1539955773696
+          }
+        },
+        "tf_premiacoes_entidades": {
+          "name": "tf_premiacoes_entidades",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_ENTIDADES\"",
+          "position": {
+            "x": 1522.7231900382933,
+            "y": 2945.7936471873145
+          }
+        },
+        "tf_premiacoes_participantes": {
+          "name": "tf_premiacoes_participantes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_PARTICIPANTES\"",
+          "position": {
+            "x": 331.5728845083924,
+            "y": 2748.9171038646755
+          }
+        },
+        "tf_qt_nfce_dia": {
+          "name": "tf_qt_nfce_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QT_NFCE_DIA\"",
+          "position": {
+            "x": 972.669972168581,
+            "y": 2655.4254396783954
+          }
+        },
+        "tf_quantidade_bilhetes_participante": {
+          "name": "tf_quantidade_bilhetes_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QUANTIDADE_BILHETES_PARTICIPANTE\"",
+          "position": {
+            "x": 1009.9999999999999,
+            "y": 2578
+          }
+        },
+        "tf_requisicao_pagamento_entidade": {
+          "name": "tf_requisicao_pagamento_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_ENTIDADE\"",
+          "position": {
+            "x": -1428.3333333333333,
+            "y": 2988.1111111111104
+          }
+        },
+        "tf_requisicao_pagamento_participante": {
+          "name": "tf_requisicao_pagamento_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_PARTICIPANTE\"",
+          "position": {
+            "x": -2143.8985915415833,
+            "y": 3005.198518677387
+          }
+        }
+      }
+    },
+    "view-1787083386977": {
+      "id": "view-1787083386977",
+      "name": "Fato - Requisição pagamento entidade",
+      "backgroundColor": "#f9f0ff",
+      "visibility": {
+        "td_bilhetagem": false,
+        "td_cnae": false,
+        "td_entidade_social": false,
+        "td_faixa_histograma_bilhete": false,
+        "td_faixa_histograma_participante": false,
+        "td_municipio": false,
+        "td_pagamento_retorno_status": false,
+        "td_participante": false,
+        "td_periodo": true,
+        "td_premio_status": false,
+        "td_regiao_fiscal": false,
+        "td_segmentacao_nfm": false,
+        "td_sorteio": false,
+        "td_sorteio_status": false,
+        "td_sorteio_tipo": false,
+        "tf_bilhetagem_resumo": false,
+        "tf_notas_emitente_dia": false,
+        "tf_notas_participante_dia": false,
+        "tf_partic_ent_indicacoes": false,
+        "tf_participante_adesao": false,
+        "tf_premiacoes_entidades": false,
+        "tf_premiacoes_participantes": false,
+        "tf_qt_nfce_dia": false,
+        "tf_quantidade_bilhetes_participante": false,
+        "tf_requisicao_pagamento_entidade": true,
+        "tf_requisicao_pagamento_participante": false
+      },
+      "cubes": {
+        "td_bilhetagem": {
+          "name": "td_bilhetagem",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_BILHETAGEM\"",
+          "position": {
+            "x": 450.2586507564032,
+            "y": 2491.21382107879
+          }
+        },
+        "td_cnae": {
+          "name": "td_cnae",
+          "source": "NOTA_MINEIRA_ARM.TD_CNAE",
+          "position": {
+            "x": 2867.92569398771,
+            "y": 1207.598497641818
+          }
+        },
+        "td_entidade_social": {
+          "name": "td_entidade_social",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_ENTIDADE_SOCIAL\"",
+          "position": {
+            "x": 4069.6302247838803,
+            "y": 2626.6078551764977
+          }
+        },
+        "td_faixa_histograma_bilhete": {
+          "name": "td_faixa_histograma_bilhete",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_BILHETE\"",
+          "position": {
+            "x": 5353.39019748703,
+            "y": 3196.2007024532163
+          }
+        },
+        "td_faixa_histograma_participante": {
+          "name": "td_faixa_histograma_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_PARTICIPANTE\"",
+          "position": {
+            "x": 5154.999999999999,
+            "y": 2470.8749999999995
+          }
+        },
+        "td_municipio": {
+          "name": "td_municipio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": 1768.2256955872797,
+            "y": 2620.9752922377306
+          }
+        },
+        "td_pagamento_retorno_status": {
+          "name": "td_pagamento_retorno_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PAGAMENTO_RETORNO_STATUS\"",
+          "position": {
+            "x": 225,
+            "y": 1598
+          }
+        },
+        "td_participante": {
+          "name": "td_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PARTICIPANTE\"",
+          "position": {
+            "x": 3027.8879867283495,
+            "y": 3407.2275391045814
+          }
+        },
+        "td_periodo": {
+          "name": "td_periodo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PERIODO\"",
+          "position": {
+            "x": 2128.7448146886663,
+            "y": 2107.8614752387134
+          }
+        },
+        "td_premio_status": {
+          "name": "td_premio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PREMIO_STATUS\"",
+          "position": {
+            "x": 2495,
+            "y": 4462
+          }
+        },
+        "td_regiao_fiscal": {
+          "name": "td_regiao_fiscal",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 439.98089612210845,
+            "y": 3054.8335381317083
+          }
+        },
+        "td_segmentacao_nfm": {
+          "name": "td_segmentacao_nfm",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SEGMENTACAO_NFM\"",
+          "position": {
+            "x": 2859.0896341909074,
+            "y": 2570.661011265922
+          }
+        },
+        "td_sorteio": {
+          "name": "td_sorteio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO\"",
+          "position": {
+            "x": -1692.5569675357829,
+            "y": 4151.048652089953
+          }
+        },
+        "td_sorteio_status": {
+          "name": "td_sorteio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_STATUS\"",
+          "position": {
+            "x": 4462.5,
+            "y": 4073.4999999999995
+          }
+        },
+        "td_sorteio_tipo": {
+          "name": "td_sorteio_tipo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_TIPO\"",
+          "position": {
+            "x": 5850,
+            "y": 4181
+          }
+        },
+        "tf_bilhetagem_resumo": {
+          "name": "tf_bilhetagem_resumo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_BILHETAGEM_RESUMO\"",
+          "position": {
+            "x": -175.56657389527118,
+            "y": 2901.5857866142483
+          }
+        },
+        "tf_notas_emitente_dia": {
+          "name": "tf_notas_emitente_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_EMITENTE_DIA\"",
+          "position": {
+            "x": 2145.102221212448,
+            "y": 2857.4862064883228
+          }
+        },
+        "tf_notas_participante_dia": {
+          "name": "tf_notas_participante_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_PARTICIPANTE_DIA\"",
+          "position": {
+            "x": 4399.151143008799,
+            "y": 3215.8365578349594
+          }
+        },
+        "tf_partic_ent_indicacoes": {
+          "name": "tf_partic_ent_indicacoes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTIC_ENT_INDICACOES\"",
+          "position": {
+            "x": 3535.782464732251,
+            "y": 3010.8109740780546
+          }
+        },
+        "tf_participante_adesao": {
+          "name": "tf_participante_adesao",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTICIPANTE_ADESAO\"",
+          "position": {
+            "x": 2768.302206065835,
+            "y": 2941.1539955773696
+          }
+        },
+        "tf_premiacoes_entidades": {
+          "name": "tf_premiacoes_entidades",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_ENTIDADES\"",
+          "position": {
+            "x": 1522.7231900382933,
+            "y": 2945.7936471873145
+          }
+        },
+        "tf_premiacoes_participantes": {
+          "name": "tf_premiacoes_participantes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_PARTICIPANTES\"",
+          "position": {
+            "x": 331.5728845083924,
+            "y": 2748.9171038646755
+          }
+        },
+        "tf_qt_nfce_dia": {
+          "name": "tf_qt_nfce_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QT_NFCE_DIA\"",
+          "position": {
+            "x": 972.669972168581,
+            "y": 2655.4254396783954
+          }
+        },
+        "tf_quantidade_bilhetes_participante": {
+          "name": "tf_quantidade_bilhetes_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QUANTIDADE_BILHETES_PARTICIPANTE\"",
+          "position": {
+            "x": 1009.9999999999999,
+            "y": 2578
+          }
+        },
+        "tf_requisicao_pagamento_entidade": {
+          "name": "tf_requisicao_pagamento_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_ENTIDADE\"",
+          "position": {
+            "x": 1424.115084998922,
+            "y": 2327.7402826252796
+          }
+        },
+        "tf_requisicao_pagamento_participante": {
+          "name": "tf_requisicao_pagamento_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_PARTICIPANTE\"",
+          "position": {
+            "x": -2143.8985915415833,
+            "y": 3005.198518677387
+          }
+        }
+      }
+    },
+    "view-1787083399233": {
+      "id": "view-1787083399233",
+      "name": "Fato - Requisição pagamento participante",
+      "backgroundColor": "#fff4ed",
+      "visibility": {
+        "td_bilhetagem": false,
+        "td_cnae": false,
+        "td_entidade_social": false,
+        "td_faixa_histograma_bilhete": false,
+        "td_faixa_histograma_participante": false,
+        "td_municipio": false,
+        "td_pagamento_retorno_status": false,
+        "td_participante": false,
+        "td_periodo": false,
+        "td_premio_status": false,
+        "td_regiao_fiscal": false,
+        "td_segmentacao_nfm": false,
+        "td_sorteio": false,
+        "td_sorteio_status": false,
+        "td_sorteio_tipo": false,
+        "tf_bilhetagem_resumo": false,
+        "tf_notas_emitente_dia": false,
+        "tf_notas_participante_dia": false,
+        "tf_partic_ent_indicacoes": false,
+        "tf_participante_adesao": false,
+        "tf_premiacoes_entidades": false,
+        "tf_premiacoes_participantes": true,
+        "tf_qt_nfce_dia": false,
+        "tf_quantidade_bilhetes_participante": false,
+        "tf_requisicao_pagamento_entidade": false,
+        "tf_requisicao_pagamento_participante": true
+      },
+      "cubes": {
+        "td_bilhetagem": {
+          "name": "td_bilhetagem",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_BILHETAGEM\"",
+          "position": {
+            "x": 450.2586507564032,
+            "y": 2491.21382107879
+          }
+        },
+        "td_cnae": {
+          "name": "td_cnae",
+          "source": "NOTA_MINEIRA_ARM.TD_CNAE",
+          "position": {
+            "x": 2867.92569398771,
+            "y": 1207.598497641818
+          }
+        },
+        "td_entidade_social": {
+          "name": "td_entidade_social",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_ENTIDADE_SOCIAL\"",
+          "position": {
+            "x": 4069.6302247838803,
+            "y": 2626.6078551764977
+          }
+        },
+        "td_faixa_histograma_bilhete": {
+          "name": "td_faixa_histograma_bilhete",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_BILHETE\"",
+          "position": {
+            "x": 5353.39019748703,
+            "y": 3196.2007024532163
+          }
+        },
+        "td_faixa_histograma_participante": {
+          "name": "td_faixa_histograma_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_PARTICIPANTE\"",
+          "position": {
+            "x": 5154.999999999999,
+            "y": 2470.8749999999995
+          }
+        },
+        "td_municipio": {
+          "name": "td_municipio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": 1768.2256955872797,
+            "y": 2620.9752922377306
+          }
+        },
+        "td_pagamento_retorno_status": {
+          "name": "td_pagamento_retorno_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PAGAMENTO_RETORNO_STATUS\"",
+          "position": {
+            "x": 225,
+            "y": 1598
+          }
+        },
+        "td_participante": {
+          "name": "td_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PARTICIPANTE\"",
+          "position": {
+            "x": 3027.8879867283495,
+            "y": 3407.2275391045814
+          }
+        },
+        "td_periodo": {
+          "name": "td_periodo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PERIODO\"",
+          "position": {
+            "x": -1361.0583515820642,
+            "y": 2723.494810415909
+          }
+        },
+        "td_premio_status": {
+          "name": "td_premio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PREMIO_STATUS\"",
+          "position": {
+            "x": 2495,
+            "y": 4462
+          }
+        },
+        "td_regiao_fiscal": {
+          "name": "td_regiao_fiscal",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 439.98089612210845,
+            "y": 3054.8335381317083
+          }
+        },
+        "td_segmentacao_nfm": {
+          "name": "td_segmentacao_nfm",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SEGMENTACAO_NFM\"",
+          "position": {
+            "x": 2859.0896341909074,
+            "y": 2570.661011265922
+          }
+        },
+        "td_sorteio": {
+          "name": "td_sorteio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO\"",
+          "position": {
+            "x": -1692.5569675357829,
+            "y": 4151.048652089953
+          }
+        },
+        "td_sorteio_status": {
+          "name": "td_sorteio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_STATUS\"",
+          "position": {
+            "x": 4462.5,
+            "y": 4073.4999999999995
+          }
+        },
+        "td_sorteio_tipo": {
+          "name": "td_sorteio_tipo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_TIPO\"",
+          "position": {
+            "x": 5850,
+            "y": 4181
+          }
+        },
+        "tf_bilhetagem_resumo": {
+          "name": "tf_bilhetagem_resumo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_BILHETAGEM_RESUMO\"",
+          "position": {
+            "x": -175.56657389527118,
+            "y": 2901.5857866142483
+          }
+        },
+        "tf_notas_emitente_dia": {
+          "name": "tf_notas_emitente_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_EMITENTE_DIA\"",
+          "position": {
+            "x": 2145.102221212448,
+            "y": 2857.4862064883228
+          }
+        },
+        "tf_notas_participante_dia": {
+          "name": "tf_notas_participante_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_PARTICIPANTE_DIA\"",
+          "position": {
+            "x": 4399.151143008799,
+            "y": 3215.8365578349594
+          }
+        },
+        "tf_partic_ent_indicacoes": {
+          "name": "tf_partic_ent_indicacoes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTIC_ENT_INDICACOES\"",
+          "position": {
+            "x": 3535.782464732251,
+            "y": 3010.8109740780546
+          }
+        },
+        "tf_participante_adesao": {
+          "name": "tf_participante_adesao",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTICIPANTE_ADESAO\"",
+          "position": {
+            "x": 2768.302206065835,
+            "y": 2941.1539955773696
+          }
+        },
+        "tf_premiacoes_entidades": {
+          "name": "tf_premiacoes_entidades",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_ENTIDADES\"",
+          "position": {
+            "x": 1522.7231900382933,
+            "y": 2945.7936471873145
+          }
+        },
+        "tf_premiacoes_participantes": {
+          "name": "tf_premiacoes_participantes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_PARTICIPANTES\"",
+          "position": {
+            "x": -1208.6798931633564,
+            "y": 2674.7151452323137
+          }
+        },
+        "tf_qt_nfce_dia": {
+          "name": "tf_qt_nfce_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QT_NFCE_DIA\"",
+          "position": {
+            "x": 972.669972168581,
+            "y": 2655.4254396783954
+          }
+        },
+        "tf_quantidade_bilhetes_participante": {
+          "name": "tf_quantidade_bilhetes_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QUANTIDADE_BILHETES_PARTICIPANTE\"",
+          "position": {
+            "x": 1009.9999999999999,
+            "y": 2578
+          }
+        },
+        "tf_requisicao_pagamento_entidade": {
+          "name": "tf_requisicao_pagamento_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_ENTIDADE\"",
+          "position": {
+            "x": -1428.3333333333333,
+            "y": 2988.1111111111104
+          }
+        },
+        "tf_requisicao_pagamento_participante": {
+          "name": "tf_requisicao_pagamento_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_PARTICIPANTE\"",
+          "position": {
+            "x": -2187.0957203252715,
+            "y": 2880.6891474773442
+          }
+        }
+      }
+    },
+    "view-1787083412257": {
+      "id": "view-1787083412257",
+      "name": "Fato - Notas participante dia",
+      "backgroundColor": "#eef8f7",
+      "visibility": {
+        "td_bilhetagem": false,
+        "td_cnae": false,
+        "td_entidade_social": false,
+        "td_faixa_histograma_bilhete": false,
+        "td_faixa_histograma_participante": false,
+        "td_municipio": true,
+        "td_pagamento_retorno_status": false,
+        "td_participante": true,
+        "td_periodo": true,
+        "td_premio_status": false,
+        "td_regiao_fiscal": true,
+        "td_segmentacao_nfm": false,
+        "td_sorteio": false,
+        "td_sorteio_status": false,
+        "td_sorteio_tipo": false,
+        "tf_bilhetagem_resumo": false,
+        "tf_notas_emitente_dia": false,
+        "tf_notas_participante_dia": true,
+        "tf_partic_ent_indicacoes": false,
+        "tf_participante_adesao": false,
+        "tf_premiacoes_entidades": false,
+        "tf_premiacoes_participantes": false,
+        "tf_qt_nfce_dia": false,
+        "tf_quantidade_bilhetes_participante": false,
+        "tf_requisicao_pagamento_entidade": false,
+        "tf_requisicao_pagamento_participante": false
+      },
+      "cubes": {
+        "td_bilhetagem": {
+          "name": "td_bilhetagem",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_BILHETAGEM\"",
+          "position": {
+            "x": 450.2586507564032,
+            "y": 2491.21382107879
+          }
+        },
+        "td_cnae": {
+          "name": "td_cnae",
+          "source": "NOTA_MINEIRA_ARM.TD_CNAE",
+          "position": {
+            "x": 2867.92569398771,
+            "y": 1207.598497641818
+          }
+        },
+        "td_entidade_social": {
+          "name": "td_entidade_social",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_ENTIDADE_SOCIAL\"",
+          "position": {
+            "x": 4069.6302247838803,
+            "y": 2626.6078551764977
+          }
+        },
+        "td_faixa_histograma_bilhete": {
+          "name": "td_faixa_histograma_bilhete",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_BILHETE\"",
+          "position": {
+            "x": 5353.39019748703,
+            "y": 3196.2007024532163
+          }
+        },
+        "td_faixa_histograma_participante": {
+          "name": "td_faixa_histograma_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_PARTICIPANTE\"",
+          "position": {
+            "x": 5154.999999999999,
+            "y": 2470.8749999999995
+          }
+        },
+        "td_municipio": {
+          "name": "td_municipio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": 5028.816684764886,
+            "y": 3690.996890726263
+          }
+        },
+        "td_pagamento_retorno_status": {
+          "name": "td_pagamento_retorno_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PAGAMENTO_RETORNO_STATUS\"",
+          "position": {
+            "x": 225,
+            "y": 1598
+          }
+        },
+        "td_participante": {
+          "name": "td_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PARTICIPANTE\"",
+          "position": {
+            "x": 3799.664874430201,
+            "y": 2972.003979241047
+          }
+        },
+        "td_periodo": {
+          "name": "td_periodo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PERIODO\"",
+          "position": {
+            "x": 3740.4690612206186,
+            "y": 3659.72167832805
+          }
+        },
+        "td_premio_status": {
+          "name": "td_premio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PREMIO_STATUS\"",
+          "position": {
+            "x": 2495,
+            "y": 4462
+          }
+        },
+        "td_regiao_fiscal": {
+          "name": "td_regiao_fiscal",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 5097.452424776523,
+            "y": 2998.500525990423
+          }
+        },
+        "td_segmentacao_nfm": {
+          "name": "td_segmentacao_nfm",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SEGMENTACAO_NFM\"",
+          "position": {
+            "x": 2859.0896341909074,
+            "y": 2570.661011265922
+          }
+        },
+        "td_sorteio": {
+          "name": "td_sorteio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO\"",
+          "position": {
+            "x": -1692.5569675357829,
+            "y": 4151.048652089953
+          }
+        },
+        "td_sorteio_status": {
+          "name": "td_sorteio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_STATUS\"",
+          "position": {
+            "x": 4462.5,
+            "y": 4073.4999999999995
+          }
+        },
+        "td_sorteio_tipo": {
+          "name": "td_sorteio_tipo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_TIPO\"",
+          "position": {
+            "x": 5850,
+            "y": 4181
+          }
+        },
+        "tf_bilhetagem_resumo": {
+          "name": "tf_bilhetagem_resumo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_BILHETAGEM_RESUMO\"",
+          "position": {
+            "x": -175.56657389527118,
+            "y": 2901.5857866142483
+          }
+        },
+        "tf_notas_emitente_dia": {
+          "name": "tf_notas_emitente_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_EMITENTE_DIA\"",
+          "position": {
+            "x": 2145.102221212448,
+            "y": 2857.4862064883228
+          }
+        },
+        "tf_notas_participante_dia": {
+          "name": "tf_notas_participante_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_PARTICIPANTE_DIA\"",
+          "position": {
+            "x": 4399.151143008799,
+            "y": 3215.8365578349594
+          }
+        },
+        "tf_partic_ent_indicacoes": {
+          "name": "tf_partic_ent_indicacoes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTIC_ENT_INDICACOES\"",
+          "position": {
+            "x": 3535.782464732251,
+            "y": 3010.8109740780546
+          }
+        },
+        "tf_participante_adesao": {
+          "name": "tf_participante_adesao",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTICIPANTE_ADESAO\"",
+          "position": {
+            "x": 2768.302206065835,
+            "y": 2941.1539955773696
+          }
+        },
+        "tf_premiacoes_entidades": {
+          "name": "tf_premiacoes_entidades",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_ENTIDADES\"",
+          "position": {
+            "x": 1522.7231900382933,
+            "y": 2945.7936471873145
+          }
+        },
+        "tf_premiacoes_participantes": {
+          "name": "tf_premiacoes_participantes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_PARTICIPANTES\"",
+          "position": {
+            "x": 331.5728845083924,
+            "y": 2748.9171038646755
+          }
+        },
+        "tf_qt_nfce_dia": {
+          "name": "tf_qt_nfce_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QT_NFCE_DIA\"",
+          "position": {
+            "x": 972.669972168581,
+            "y": 2655.4254396783954
+          }
+        },
+        "tf_quantidade_bilhetes_participante": {
+          "name": "tf_quantidade_bilhetes_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QUANTIDADE_BILHETES_PARTICIPANTE\"",
+          "position": {
+            "x": 1009.9999999999999,
+            "y": 2578
+          }
+        },
+        "tf_requisicao_pagamento_entidade": {
+          "name": "tf_requisicao_pagamento_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_ENTIDADE\"",
+          "position": {
+            "x": -1428.3333333333333,
+            "y": 2988.1111111111104
+          }
+        },
+        "tf_requisicao_pagamento_participante": {
+          "name": "tf_requisicao_pagamento_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_PARTICIPANTE\"",
+          "position": {
+            "x": -2143.8985915415833,
+            "y": 3005.198518677387
+          }
+        }
+      }
+    },
+    "view-1787083428202": {
+      "id": "view-1787083428202",
+      "name": "Fato - Notas emitente dia",
+      "backgroundColor": "#f5f2ea",
+      "visibility": {
+        "td_bilhetagem": false,
+        "td_cnae": true,
+        "td_entidade_social": false,
+        "td_faixa_histograma_bilhete": false,
+        "td_faixa_histograma_participante": false,
+        "td_municipio": true,
+        "td_pagamento_retorno_status": false,
+        "td_participante": false,
+        "td_periodo": true,
+        "td_premio_status": false,
+        "td_regiao_fiscal": true,
+        "td_segmentacao_nfm": true,
+        "td_sorteio": false,
+        "td_sorteio_status": false,
+        "td_sorteio_tipo": false,
+        "tf_bilhetagem_resumo": false,
+        "tf_notas_emitente_dia": true,
+        "tf_notas_participante_dia": false,
+        "tf_partic_ent_indicacoes": false,
+        "tf_participante_adesao": false,
+        "tf_premiacoes_entidades": false,
+        "tf_premiacoes_participantes": false,
+        "tf_qt_nfce_dia": false,
+        "tf_quantidade_bilhetes_participante": false,
+        "tf_requisicao_pagamento_entidade": false,
+        "tf_requisicao_pagamento_participante": false
+      },
+      "cubes": {
+        "td_bilhetagem": {
+          "name": "td_bilhetagem",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_BILHETAGEM\"",
+          "position": {
+            "x": 450.2586507564032,
+            "y": 2491.21382107879
+          }
+        },
+        "td_cnae": {
+          "name": "td_cnae",
+          "source": "NOTA_MINEIRA_ARM.TD_CNAE",
+          "position": {
+            "x": 2698.1445482022154,
+            "y": 2507.821306890616
+          }
+        },
+        "td_entidade_social": {
+          "name": "td_entidade_social",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_ENTIDADE_SOCIAL\"",
+          "position": {
+            "x": 4069.6302247838803,
+            "y": 2626.6078551764977
+          }
+        },
+        "td_faixa_histograma_bilhete": {
+          "name": "td_faixa_histograma_bilhete",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_BILHETE\"",
+          "position": {
+            "x": 5353.39019748703,
+            "y": 3196.2007024532163
+          }
+        },
+        "td_faixa_histograma_participante": {
+          "name": "td_faixa_histograma_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_PARTICIPANTE\"",
+          "position": {
+            "x": 5154.999999999999,
+            "y": 2470.8749999999995
+          }
+        },
+        "td_municipio": {
+          "name": "td_municipio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": 1483.7776828711903,
+            "y": 2390.4784107851615
+          }
+        },
+        "td_pagamento_retorno_status": {
+          "name": "td_pagamento_retorno_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PAGAMENTO_RETORNO_STATUS\"",
+          "position": {
+            "x": 225,
+            "y": 1598
+          }
+        },
+        "td_participante": {
+          "name": "td_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PARTICIPANTE\"",
+          "position": {
+            "x": 3027.8879867283495,
+            "y": 3407.2275391045814
+          }
+        },
+        "td_periodo": {
+          "name": "td_periodo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PERIODO\"",
+          "position": {
+            "x": 2678.873086171482,
+            "y": 3367.2973276192633
+          }
+        },
+        "td_premio_status": {
+          "name": "td_premio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PREMIO_STATUS\"",
+          "position": {
+            "x": 2495,
+            "y": 4462
+          }
+        },
+        "td_regiao_fiscal": {
+          "name": "td_regiao_fiscal",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 1630.1624566309292,
+            "y": 3343.8183417644086
+          }
+        },
+        "td_segmentacao_nfm": {
+          "name": "td_segmentacao_nfm",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SEGMENTACAO_NFM\"",
+          "position": {
+            "x": 3058.482067030081,
+            "y": 3168.6158493288713
+          }
+        },
+        "td_sorteio": {
+          "name": "td_sorteio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO\"",
+          "position": {
+            "x": -1692.5569675357829,
+            "y": 4151.048652089953
+          }
+        },
+        "td_sorteio_status": {
+          "name": "td_sorteio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_STATUS\"",
+          "position": {
+            "x": 4462.5,
+            "y": 4073.4999999999995
+          }
+        },
+        "td_sorteio_tipo": {
+          "name": "td_sorteio_tipo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_TIPO\"",
+          "position": {
+            "x": 5850,
+            "y": 4181
+          }
+        },
+        "tf_bilhetagem_resumo": {
+          "name": "tf_bilhetagem_resumo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_BILHETAGEM_RESUMO\"",
+          "position": {
+            "x": -175.56657389527118,
+            "y": 2901.5857866142483
+          }
+        },
+        "tf_notas_emitente_dia": {
+          "name": "tf_notas_emitente_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_EMITENTE_DIA\"",
+          "position": {
+            "x": 2145.102221212448,
+            "y": 2857.4862064883228
+          }
+        },
+        "tf_notas_participante_dia": {
+          "name": "tf_notas_participante_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_PARTICIPANTE_DIA\"",
+          "position": {
+            "x": 4399.151143008799,
+            "y": 3215.8365578349594
+          }
+        },
+        "tf_partic_ent_indicacoes": {
+          "name": "tf_partic_ent_indicacoes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTIC_ENT_INDICACOES\"",
+          "position": {
+            "x": 3535.782464732251,
+            "y": 3010.8109740780546
+          }
+        },
+        "tf_participante_adesao": {
+          "name": "tf_participante_adesao",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTICIPANTE_ADESAO\"",
+          "position": {
+            "x": 2768.302206065835,
+            "y": 2941.1539955773696
+          }
+        },
+        "tf_premiacoes_entidades": {
+          "name": "tf_premiacoes_entidades",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_ENTIDADES\"",
+          "position": {
+            "x": 1522.7231900382933,
+            "y": 2945.7936471873145
+          }
+        },
+        "tf_premiacoes_participantes": {
+          "name": "tf_premiacoes_participantes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_PARTICIPANTES\"",
+          "position": {
+            "x": 331.5728845083924,
+            "y": 2748.9171038646755
+          }
+        },
+        "tf_qt_nfce_dia": {
+          "name": "tf_qt_nfce_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QT_NFCE_DIA\"",
+          "position": {
+            "x": 972.669972168581,
+            "y": 2655.4254396783954
+          }
+        },
+        "tf_quantidade_bilhetes_participante": {
+          "name": "tf_quantidade_bilhetes_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QUANTIDADE_BILHETES_PARTICIPANTE\"",
+          "position": {
+            "x": 1009.9999999999999,
+            "y": 2578
+          }
+        },
+        "tf_requisicao_pagamento_entidade": {
+          "name": "tf_requisicao_pagamento_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_ENTIDADE\"",
+          "position": {
+            "x": -1428.3333333333333,
+            "y": 2988.1111111111104
+          }
+        },
+        "tf_requisicao_pagamento_participante": {
+          "name": "tf_requisicao_pagamento_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_PARTICIPANTE\"",
+          "position": {
+            "x": -2143.8985915415833,
+            "y": 3005.198518677387
+          }
+        }
+      }
+    },
+    "view-1787085171043": {
+      "id": "view-1787085171043",
+      "name": "Dimensão - Bilhetagem",
+      "backgroundColor": "#f0f0ff",
+      "visibility": {
+        "td_bilhetagem": true,
+        "td_cnae": false,
+        "td_entidade_social": false,
+        "td_faixa_histograma_bilhete": false,
+        "td_faixa_histograma_participante": false,
+        "td_municipio": false,
+        "td_pagamento_retorno_status": false,
+        "td_participante": false,
+        "td_periodo": false,
+        "td_premio_status": false,
+        "td_regiao_fiscal": false,
+        "td_segmentacao_nfm": false,
+        "td_sorteio": false,
+        "td_sorteio_status": false,
+        "td_sorteio_tipo": true,
+        "tf_bilhetagem_resumo": true,
+        "tf_notas_emitente_dia": false,
+        "tf_notas_participante_dia": false,
+        "tf_partic_ent_indicacoes": false,
+        "tf_participante_adesao": false,
+        "tf_premiacoes_entidades": true,
+        "tf_premiacoes_participantes": true,
+        "tf_qt_nfce_dia": false,
+        "tf_quantidade_bilhetes_participante": true,
+        "tf_requisicao_pagamento_entidade": false,
+        "tf_requisicao_pagamento_participante": false
+      },
+      "cubes": {
+        "td_bilhetagem": {
+          "name": "td_bilhetagem",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_BILHETAGEM\"",
+          "position": {
+            "x": 227.9319764048425,
+            "y": 3423.928108397887
+          }
+        },
+        "td_cnae": {
+          "name": "td_cnae",
+          "source": "NOTA_MINEIRA_ARM.TD_CNAE",
+          "position": {
+            "x": 2698.495992668328,
+            "y": 2568.470202511259
+          }
+        },
+        "td_entidade_social": {
+          "name": "td_entidade_social",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_ENTIDADE_SOCIAL\"",
+          "position": {
+            "x": 4340.962331488154,
+            "y": 2424.2988282478727
+          }
+        },
+        "td_faixa_histograma_bilhete": {
+          "name": "td_faixa_histograma_bilhete",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_BILHETE\"",
+          "position": {
+            "x": 5353.39019748703,
+            "y": 3196.2007024532163
+          }
+        },
+        "td_faixa_histograma_participante": {
+          "name": "td_faixa_histograma_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_PARTICIPANTE\"",
+          "position": {
+            "x": 5154.999999999999,
+            "y": 2470.8749999999995
+          }
+        },
+        "td_municipio": {
+          "name": "td_municipio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": 1587.1723507452891,
+            "y": 2509.426095481293
+          }
+        },
+        "td_pagamento_retorno_status": {
+          "name": "td_pagamento_retorno_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PAGAMENTO_RETORNO_STATUS\"",
+          "position": {
+            "x": 225,
+            "y": 1598
+          }
+        },
+        "td_participante": {
+          "name": "td_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PARTICIPANTE\"",
+          "position": {
+            "x": 3589.999999999996,
+            "y": 4152.999999999997
+          }
+        },
+        "td_periodo": {
+          "name": "td_periodo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PERIODO\"",
+          "position": {
+            "x": 4790.564149102494,
+            "y": 1662.166958405706
+          }
+        },
+        "td_premio_status": {
+          "name": "td_premio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_PREMIO_STATUS\"",
+          "position": {
+            "x": 2495,
+            "y": 4462
+          }
+        },
+        "td_regiao_fiscal": {
+          "name": "td_regiao_fiscal",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 2044.8254139213295,
+            "y": 3733.333291997146
+          }
+        },
+        "td_segmentacao_nfm": {
+          "name": "td_segmentacao_nfm",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SEGMENTACAO_NFM\"",
+          "position": {
+            "x": 2758.4253106598726,
+            "y": 3343.191766842616
+          }
+        },
+        "td_sorteio": {
+          "name": "td_sorteio",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO\"",
+          "position": {
+            "x": -1692.5569675357829,
+            "y": 4151.048652089953
+          }
+        },
+        "td_sorteio_status": {
+          "name": "td_sorteio_status",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_STATUS\"",
+          "position": {
+            "x": 4462.5,
+            "y": 4073.4999999999995
+          }
+        },
+        "td_sorteio_tipo": {
+          "name": "td_sorteio_tipo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_TIPO\"",
+          "position": {
+            "x": -523.5833759237056,
+            "y": 3308.637084113669
+          }
+        },
+        "tf_bilhetagem_resumo": {
+          "name": "tf_bilhetagem_resumo",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_BILHETAGEM_RESUMO\"",
+          "position": {
+            "x": 841.8294990243672,
+            "y": 3915.8800908365965
+          }
+        },
+        "tf_notas_emitente_dia": {
+          "name": "tf_notas_emitente_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_EMITENTE_DIA\"",
+          "position": {
+            "x": 2145.102221212448,
+            "y": 2857.4862064883228
+          }
+        },
+        "tf_notas_participante_dia": {
+          "name": "tf_notas_participante_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_NOTAS_PARTICIPANTE_DIA\"",
+          "position": {
+            "x": 4399.151143008799,
+            "y": 3215.8365578349594
+          }
+        },
+        "tf_partic_ent_indicacoes": {
+          "name": "tf_partic_ent_indicacoes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTIC_ENT_INDICACOES\"",
+          "position": {
+            "x": 3535.782464732251,
+            "y": 3010.8109740780546
+          }
+        },
+        "tf_participante_adesao": {
+          "name": "tf_participante_adesao",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PARTICIPANTE_ADESAO\"",
+          "position": {
+            "x": 3238.1743416840577,
+            "y": 2145.4027981594113
+          }
+        },
+        "tf_premiacoes_entidades": {
+          "name": "tf_premiacoes_entidades",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_ENTIDADES\"",
+          "position": {
+            "x": 1223.862289908187,
+            "y": 3493.650343031314
+          }
+        },
+        "tf_premiacoes_participantes": {
+          "name": "tf_premiacoes_participantes",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_PARTICIPANTES\"",
+          "position": {
+            "x": 1709.1044242954194,
+            "y": 3068.769067542982
+          }
+        },
+        "tf_qt_nfce_dia": {
+          "name": "tf_qt_nfce_dia",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QT_NFCE_DIA\"",
+          "position": {
+            "x": 972.669972168581,
+            "y": 2655.4254396783954
+          }
+        },
+        "tf_quantidade_bilhetes_participante": {
+          "name": "tf_quantidade_bilhetes_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_QUANTIDADE_BILHETES_PARTICIPANTE\"",
+          "position": {
+            "x": 1141.2193990593023,
+            "y": 2659.546177942945
+          }
+        },
+        "tf_requisicao_pagamento_entidade": {
+          "name": "tf_requisicao_pagamento_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_ENTIDADE\"",
+          "position": {
+            "x": -1428.3333333333333,
+            "y": 2988.1111111111104
+          }
+        },
+        "tf_requisicao_pagamento_participante": {
+          "name": "tf_requisicao_pagamento_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_PARTICIPANTE\"",
+          "position": {
+            "x": -2143.8985915415833,
+            "y": 3005.198518677387
+          }
+        }
+      }
+    }
+  },
+  "cubes": {}
+}

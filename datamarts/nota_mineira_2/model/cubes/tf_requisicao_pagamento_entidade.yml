@@ -1,0 +1,49 @@
+cubes:
+  - name: tf_requisicao_pagamento_entidade
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TF_REQUISICAO_PAGAMENTO_ENTIDADE\""
+    data_source: default
+
+    joins:
+      - name: td_periodo
+        sql: "{CUBE}.dt_requisicao = {td_periodo}.data"
+        relationship: many_to_one
+
+    dimensions:
+      - name: id
+        title: ID
+        sql: COALESCE({CUBE}."SK_PREMIADO" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_STATUS_RETORNO_PAGAMENTO" || '', '')
+
+        type: string
+        primary_key: true
+
+      - name: dt_requisicao
+        sql: '{CUBE}."DT_REQUISICAO"'
+        type: time
+        primary_key: false
+
+      - name: sk_premiado
+        sql: '{CUBE}."SK_PREMIADO"'
+        type: string
+        primary_key: false
+
+      - name: sk_status_retorno_pagamento
+        sql: '{CUBE}."SK_STATUS_RETORNO_PAGAMENTO"'
+        type: number
+        primary_key: false
+
+      - name: dt_retorno_proc_pag_grp
+        sql: '{CUBE}."DT_RETORNO_PROC_PAG_GRP"'
+        type: time
+        primary_key: false
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Fato - Requisição pagamento entidade
+    hierarchies: []

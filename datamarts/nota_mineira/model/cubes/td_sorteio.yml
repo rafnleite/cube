@@ -1,0 +1,44 @@
+cubes:
+  - name: td_sorteio
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: ds_sorteio
+        sql: "{CUBE}.\"DS_SORTEIO\""
+        type: string
+
+      - name: ds_motivo_cancelamento
+        sql: "{CUBE}.\"DS_MOTIVO_CANCELAMENTO\""
+        type: string
+
+      - name: dt_previsao_sorteio
+        sql: "{CUBE}.\"DT_PREVISAO_SORTEIO\""
+        type: time
+
+      - name: dt_inicio_ref_compra
+        sql: "{CUBE}.\"DT_INICIO_REF_COMPRA\""
+        type: time
+
+      - name: dt_fim_ref_compra
+        sql: "{CUBE}.\"DT_FIM_REF_COMPRA\""
+        type: time
+
+      - name: dt_cancelamento
+        sql: "{CUBE}.\"DT_CANCELAMENTO\""
+        type: time
+
+      - name: dt_sorteio
+        sql: "{CUBE}.\"DT_SORTEIO\""
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+

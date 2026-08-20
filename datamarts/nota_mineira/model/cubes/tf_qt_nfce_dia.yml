@@ -1,0 +1,20 @@
+cubes:
+  - name: tf_qt_nfce_dia
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TF_QT_NFCE_DIA\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: dt_emissao
+        sql: "{CUBE}.\"DT_EMISSAO\""
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+

@@ -376,5 +376,66 @@ describe('ScaffoldingTemplate', () => {
         expect(it.content).toMatchSnapshot(it.fileName);
       });
     });
+
+    it('joins a corporate fact to the first SK of a dimension', () => {
+      const template = new ScaffoldingTemplate(
+        {
+          DW: {
+            TF_MOVIMENTO: [
+              { name: 'SK_MUNICIPIO', type: 'integer', attributes: [] },
+              { name: 'SK_REGIAO_FISCAL', type: 'integer', attributes: [] },
+              { name: 'VL_TOTAL', type: 'decimal', attributes: [] },
+            ],
+            TD_MUNICIPIO: [
+              { name: 'SK_MUNICIPIO', type: 'integer', attributes: [] },
+              { name: 'SK_REGIAO_FISCAL', type: 'integer', attributes: [] },
+              { name: 'DS_MUNICIPIO', type: 'varchar', attributes: [] },
+            ],
+          },
+        },
+        driver,
+        {
+          format: SchemaFormat.Yaml,
+          snakeCase: true,
+        }
+      );
+
+      const factFile = template.generateFilesByTableNames(['DW.TF_MOVIMENTO', 'DW.TD_MUNICIPIO'])
+        .find(file => file.fileName === 'tf_movimento.yml');
+
+      expect(factFile?.content).toContain('sql: "{CUBE.sk_municipio} = {td_municipio.sk_municipio}"');
+      expect(factFile?.content).not.toContain('td_municipio.sk_regiao_fiscal');
+    });
+
+    it('uses TD_PERIODO.DATA as key and joins the first fact DT column', () => {
+      const template = new ScaffoldingTemplate(
+        {
+          DW: {
+            TF_VENDAS: [
+              { name: 'DT_VENDA', type: 'date', attributes: [] },
+              { name: 'DT_CARGA', type: 'date', attributes: [] },
+              { name: 'VL_TOTAL', type: 'decimal', attributes: [] },
+            ],
+            TD_PERIODO: [
+              { name: 'DATA', type: 'date', attributes: [] },
+              { name: 'DS_MES', type: 'varchar', attributes: [] },
+            ],
+          },
+        },
+        driver,
+        {
+          format: SchemaFormat.Yaml,
+          snakeCase: true,
+        }
+      );
+
+      const files = template.generateFilesByTableNames(['DW.TF_VENDAS', 'DW.TD_PERIODO']);
+      const factFile = files.find(file => file.fileName === 'tf_vendas.yml');
+      const periodFile = files.find(file => file.fileName === 'td_periodo.yml');
+
+      expect(factFile?.content).toContain('sql: "{CUBE.dt_venda} = {td_periodo.data}"');
+      expect(factFile?.content).not.toContain('td_periodo.dt_carga');
+      expect(periodFile?.content).toMatch(/- name: data[\s\S]*?primary_key: true/);
+    });
   });
 });

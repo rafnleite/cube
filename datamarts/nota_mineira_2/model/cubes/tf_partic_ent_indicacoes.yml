@@ -1,0 +1,95 @@
+cubes:
+  - name: tf_partic_ent_indicacoes
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TF_PARTIC_ENT_INDICACOES\""
+    data_source: default
+
+    joins:
+      - name: td_participante
+        sql: "{CUBE}.sk_participante = {td_participante}.sk_participante"
+        relationship: many_to_one
+
+      - name: td_entidade_social
+        sql: "{CUBE}.sk_entidade_social = {td_entidade_social}.sk_entidade_social"
+        relationship: many_to_one
+
+      - name: td_periodo
+        sql: "{CUBE}.DATA = {td_periodo}.DATA"
+        relationship: many_to_one
+
+    dimensions:
+      - name: id
+        title: ID
+        sql: COALESCE({CUBE}."SK_PARTICIPANTE" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_ENTIDADE_SOCIAL" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_MUNICIPIO_PART" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_MUNICIPIO_ENT" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_REGIAO_PART" || '', '') || '-' ||
+          COALESCE({CUBE}."SK_REGIAO_ENT" || '', '')
+
+        type: string
+        primary_key: true
+
+      - name: sk_participante
+        sql: '{CUBE}."SK_PARTICIPANTE"'
+        type: number
+        primary_key: false
+
+      - name: sk_entidade_social
+        sql: '{CUBE}."SK_ENTIDADE_SOCIAL"'
+        type: number
+        primary_key: false
+
+      - name: data
+        title: Data
+        sql: '{CUBE}."DATA"'
+        type: time
+        primary_key: false
+
+      - name: sk_municipio_part
+        sql: '{CUBE}."SK_MUNICIPIO_PART"'
+        type: number
+        primary_key: false
+
+      - name: sk_municipio_ent
+        sql: '{CUBE}."SK_MUNICIPIO_ENT"'
+        type: number
+        primary_key: false
+
+      - name: sk_regiao_part
+        sql: '{CUBE}."SK_REGIAO_PART"'
+        type: number
+        primary_key: false
+
+      - name: sk_regiao_ent
+        sql: '{CUBE}."SK_REGIAO_ENT"'
+        type: number
+        primary_key: false
+
+      - name: fl_part_ativo
+        title: Flag de participante ativo
+        sql: '{CUBE}."FL_PART_ATIVO"'
+        type: number
+        primary_key: false
+
+      - name: fl_part_impedido
+        title: Flag de participante impedido
+        sql: '{CUBE}."FL_PART_IMPEDIDO"'
+        type: number
+        primary_key: false
+
+    measures:
+      - name: count
+        title: Contagem
+        type: count
+
+      - name: qtd_indicacoes
+        title: Quantidade de indicações
+        sql: '{CUBE}."QTD_INDICACOES"'
+        type: sum
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Fato - Indicações entidades
+    hierarchies: []

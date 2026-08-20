@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import MonacoEditor, { useMonaco } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import styled from 'styled-components';
@@ -13,6 +13,8 @@ type SqlExpressionAutocompleteProps = {
   tableReference?: boolean;
   placeholder?: string;
   style?: React.CSSProperties;
+  onFocus?: React.FocusEventHandler<HTMLDivElement>;
+  onBlur?: React.FocusEventHandler<HTMLDivElement>;
 };
 
 type SqlCompletionContext = {
@@ -24,7 +26,11 @@ type SqlCompletionContext = {
 const EditorFrame = styled.div`
   width: 100%;
   position: relative;
-  overflow: visible;
+  overflow: hidden;
+  resize: vertical;
+  min-height: 34px;
+  max-height: 420px;
+  box-sizing: border-box;
   z-index: 1;
   border: 1px solid #d9d9d9;
   border-radius: 2px;
@@ -169,12 +175,35 @@ export function SqlExpressionAutocomplete({
   tableReference = false,
   placeholder,
   style,
+  onFocus,
+  onBlur,
 }: SqlExpressionAutocompleteProps) {
   const monaco = useMonaco();
   const path = useMemo(nextEditorPath, []);
   const latestOnChange = useRef(onChange);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [editorHeight, setEditorHeight] = useState(multiline ? 92 : 34);
 
   latestOnChange.current = onChange;
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return undefined;
+
+    const updateHeight = () => {
+      const nextHeight = Math.round(frame.getBoundingClientRect().height);
+      if (nextHeight >= 34 && nextHeight <= 420) setEditorHeight(nextHeight);
+    };
+
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(frame);
+    updateHeight();
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    setEditorHeight(multiline ? 92 : 34);
+  }, [multiline]);
 
   useEffect(() => {
     contexts.set(path, { columns, tablesSchema, tableReference });
@@ -188,14 +217,30 @@ export function SqlExpressionAutocomplete({
   }, [monaco]);
 
   return (
-    <EditorFrame style={style} title={placeholder}>
+    <EditorFrame
+      ref={frameRef}
+      style={{ ...style, height: editorHeight }}
+      title={placeholder}
+      onFocus={onFocus}
+      onBlur={onBlur}
+    >
       <MonacoEditor
         path={path}
         language="sql"
         theme="vs"
         value={value}
         onChange={(nextValue) => latestOnChange.current(nextValue || '')}
-        height={multiline ? 92 : 34}
+        onMount={(editor, editorMonaco) => {
+          editor.onKeyDown((event) => {
+            if (event.keyCode !== editorMonaco.KeyCode.Space) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+            editor.trigger('cube-sql-editor', 'hideSuggestWidget', {});
+            editor.trigger('cube-sql-editor', 'type', { text: ' ' });
+          });
+        }}
+        height={editorHeight}
         options={{
           automaticLayout: true,
           fixedOverflowWidgets: true,
@@ -216,6 +261,7 @@ export function SqlExpressionAutocomplete({
           wordWrap: multiline ? 'on' : 'off',
           quickSuggestions: true,
           suggestOnTriggerCharacters: true,
+          acceptSuggestionOnCommitCharacter: false,
           snippetSuggestions: 'top',
           renderLineHighlight: 'none',
           scrollbar: {

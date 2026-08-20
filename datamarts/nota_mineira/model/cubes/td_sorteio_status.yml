@@ -1,0 +1,20 @@
+cubes:
+  - name: td_sorteio_status
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO_STATUS\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: ds_sorteio_status
+        sql: "{CUBE}.\"DS_SORTEIO_STATUS\""
+        type: string
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+

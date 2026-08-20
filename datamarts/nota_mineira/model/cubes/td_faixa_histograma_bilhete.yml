@@ -1,0 +1,24 @@
+cubes:
+  - name: td_faixa_histograma_bilhete
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_FAIXA_HISTOGRAMA_BILHETE\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: ds_faixa
+        sql: "{CUBE}.\"DS_FAIXA\""
+        type: string
+
+      - name: ds_faixa_completo
+        sql: "{CUBE}.\"DS_FAIXA_COMPLETO\""
+        type: string
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+

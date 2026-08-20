@@ -1,0 +1,102 @@
+cubes:
+  - name: td_periodo
+    sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_PERIODO\""
+    data_source: default
+
+    joins: []
+
+    dimensions:
+      - name: data
+        sql: '{CUBE}."DATA"'
+        type: time
+        primary_key: true
+
+      - name: nr_mes
+        title: Mês - Número
+        sql: "{CUBE}.NR_MES"
+        type: number
+        primary_key: false
+
+      - name: nr_trimestre
+        title: Trimestre - Número
+        sql: "{CUBE}.NR_TRIMESTRE"
+        type: number
+        primary_key: false
+
+      - name: nr_ano_semestre
+        title: Ano Semestre - Número
+        sql: "{CUBE}.NR_ANO_SEMESTRE"
+        type: number
+        primary_key: false
+
+      - name: Ano
+        title: Ano - Número
+        sql: "{CUBE}.ANO"
+        type: number
+        primary_key: false
+
+      - name: nr_ano_trimestre
+        title: Ano Trimestre - Número
+        sql: "{CUBE}.NR_ANO_TRIMESTRE"
+        type: number
+        primary_key: false
+
+      - name: nr_semestre
+        title: Semestre - Número
+        sql: "{CUBE}.NR_SEMESTRE"
+        type: number
+        primary_key: false
+
+      - name: nr_ano_mes
+        title: Ano Mês - Número
+        sql: "{CUBE}.NR_ANO_MES"
+        type: number
+        primary_key: false
+
+      - name: ds_mes_ano
+        title: Ano e Mês - Descrição
+        sql: '{CUBE}."DS_MES_ANO"'
+        type: string
+        primary_key: false
+
+      - name: ds_mes
+        title: Mês - Descrição
+        sql: '{CUBE}."DS_MES"'
+        type: string
+        primary_key: false
+
+      - name: ds_trimestre
+        title: Trimestre - Descrição
+        sql: '{CUBE}."DS_TRIMESTRE"'
+        type: string
+        primary_key: false
+
+      - name: ds_semestre
+        title: Semestre - Descrição
+        sql: '{CUBE}."DS_SEMESTRE"'
+        type: string
+        primary_key: false
+
+      - name: ds_trimestre_ano
+        title: Ano Trimestre - Descrição
+        sql: '{CUBE}."DS_TRIMESTRE_ANO"'
+        type: string
+        primary_key: false
+
+      - name: ds_semestre_ano
+        title: Ano semestre - Descrição
+        sql: '{CUBE}."DS_SEMESTRE_ANO"'
+        type: string
+        primary_key: false
+
+    measures:
+      - name: count
+        title: Contagem
+        type: count
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+
+    title: Período
+    hierarchies: []

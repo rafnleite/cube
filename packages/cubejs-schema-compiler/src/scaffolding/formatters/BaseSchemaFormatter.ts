@@ -98,6 +98,32 @@ export abstract class BaseSchemaFormatter {
     }${this.escapeName(m.name)}`;
   }
 
+  protected usesPipeForStringConcatenation(): boolean {
+    const dialectClass = this.driver?.constructor?.dialectClass;
+    const dialectName = typeof dialectClass === 'function' ? dialectClass()?.name : '';
+    const driverName = this.driver?.constructor?.name || '';
+    return dialectName === 'NetezzaQuery'
+      || dialectName === 'PostgresQuery'
+      || driverName === 'PostgresDriver';
+  }
+
+  protected isNetezzaDriver(): boolean {
+    const dialectClass = this.driver?.constructor?.dialectClass;
+    return typeof dialectClass === 'function' && dialectClass()?.name === 'NetezzaQuery';
+  }
+
+  protected sqlForCompositeKey(columns: string[]) {
+    const values = columns.map(column => `${this.cubeReference('CUBE')}.${this.escapeName(column)}`);
+
+    return this.usesPipeForStringConcatenation()
+      ? values
+        .map(value => this.isNetezzaDriver()
+          ? `COALESCE(${value} || '', '')`
+          : `COALESCE(CAST(${value} AS VARCHAR(64)), '')`)
+        .join(" || '-' || ")
+      : `CONCAT(${values.join(", '-', ")})`;
+  }
+
   protected memberTitle(m) {
     return inflection.titleize(inflection.underscore(this.memberName(m))) !== m.title
       ? m.title
@@ -185,7 +211,9 @@ export abstract class BaseSchemaFormatter {
       dimensions: tableSchema.dimensions.sort((a) => (a.isPrimaryKey ? -1 : 0))
         .map((m) => ({
           [this.memberName(m)]: {
-            sql: this.sqlForMember(m),
+            sql: m.sql ?? (m.compositeKeyColumns
+              ? this.sqlForCompositeKey(m.compositeKeyColumns)
+              : this.sqlForMember(m)),
             type: m.type ?? m.types[0],
             title: this.memberTitle(m),
             [this.options.snakeCase ? 'primary_key' : 'primaryKey']: m.isPrimaryKey

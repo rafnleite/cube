@@ -29,6 +29,68 @@ type SchemaFile = {
   content: string;
 };
 
+/** Keep generated YAML readable when AST mutations create new cube sections. */
+function formatYamlSource(source: string): string {
+  const lines = source.replace(/\r\n/g, '\n').split('\n');
+  const formatted: string[] = [];
+  const listItemIndents = new Set<number>();
+
+  const addBlankLine = () => {
+    if (formatted.length > 0 && formatted[formatted.length - 1] !== '') {
+      formatted.push('');
+    }
+  };
+
+  const indentOf = (line: string) => (line.match(/^ */)?.[0].length || 0);
+  const previousNonBlank = () => {
+    for (let index = formatted.length - 1; index >= 0; index -= 1) {
+      if (formatted[index].trim()) return formatted[index];
+    }
+    return null;
+  };
+
+  const cubeHasDataSource = (index: number) => {
+    for (let next = index + 1; next < lines.length; next += 1) {
+      if (/^ {2}-\s/.test(lines[next])) return false;
+      if (/^ {4}data_source:/.test(lines[next])) return true;
+    }
+    return false;
+  };
+
+  lines.forEach((line, index) => {
+    if (!line.trim()) {
+      formatted.push(line);
+      return;
+    }
+
+    const previous = previousNonBlank();
+    const currentIndent = indentOf(line);
+    const listItem = line.match(/^( *)-\s/);
+
+    if (previous && listItem) {
+      const previousIndent = indentOf(previous);
+      if (listItemIndents.has(currentIndent) && previousIndent > currentIndent) {
+        addBlankLine();
+      }
+      listItemIndents.add(currentIndent);
+    } else if (previous && currentIndent < indentOf(previous)) {
+      addBlankLine();
+    }
+
+    formatted.push(line);
+
+    const cubeProperty = line.match(/^ {4}(sql_table|data_source):/);
+    const needsGeneratedBreak = cubeProperty
+      && (cubeProperty[1] === 'data_source'
+        || (cubeProperty[1] === 'sql_table' && !cubeHasDataSource(index)));
+    if (needsGeneratedBreak && lines[index + 1]?.trim()) {
+      addBlankLine();
+    }
+  });
+
+  return formatted.join('\n').replace(/\n+$/, '\n');
+}
+
 export class CubeSchemaConverter {
   protected dataSchemaFiles: SchemaFile[] = [];
 
@@ -172,7 +234,7 @@ export class CubeSchemaConverter {
     return Object.entries(this.parsedFiles).map(([cubeName, file]) => {
       const source = 'ast' in file
         ? generator(file.ast, {}).code
-        : String(file.yaml);
+        : formatYamlSource(String(file.yaml));
 
       return {
         cubeName,

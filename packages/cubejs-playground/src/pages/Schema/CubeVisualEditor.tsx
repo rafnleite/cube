@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Tabs, Select, Input, Button, Empty, Typography, Tooltip, message, Dropdown, Menu, Checkbox } from 'antd';
 import { load, dump } from 'js-yaml';
-import styled, { createGlobalStyle } from 'styled-components';
+import styled from 'styled-components';
 import autocompleteConfig from '../../config/schema-autocomplete.json';
 import {
   CubeIcon,
@@ -10,6 +10,7 @@ import {
   QuestionOutlined,
   ReadmeOutlined,
   RulerCombinedIcon,
+  TrashOutlined,
 } from '../../shared/icons/FontAwesomeIcons';
 import {
   expressionReferencesColumn,
@@ -31,12 +32,14 @@ import {
   HierarchyForm,
   JoinForm,
   MeasureForm,
+  normalizeMeasureFilters,
   PreAggregationForm,
   SegmentForm,
   AccessPolicyForm,
 } from './SchemaEntityForms';
 import { SchemaItemList } from './SchemaItemList';
 import { SqlExpressionAutocomplete } from './SqlExpressionAutocomplete';
+import { ConfirmPopover } from '../../components/ConfirmPopover';
 
 const { TabPane } = Tabs;
 const { Text } = Typography;
@@ -60,25 +63,56 @@ const ColumnActionButton = styled(Button)`
   color: rgba(0, 0, 0, 0.45);
 `;
 
-const EditorOverlayStyles = createGlobalStyle`
-  .cube-remove-popconfirm .ant-popover-inner-content {
-    min-width: 190px;
-    padding: 14px 16px 12px;
+const CubeSelector = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+`;
+
+const CubeSelectorLabel = styled.span`
+  color: rgba(0, 0, 0, 0.55);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+`;
+
+const CubeSelectorOption = styled.span`
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+`;
+
+const CubeSelectorTitle = styled.span`
+  overflow: hidden;
+  color: rgba(0, 0, 0, 0.88);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const CubeSelectorName = styled.span`
+  overflow: hidden;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 11px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const CubeSelectorControl = styled(Select)`
+  width: 250px;
+
+  .ant-select-selector {
+    min-height: 32px;
   }
 
-  .cube-remove-popconfirm .ant-popover-message {
-    padding: 0 0 12px;
-  }
-
-  .cube-remove-popconfirm .ant-popover-buttons {
+  .ant-select-selection-item {
     display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    margin: 0;
-  }
-
-  .cube-remove-popconfirm .ant-popover-buttons button {
-    margin-left: 0;
+    align-items: center;
   }
 `;
 
@@ -131,8 +165,8 @@ const ITEM_FIELD_ORDER: Record<string, string[]> = {
   joins: ['name', 'sql', 'relationship'],
   dimensions: ['title', 'name', 'description', 'sql', 'type', 'latitude', 'longitude', 'primary_key', 'public', 'shown', 'case', 'sub_query', 'format', 'meta'],
   measures: ['title', 'name', 'description', 'sql', 'type', 'public', 'format', 'drill_members', 'rolling_window', 'filters', 'case', 'meta'],
-  hierarchies: ['name', 'title', 'public', 'levels'],
-  segments: ['name', 'sql', 'title', 'description', 'public'],
+  hierarchies: ['title', 'name', 'public', 'levels'],
+  segments: ['title', 'name', 'sql', 'description', 'public'],
   pre_aggregations: ['name', 'type', 'measures', 'dimensions', 'time_dimension', 'granularity', 'partition_granularity', 'refresh_key', 'external', 'scheduled_refresh', 'indexes'],
   access_policy: ['group', 'groups', 'conditions', 'member_level', 'row_level', 'member_masking'],
 };
@@ -170,6 +204,74 @@ const VISUAL_EDITOR_DOCUMENTATION: Record<string, { label: string; url: string }
 
 type CubeItem = Record<string, any>;
 type CubeDoc = { cubes?: CubeItem[]; [key: string]: any };
+type VisualSchemaFile = { fileName: string; content?: string };
+type VisualSchemaChange = { fileName: string; content: string };
+
+const REMOTE_JOIN_FILE = '__visualEditorJoinFile';
+const REMOTE_JOIN_CUBE = '__visualEditorJoinCube';
+
+function parseVisualJoinColumns(sql: unknown, targetCube: string): { sourceColumn?: string; targetColumn?: string } {
+  if (typeof sql !== 'string') return {};
+  const expression = sql.trim().replace(/^`|`$/g, '');
+  const escapedTarget = targetCube.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const direct = expression.match(new RegExp(`^\\{CUBE\\}\\.([A-Za-z_][A-Za-z0-9_$]*)\\s*=\\s*\\{${escapedTarget}\\}\\.([A-Za-z_][A-Za-z0-9_$]*)$`));
+  if (direct) return { sourceColumn: direct[1], targetColumn: direct[2] };
+  const reverse = expression.match(new RegExp(`^\\{${escapedTarget}\\}\\.([A-Za-z_][A-Za-z0-9_$]*)\\s*=\\s*\\{CUBE\\}\\.([A-Za-z_][A-Za-z0-9_$]*)$`));
+  if (reverse) return { sourceColumn: reverse[2], targetColumn: reverse[1] };
+  return {};
+}
+
+function normalizeVisualRelationships(documents: Array<{ fileName: string; doc: CubeDoc }>): Set<string> {
+  const cubes = new Map<string, { fileName: string; cube: CubeItem }>();
+  documents.forEach(({ fileName, doc }) => {
+    (doc.cubes || []).forEach(cube => {
+      if (cube.name) cubes.set(String(cube.name), { fileName, cube });
+    });
+  });
+
+  const moves: Array<{
+    source: CubeItem;
+    target: CubeItem;
+    join: CubeItem;
+    sourceColumn: string;
+    targetColumn: string;
+  }> = [];
+  cubes.forEach(({ cube: source }) => {
+    (source.joins || []).forEach((join: CubeItem) => {
+      if (join.relationship !== 'one_to_many' || !join.name) return;
+      const target = cubes.get(String(join.name))?.cube;
+      const columns = parseVisualJoinColumns(join.sql, String(join.name));
+      if (target && columns.sourceColumn && columns.targetColumn) {
+        moves.push({
+          source,
+          target,
+          join,
+          sourceColumn: columns.sourceColumn,
+          targetColumn: columns.targetColumn,
+        });
+      }
+    });
+  });
+
+  const changedFiles = new Set<string>();
+  moves.forEach(({ source, target, join, sourceColumn, targetColumn }) => {
+    source.joins = (source.joins || []).filter((item: CubeItem) => item !== join);
+    target.joins = Array.isArray(target.joins) ? target.joins : [];
+    const movedJoin = {
+      ...join,
+      name: source.name,
+      sql: `{CUBE}.${targetColumn} = {${source.name}}.${sourceColumn}`,
+      relationship: 'many_to_one',
+    };
+    const existingIndex = target.joins.findIndex((item: CubeItem) => item.name === source.name);
+    if (existingIndex >= 0) target.joins[existingIndex] = movedJoin;
+    else target.joins.push(movedJoin);
+    documents.forEach(({ fileName, doc }) => {
+      if (doc.cubes?.includes(source) || doc.cubes?.includes(target)) changedFiles.add(fileName);
+    });
+  });
+  return changedFiles;
+}
 
 /**
  * The scaffolding generator separates structural YAML blocks with blank
@@ -298,39 +400,41 @@ type Props = {
   visible: boolean;
   fileName: string;
   yamlContent: string;
+  files?: VisualSchemaFile[];
   tablesSchema?: TablesSchema;
   onClose: () => void;
   onSave: (content: string) => Promise<void> | void;
+  onSaveFiles?: (changes: VisualSchemaChange[]) => Promise<void> | void;
 };
 
-export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema, onClose, onSave }: Props) {
+export function CubeVisualEditor({ visible, fileName, yamlContent, files = [], tablesSchema, onClose, onSave, onSaveFiles }: Props) {
   const [doc, setDoc] = useState<CubeDoc | null>(null);
+  const [externalDocs, setExternalDocs] = useState<Record<string, CubeDoc>>({});
   const [parseError, setParseError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [selectedCubeIndex, setSelectedCubeIndex] = useState<number | null>(null);
   const [dataSourceMode, setDataSourceMode] = useState<'sql_table' | 'sql'>('sql_table');
   const [activeTab, setActiveTab] = useState('cube');
   const [expandedItems, setExpandedItems] = useState<Partial<Record<ListSection, string[]>>>({});
   const [primaryKeyDraft, setPrimaryKeyDraft] = useState<PrimaryKeyDraft | null>(null);
   const editorIdCounter = useRef(0);
   const scrollTarget = useRef<string | null>(null);
+  const dirtyExternalFiles = useRef(new Set<string>());
 
   function ensureEditorIds(next: CubeDoc) {
-    const firstCube = next.cubes?.[0];
-    if (!firstCube) {
-      return;
-    }
-
-    LIST_SECTIONS.forEach((section) => {
-      const items = firstCube[section];
-      if (!Array.isArray(items)) {
-        return;
-      }
-
-      items.forEach((item: CubeItem) => {
-        if (!item[VISUAL_EDITOR_ID]) {
-          item[VISUAL_EDITOR_ID] = `${section}-${editorIdCounter.current}`;
-          editorIdCounter.current += 1;
+    (next.cubes || []).forEach((currentCube) => {
+      LIST_SECTIONS.forEach((section) => {
+        const items = currentCube[section];
+        if (!Array.isArray(items)) {
+          return;
         }
+
+        items.forEach((item: CubeItem) => {
+          if (!item[VISUAL_EDITOR_ID]) {
+            item[VISUAL_EDITOR_ID] = `${section}-${editorIdCounter.current}`;
+            editorIdCounter.current += 1;
+          }
+        });
       });
     });
   }
@@ -345,11 +449,28 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
       if (parsed && typeof parsed === 'object' && Array.isArray(parsed.cubes) && parsed.cubes.length) {
         ensureEditorIds(parsed);
         setDoc(parsed);
+        setSelectedCubeIndex(0);
         setDataSourceMode(parsed.cubes[0]?.sql !== undefined ? 'sql' : 'sql_table');
         setActiveTab('cube');
         setExpandedItems({});
         scrollTarget.current = null;
         setParseError(null);
+
+        const parsedExternalDocs: Record<string, CubeDoc> = {};
+        dirtyExternalFiles.current.clear();
+        files.forEach(file => {
+          if (file.fileName === fileName || !file.content || !/\.(ya?ml)$/i.test(file.fileName)) return;
+          try {
+            const external = load(file.content) as CubeDoc;
+            if (external && Array.isArray(external.cubes) && external.cubes.length) {
+              ensureEditorIds(external);
+              parsedExternalDocs[file.fileName] = external;
+            }
+          } catch (_error) {
+            // An unrelated invalid file should not prevent editing this file.
+          }
+        });
+        setExternalDocs(parsedExternalDocs);
       } else {
         setDoc(null);
         setParseError('O editor visual funciona apenas para arquivos com pelo menos um cube.');
@@ -358,7 +479,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
       setDoc(null);
       setParseError(`Não foi possível interpretar o YAML: ${e?.message || e}`);
     }
-  }, [visible, yamlContent]);
+  }, [fileName, files, visible, yamlContent]);
 
   useEffect(() => {
     const target = scrollTarget.current;
@@ -379,12 +500,99 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
     });
   }, [activeTab, expandedItems, doc]);
 
-  const cube: CubeItem | undefined = doc?.cubes?.[0];
+  const cube: CubeItem | undefined = selectedCubeIndex === null
+    ? undefined
+    : doc?.cubes?.[selectedCubeIndex];
 
   const columns = useMemo(
     () => resolveColumnsForTable(cube?.sql_table, tablesSchema),
     [cube?.sql_table, tablesSchema]
   );
+
+  const documentEntries = useMemo(
+    () => [
+      ...(doc ? [{ fileName, doc }] : []),
+      ...Object.entries(externalDocs).map(([externalFileName, externalDoc]) => ({
+        fileName: externalFileName,
+        doc: externalDoc,
+      })),
+    ],
+    [doc, externalDocs, fileName]
+  );
+
+  function originForJoin(item: CubeItem) {
+    const originFileName = item[REMOTE_JOIN_FILE] as string | undefined;
+    const originCubeName = item[REMOTE_JOIN_CUBE] as string | undefined;
+    if (!originFileName || !originCubeName) {
+      return cube;
+    }
+    return documentEntries
+      .find(entry => entry.fileName === originFileName)
+      ?.doc.cubes?.find(currentCube => currentCube.name === originCubeName);
+  }
+
+  function visibleItemsForSection(section: ListSection): CubeItem[] {
+    if (section !== 'joins' || !cube?.name) {
+      return (cube?.[section] || []) as CubeItem[];
+    }
+
+    const localJoins = ((cube.joins || []) as CubeItem[]);
+    const remoteJoins = documentEntries.flatMap(entry => (
+      entry.doc.cubes || []
+    ).filter(otherCube => otherCube.name && otherCube.name !== cube.name).flatMap(otherCube => (
+      ((otherCube.joins || []) as CubeItem[])
+        .filter(join => join.name === cube.name)
+        .map(join => ({
+          ...join,
+          [REMOTE_JOIN_FILE]: entry.fileName,
+          [REMOTE_JOIN_CUBE]: otherCube.name,
+        }))
+    )));
+
+    return [...localJoins, ...remoteJoins];
+  }
+
+  function locateVisualItem(section: ListSection, index: number, visualItem?: CubeItem) {
+    const originFileName = visualItem?.[REMOTE_JOIN_FILE] as string | undefined;
+    const originCubeName = visualItem?.[REMOTE_JOIN_CUBE] as string | undefined;
+    if (!originFileName || !originCubeName) {
+      return { fileName, cubeName: cube?.name, itemIndex: index };
+    }
+
+    const originDoc = originFileName === fileName ? doc : externalDocs[originFileName];
+    const originCube = originDoc?.cubes?.find(currentCube => currentCube.name === originCubeName);
+    const itemId = visualItem?.[VISUAL_EDITOR_ID];
+    const itemIndex = (originCube?.[section] || []).findIndex((item: CubeItem) => item[VISUAL_EDITOR_ID] === itemId);
+    return { fileName: originFileName, cubeName: originCubeName, itemIndex };
+  }
+
+  function updateExternalItem(section: ListSection, index: number, key: string, value: any, visualItem: CubeItem) {
+    const location = locateVisualItem(section, index, visualItem);
+    if (!location.fileName || !location.cubeName || location.itemIndex < 0) return;
+    if (location.fileName === fileName) {
+      updateDoc((next) => {
+        const targetCube = next.cubes?.find(currentCube => currentCube.name === location.cubeName);
+        const item = targetCube?.[section]?.[location.itemIndex];
+        if (!item) return;
+        if (value === '' || value === undefined || value === null) delete item[key];
+        else item[key] = value;
+      });
+      message.info(`Esta junção está declarada em ${location.cubeName} e será salva nesse arquivo.`);
+      return;
+    }
+    setExternalDocs(previous => {
+      const next = structuredClone(previous);
+      const targetCube = next[location.fileName]?.cubes?.find(currentCube => currentCube.name === location.cubeName);
+      if (!targetCube) return previous;
+      const item = targetCube[section]?.[location.itemIndex] || (targetCube[section] = [])[location.itemIndex] || {};
+      if (value === '' || value === undefined || value === null) delete item[key];
+      else item[key] = value;
+      ensureEditorIds(next[location.fileName]);
+      return next;
+    });
+    dirtyExternalFiles.current.add(location.fileName);
+    message.info(`Esta junção está declarada em ${location.cubeName} e será salva no arquivo ${location.fileName}.`);
+  }
 
   const columnUsages = useMemo<Record<string, ColumnUsage>>(() => {
     const usages: Record<string, ColumnUsage> = Object.fromEntries(
@@ -397,7 +605,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
       }])
     );
 
-    const markExpression = (expression: unknown, usage: keyof ColumnUsage) => {
+    const markExpression = (expression: unknown, usage: Exclude<keyof ColumnUsage, 'joinNames'>) => {
       columns.forEach((column) => {
         if (expressionReferencesColumn(expression, column.name)) {
           usages[column.name][usage] = true;
@@ -445,7 +653,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
 
   function updateScalar(key: string, value: any) {
     updateDoc((next) => {
-      const c = next.cubes![0];
+      const c = next.cubes![selectedCubeIndex ?? 0];
       if (value === '' || value === undefined || value === null) {
         delete c[key];
       } else {
@@ -457,14 +665,118 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
   function updateDataSourceMode(mode: 'sql_table' | 'sql') {
     setDataSourceMode(mode);
     updateDoc((next) => {
-      const c = next.cubes![0];
+      const c = next.cubes![selectedCubeIndex ?? 0];
       delete c[mode === 'sql' ? 'sql_table' : 'sql'];
     });
   }
 
-  function updateItemField(section: ListSection, index: number, key: string, value: any) {
+  function addCube() {
+    if (!doc) return;
+
+    const existingNames = new Set((doc.cubes || []).map((currentCube) => String(currentCube.name || '')));
+    let name = 'new_cube';
+    let suffix = 2;
+    while (existingNames.has(name)) {
+      name = `new_cube_${suffix}`;
+      suffix += 1;
+    }
+
+    const newIndex = doc.cubes?.length || 0;
     updateDoc((next) => {
-      const c = next.cubes![0];
+      next.cubes = next.cubes || [];
+      next.cubes.push({ name, sql_table: '' });
+    });
+    setSelectedCubeIndex(newIndex);
+    setDataSourceMode('sql_table');
+    setActiveTab('cube');
+    setExpandedItems({});
+  }
+
+  function selectCube(index: number) {
+    const selected = doc?.cubes?.[index];
+    if (!selected) return;
+
+    setSelectedCubeIndex(index);
+    setDataSourceMode(selected.sql !== undefined ? 'sql' : 'sql_table');
+    setActiveTab('cube');
+    setExpandedItems({});
+  }
+
+  function removeCube(index: number) {
+    if (!doc?.cubes || doc.cubes.length <= 1) {
+      message.warning('O arquivo precisa manter pelo menos um cube.');
+      return;
+    }
+
+    const next = structuredClone(doc);
+    next.cubes!.splice(index, 1);
+    setDoc(next);
+    const nextIndex = Math.min(selectedCubeIndex ?? 0, next.cubes!.length - 1);
+    setSelectedCubeIndex(nextIndex);
+    setDataSourceMode(next.cubes![nextIndex]?.sql !== undefined ? 'sql' : 'sql_table');
+    setActiveTab('cube');
+    setExpandedItems({});
+  }
+
+  function renderCubeManager() {
+    const cubes = doc?.cubes || [];
+
+    return (
+      <div style={{ maxWidth: 760, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div>
+            <Typography.Title level={4} style={{ margin: 0 }}>Cubos do arquivo</Typography.Title>
+            <Text type="secondary">Escolha um cubo para editar suas propriedades e componentes.</Text>
+          </div>
+          <Button type="primary" icon={<PlusOutlined />} onClick={addCube}>Adicionar cubo</Button>
+        </div>
+
+        <div style={{ display: 'grid', gap: 10 }}>
+          {cubes.map((currentCube, index) => (
+            <div
+              key={`${currentCube[VISUAL_EDITOR_ID] || currentCube.name || 'cube'}-${index}`}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: 14,
+                border: '1px solid #e5e5e5',
+                borderRadius: 6,
+                background: '#fafafa',
+              }}
+            >
+              <CubeIcon style={{ color: '#7568d8', fontSize: 18 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Typography.Text strong>{currentCube.name || `Cubo ${index + 1}`}</Typography.Text>
+                <div>
+                  <Text type="secondary">
+                    {currentCube.sql_table || currentCube.sql || 'Fonte SQL não definida'}
+                  </Text>
+                </div>
+              </div>
+              <Button onClick={() => selectCube(index)}>Gerenciar</Button>
+              <ConfirmPopover
+                title="Remover este cubo?"
+                okText="Remover"
+                cancelText="Cancelar"
+                onConfirm={() => removeCube(index)}
+              >
+                <Button danger>Remover</Button>
+              </ConfirmPopover>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function updateItemField(section: ListSection, index: number, key: string, value: any, visualItem?: CubeItem) {
+    if (visualItem?.[REMOTE_JOIN_FILE]) {
+      updateExternalItem(section, index, key, value, visualItem);
+      return;
+    }
+    updateDoc((next) => {
+      const c = next.cubes![selectedCubeIndex ?? 0];
       if (!Array.isArray(c[section])) {
         c[section] = [];
       }
@@ -479,7 +791,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
 
   function addItem(section: ListSection) {
     updateDoc((next) => {
-      const c = next.cubes![0];
+      const c = next.cubes![selectedCubeIndex ?? 0];
       if (!Array.isArray(c[section])) {
         c[section] = [];
       }
@@ -487,9 +799,30 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
     });
   }
 
-  function removeItem(section: ListSection, index: number) {
+  function removeItem(section: ListSection, index: number, visualItem?: CubeItem) {
+    if (visualItem?.[REMOTE_JOIN_FILE]) {
+      const location = locateVisualItem(section, index, visualItem);
+      if (!location.fileName || !location.cubeName || location.itemIndex < 0) return;
+      if (location.fileName === fileName) {
+        updateDoc((next) => {
+          const targetCube = next.cubes?.find(currentCube => currentCube.name === location.cubeName);
+          if (targetCube?.[section]) targetCube[section].splice(location.itemIndex, 1);
+        });
+        message.info(`Esta junção está declarada em ${location.cubeName} e será removida desse arquivo.`);
+        return;
+      }
+      setExternalDocs(previous => {
+        const next = structuredClone(previous);
+        const targetCube = next[location.fileName]?.cubes?.find(currentCube => currentCube.name === location.cubeName);
+        if (targetCube?.[section]) targetCube[section].splice(location.itemIndex, 1);
+        return next;
+      });
+      dirtyExternalFiles.current.add(location.fileName);
+      message.info(`Esta junção está declarada em ${location.cubeName} e será removida do arquivo ${location.fileName}.`);
+      return;
+    }
     updateDoc((next) => {
-      next.cubes![0][section].splice(index, 1);
+      next.cubes![selectedCubeIndex ?? 0][section].splice(index, 1);
     });
   }
 
@@ -499,7 +832,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
     }
 
     updateDoc((next) => {
-      const items = next.cubes![0][section] as CubeItem[];
+      const items = next.cubes![selectedCubeIndex ?? 0][section] as CubeItem[];
       const [item] = items.splice(fromIndex, 1);
       items.splice(toIndex, 0, item);
     });
@@ -566,16 +899,20 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
     const isPrimaryKeyDimension = section === 'dimensions' && Boolean(usage?.primaryKey);
     const newIndex = isPrimaryKeyDimension
       ? 0
-      : (Array.isArray(cube?.[section]) ? cube[section].length : 0);
+      : (cube && Array.isArray(cube[section]) ? cube[section].length : 0);
 
     updateDoc((next) => {
-      const c = next.cubes![0];
+      const c = next.cubes![selectedCubeIndex ?? 0];
       if (!Array.isArray(c[section])) {
         c[section] = [];
       }
 
       const items = c[section] as CubeItem[];
-      const baseName = section === 'measures' ? `${column.name}_count` : section === 'joins' ? `${column.name}_join` : column.name;
+      const baseName = section === 'measures'
+        ? `${column.name}_count`
+        : section === 'joins'
+          ? `${column.name}_join`
+          : column.name.toLowerCase();
       let name = baseName;
       let suffix = 2;
       while (items.some((item) => item.name === name)) {
@@ -629,7 +966,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
 
   function openPrimaryKeyModal(selectedColumns: string[] = []) {
     setPrimaryKeyDraft({
-      name: selectedColumns.length === 1 ? selectedColumns[0] : 'primary_key',
+      name: selectedColumns.length === 1 ? selectedColumns[0].toLowerCase() : 'primary_key',
       selectedColumns,
       customSql: false,
       sql: '',
@@ -658,7 +995,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
 
     const requestedName = primaryKeyDraft.name.trim();
     updateDoc((next) => {
-      const c = next.cubes![0];
+      const c = next.cubes![selectedCubeIndex ?? 0];
       const dimensions = Array.isArray(c.dimensions) ? c.dimensions as CubeItem[] : [];
       let name = requestedName;
       let suffix = 2;
@@ -689,7 +1026,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
 
   function renderListSection(section: ListSection) {
     const sectionConfig = schemaAutocomplete.yaml.sections[section];
-    const items: CubeItem[] = (cube?.[section] || []) as CubeItem[];
+    const items: CubeItem[] = visibleItemsForSection(section);
 
     return (
       <div>
@@ -710,27 +1047,52 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
           expandedKeys={expandedItems[section] || []}
           droppableId={`visual-editor-${section}`}
           emptyDescription={`Nenhum item em ${SECTION_TITLES[section]}`}
-          getItemKey={(item) => String(item[VISUAL_EDITOR_ID])}
-          getItemTitle={(item) => section === 'dimensions'
+          getItemKey={(item, index) => `${item[REMOTE_JOIN_FILE] || fileName}:${item[REMOTE_JOIN_CUBE] || cube?.name || 'cube'}:${item[VISUAL_EDITOR_ID] || index}`}
+          getItemTitle={(item) => section !== 'access_policy'
             ? item.title || item.name
             : section === 'access_policy'
               ? item.group || (Array.isArray(item.groups) ? item.groups.join(', ') : item.groups) || 'Política de acesso'
               : item.name}
           isPrimaryKey={(item) => section === 'dimensions' && Boolean(item.primary_key || item.primaryKey)}
           onToggle={(index) => toggleItem(section, index)}
-          onRemove={(index) => removeItem(section, index)}
-          onReorder={(fromIndex, toIndex) => reorderItem(section, fromIndex, toIndex)}
+          onRemove={(index) => removeItem(section, index, items[index])}
+          onReorder={(fromIndex, toIndex) => {
+            if (items[fromIndex]?.[REMOTE_JOIN_FILE] || items[toIndex]?.[REMOTE_JOIN_FILE]) return;
+            reorderItem(section, fromIndex, toIndex);
+          }}
           renderItemForm={(item, index) => {
+            const itemOrigin = section === 'joins' ? originForJoin(item) : cube;
+            const itemColumns = section === 'joins'
+              ? resolveColumnsForTable(itemOrigin?.sql_table, tablesSchema)
+              : columns;
             const formProps = {
               values: item,
-              columns,
+              columns: itemColumns,
               tablesSchema,
-              onChange: (key: string, value: any) => updateItemField(section, index, key, value),
+              dimensionOptions: (cube?.dimensions || [])
+                .map((dimension: any) => ({
+                  name: String(dimension.name || ''),
+                  title: typeof dimension.title === 'string' ? dimension.title : undefined,
+                }))
+                .filter((dimension: any) => dimension.name),
+              onChange: (key: string, value: any) => updateItemField(section, index, key, value, item),
             };
             if (section === 'dimensions') return <DimensionForm {...formProps} />;
             if (section === 'measures') return <MeasureForm {...formProps} />;
             if (section === 'hierarchies') return <HierarchyForm {...formProps} />;
-            if (section === 'joins') return <JoinForm {...formProps} />;
+            if (section === 'joins') return (
+              <>
+                {item[REMOTE_JOIN_FILE] ? (
+                  <div style={{ marginBottom: 12 }}>
+                    <Text type="secondary">
+                      Esta junção envolve este cubo, mas está declarada em <strong>{item[REMOTE_JOIN_CUBE]}</strong>.
+                      As alterações serão salvas no arquivo <strong>{item[REMOTE_JOIN_FILE]}</strong>.
+                    </Text>
+                  </div>
+                ) : null}
+                <JoinForm {...formProps} />
+              </>
+            );
             if (section === 'segments') return <SegmentForm {...formProps} />;
             if (section === 'access_policy') return <AccessPolicyForm {...formProps} />;
             return <PreAggregationForm {...formProps} />;
@@ -753,7 +1115,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
   }
 
   async function handleSave() {
-    if (saving || !doc || !cube) {
+    if (saving || !doc) {
       return;
     }
 
@@ -765,8 +1127,9 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
       return '';
     };
 
-    for (const section of LIST_SECTIONS) {
-      const items: CubeItem[] = (cube[section] || []) as CubeItem[];
+    for (const [cubeIndex, currentCube] of (doc.cubes || []).entries()) {
+      for (const section of LIST_SECTIONS) {
+        const items: CubeItem[] = (currentCube[section] || []) as CubeItem[];
       if (section !== 'access_policy' && items.some((item) => !item.name)) {
         message.error(`Todo item em ${SECTION_TITLES[section]} precisa de um nome`);
         return;
@@ -790,20 +1153,26 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
         && item.case !== null
         && (typeof item.case === 'string' || typeof item.case !== 'object' || Array.isArray(item.case))
       ))) {
-        message.error(`O case de ${section === 'dimensions' ? 'uma dimensÃ£o' : 'uma medida'} precisa ser um objeto YAML vÃ¡lido.`);
+        message.error(`O case de ${section === 'dimensions' ? 'uma dimensão' : 'uma medida'} precisa ser um objeto YAML válido.`);
         return;
+      }
       }
     }
 
     const cleanDoc = structuredClone(doc);
-    const cleanCube = cleanDoc.cubes![0];
-    for (const section of LIST_SECTIONS) {
+    for (const cleanCube of cleanDoc.cubes || []) {
+      for (const section of LIST_SECTIONS) {
       if (!Array.isArray(cleanCube[section]) || cleanCube[section].length === 0) {
         delete cleanCube[section];
         continue;
       }
 
       for (const item of cleanCube[section] as CubeItem[]) {
+        if (section === 'measures') {
+          const filters = normalizeMeasureFilters(item.filters);
+          if (filters) item.filters = filters;
+          else delete item.filters;
+        }
         if (section === 'access_policy') {
           if (typeof item.groups === 'string') {
             item.groups = item.groups.split(',').map((group: string) => group.trim()).filter(Boolean);
@@ -821,16 +1190,44 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
         }
         delete item[VISUAL_EDITOR_ID];
       }
+      }
+      Object.assign(cleanCube, reorderCubeForVisualEditor(cleanCube));
     }
-
-    cleanDoc.cubes![0] = reorderCubeForVisualEditor(cleanCube);
-    const content = formatYamlLikeGeneratedModel(
-      dump(cleanDoc, { lineWidth: -1, noRefs: true, sortKeys: false })
-    );
+    const documentsToSave = documentEntries.map(entry => ({
+      fileName: entry.fileName,
+      doc: entry.fileName === fileName ? cleanDoc : structuredClone(entry.doc),
+    }));
+    documentsToSave.forEach(({ doc: document }) => {
+      (document.cubes || []).forEach(currentCube => {
+        LIST_SECTIONS.forEach(section => {
+          if (!Array.isArray(currentCube[section])) return;
+          currentCube[section].forEach((item: CubeItem) => delete item[VISUAL_EDITOR_ID]);
+        });
+      });
+    });
+    const normalizedFiles = normalizeVisualRelationships(documentsToSave);
+    const filesToSave = new Set([fileName, ...dirtyExternalFiles.current, ...normalizedFiles]);
+    const changes = documentsToSave
+      .filter(entry => filesToSave.has(entry.fileName))
+      .map(entry => ({
+        fileName: entry.fileName,
+        content: formatYamlLikeGeneratedModel(
+          dump(entry.doc, { lineWidth: -1, noRefs: true, sortKeys: false })
+        ),
+      }));
+    const content = changes.find(change => change.fileName === fileName)?.content || '';
 
     setSaving(true);
     try {
-      await onSave(content);
+      if (changes.length > 1) {
+        if (!onSaveFiles) {
+          message.error('Este editor precisa salvar também o arquivo que declara a junção.');
+          return;
+        }
+        await onSaveFiles(changes);
+      } else {
+        await onSave(content);
+      }
       onClose();
     } finally {
       setSaving(false);
@@ -838,7 +1235,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
   }
 
   function handleEditorKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
-    if (event.key === 'Enter' && event.ctrlKey && event.shiftKey) {
+    if (event.key === 'Enter' && event.shiftKey && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
       onClose();
       return;
@@ -854,12 +1251,10 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
     if (!visible) return undefined;
 
     const handleModalShortcut = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return;
-
       const target = event.target as HTMLElement | null;
       if (target?.closest('.case-builder-modal')) return;
 
-      if (event.key === 'Enter' && event.ctrlKey && event.shiftKey) {
+      if (event.key === 'Enter' && event.shiftKey && !event.ctrlKey && !event.metaKey) {
         event.preventDefault();
         event.stopPropagation();
         onClose();
@@ -880,7 +1275,50 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
   return (
     <>
     <Modal
-      title={`Editor visual — ${fileName}`}
+      title={(
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <span>Editor visual — {fileName}</span>
+          {doc && selectedCubeIndex !== null ? (
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }} onClick={(event) => event.stopPropagation()}>
+              <CubeSelector>
+                <CubeSelectorLabel>Cubo em edição</CubeSelectorLabel>
+              <CubeSelectorControl
+                size="middle"
+                value={selectedCubeIndex}
+                optionLabelProp="label"
+                aria-label="Selecionar cubo para editar"
+                onChange={(value: any) => {
+                  if (typeof value === 'number') selectCube(value);
+                }}
+                options={(doc.cubes || []).map((currentCube, index) => ({
+                  value: index,
+                  label: (
+                    <CubeSelectorOption>
+                      <CubeSelectorTitle>
+                        {currentCube.title || currentCube.name || `Cubo ${index + 1}`}
+                      </CubeSelectorTitle>
+                      {currentCube.name ? (
+                        <CubeSelectorName>{currentCube.name}</CubeSelectorName>
+                      ) : null}
+                    </CubeSelectorOption>
+                  ),
+                }))}
+              />
+              </CubeSelector>
+              <Button
+                type="dashed"
+                size="middle"
+                icon={<PlusOutlined />}
+                title="Novo cubo"
+                aria-label="Novo cubo"
+                onClick={addCube}
+              >
+                Novo cubo
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      )}
       visible={visible}
       onCancel={onClose}
       closable={false}
@@ -890,21 +1328,23 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
       footer={[
         <ModalShortcutAction key="cancel">
           <Button onClick={onClose}>Cancelar</Button>
-          <ModalShortcutHint>Ctrl + Shift + Enter</ModalShortcutHint>
+          <ModalShortcutHint>Shift + Enter</ModalShortcutHint>
         </ModalShortcutAction>,
         <ModalShortcutAction key="save">
-          <Button type="primary" loading={saving} disabled={!cube} onClick={handleSave}>Salvar</Button>
+          <Button type="primary" loading={saving} disabled={!doc} onClick={handleSave}>Salvar</Button>
           <ModalShortcutHint>Ctrl + Enter</ModalShortcutHint>
         </ModalShortcutAction>,
       ]}
     >
-      <EditorOverlayStyles />
       <div onKeyDownCapture={handleEditorKeyDown}>
         {parseError ? (
           <Empty description={parseError} />
-        ) : !cube ? (
+        ) : !doc ? (
           <Empty description="Carregando..." />
+        ) : !cube ? (
+          <Empty description="Cubo não encontrado." />
         ) : (
+          <>
           <div style={{ display: 'flex', gap: 16 }}>
           <div style={{ width: 220, flexShrink: 0 }}>
             <Text strong>Colunas da tabela</Text>
@@ -966,7 +1406,19 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
           <div style={{ flex: 1, minWidth: 0 }}>
             <Tabs activeKey={activeTab} onChange={setActiveTab}>
               <TabPane tab="Cubo" key="cube">
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+                  {doc.cubes && doc.cubes.length > 1 ? (
+                    <ConfirmPopover
+                      title="Remover este cubo?"
+                      okText="Remover"
+                      cancelText="Cancelar"
+                      onConfirm={() => removeCube(selectedCubeIndex ?? 0)}
+                    >
+                      <Button type="dashed" danger icon={<TrashOutlined />}>
+                        Remover cubo
+                      </Button>
+                    </ConfirmPopover>
+                  ) : <span />}
                   {renderDocumentationLink('cube')}
                 </div>
                 <CubeForm
@@ -985,6 +1437,7 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, tablesSchema,
             </Tabs>
           </div>
           </div>
+          </>
         )}
       </div>
     </Modal>

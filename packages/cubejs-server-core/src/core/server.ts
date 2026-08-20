@@ -37,7 +37,7 @@ import { agentCollect } from './agentCollect';
 import { OrchestratorStorage } from './OrchestratorStorage';
 import { createLogger } from './logger';
 import { OptsHandler } from './OptsHandler';
-import { MultiProjectRuntime } from './multi-project/MultiProjectRuntime';
+import { MultiDatamartRuntime } from './multi-datamart/MultiDatamartRuntime';
 import {
   driverDependencies,
   lookupDriverClass,
@@ -81,6 +81,15 @@ function wrapToFnIfNeeded<T, R>(possibleFn: T | ((a: R) => T)): (a: R) => T {
   }
 
   return () => possibleFn;
+}
+
+function datamartContextCacheKey(context: RequestContext): string {
+  const sessionId = (context as RequestContext & { datamartSessionId?: string }).datamartSessionId;
+  if (!sessionId) return 'anonymous';
+
+  // The session contains database credentials. Use only a short fingerprint
+  // in compiler/orchestrator cache keys, never the token itself.
+  return crypto.createHash('sha256').update(sessionId, 'utf8').digest('hex').slice(0, 16);
 }
 
 class AcceptAllAcceptor implements ContextAcceptor {
@@ -170,7 +179,7 @@ export class CubejsServerCore {
 
   protected apiGatewayInstance: ApiGateway | null = null;
 
-  protected readonly multiProjectRuntime?: MultiProjectRuntime;
+  protected readonly multiDatamartRuntime?: MultiDatamartRuntime;
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   public readonly event: (name: string, props?: object) => Promise<void>;
@@ -192,22 +201,26 @@ export class CubejsServerCore {
       getEnv('logLevel'),
     );
 
-    this.multiProjectRuntime = MultiProjectRuntime.fromEnv();
-    if (this.multiProjectRuntime) {
+    this.multiDatamartRuntime = MultiDatamartRuntime.fromEnv();
+    if (this.multiDatamartRuntime) {
       const originalExtendContext = opts.extendContext;
-      const runtime = this.multiProjectRuntime;
+      const runtime = this.multiDatamartRuntime;
       opts = {
         ...opts,
-        // The default refresh context is null. In multi-project mode that
+        // The default refresh context is null. In multi-datamart mode that
         // cannot select an isolated repository or credentials, so background
-        // refresh must be opt-in with project-aware contexts.
+        // refresh must be opt-in with datamart-aware contexts.
         scheduledRefreshTimer: opts.scheduledRefreshTimer ?? false,
         extendContext: async (req) => ({
           ...(originalExtendContext ? await originalExtendContext(req) : {}),
           ...runtime.contextFromRequest(req),
         }),
-        contextToAppId: context => `PROJECT_${runtime.projectId(context)}`,
-        contextToOrchestratorId: context => `PROJECT_${runtime.projectId(context)}`,
+        contextToAppId: context => (
+          `DATAMART_${runtime.datamartId(context)}_${datamartContextCacheKey(context)}`
+        ),
+        contextToOrchestratorId: context => (
+          `DATAMART_${runtime.datamartId(context)}_${datamartContextCacheKey(context)}`
+        ),
         repositoryFactory: context => runtime.repository(context),
         driverFactory: context => runtime.driver(context),
       };
@@ -301,7 +314,7 @@ export class CubejsServerCore {
         dockerVersion: getEnv('dockerImageVersion'),
         externalDbTypeFn: this.contextToExternalDbType,
         isReadyForQueryProcessing: this.isReadyForQueryProcessing.bind(this),
-        multiProjectRuntime: this.multiProjectRuntime,
+        multiDatamartRuntime: this.multiDatamartRuntime,
       });
       const oldLogger = this.logger;
       this.logger = ((msg, params) => {
@@ -463,16 +476,19 @@ export class CubejsServerCore {
   }
 
   public async initApp(app: ExpressApplication) {
-    if (this.multiProjectRuntime) {
+    if (this.multiDatamartRuntime) {
       const basePath = this.options.basePath.replace(/\/$/, '');
       app.use((req, res, next) => {
         const [pathname, query] = req.url.split('?', 2);
-        const match = pathname.match(new RegExp(`^${basePath}/projects/([a-z0-9-]+)(/.*)$`));
+        const match = pathname.match(new RegExp(`^${basePath}/datamarts/([a-z0-9_-]+)(/.*)$`));
         if (match) {
-          req.headers['x-cube-project-id'] = match[1];
+          req.headers['x-cube-datamart-id'] = match[1];
           try {
-            this.multiProjectRuntime!.contextFromRequest(req);
+            this.multiDatamartRuntime!.contextFromRequest(req);
           } catch (e) {
+            if (/Datamart session is missing or expired|Datamart credentials are required/i.test((e as Error).message)) {
+              res.setHeader('Set-Cookie', 'cube_datamart_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0');
+            }
             res.status(401).json({ error: (e as Error).message });
             return;
           }
@@ -562,23 +578,46 @@ export class CubejsServerCore {
     }
   }
 
-  public async getCompilerApi(context: RequestContext) {
+  public async getCompilerApi(
+    context: RequestContext,
+    options: { forceRefresh?: boolean } = {},
+  ) {
     const appId = await this.contextToAppId(context);
-    let compilerApi = this.compilerCache.get(appId);
+    let compilerApi = options.forceRefresh ? undefined : this.compilerCache.get(appId);
     const currentSchemaVersion = this.options.schemaVersion && (() => this.options.schemaVersion(context));
 
     if (!compilerApi) {
+      const contextWithDataSource = <T extends { dataSource: string }>(dataSourceContext: T) => {
+        const mergedContext = { ...context, ...dataSourceContext } as RequestContext & T & {
+          datamartId?: string;
+          datamartSessionId?: string;
+        };
+        const datamartContext = context as RequestContext & {
+          datamartId?: string;
+          datamartSessionId?: string;
+        };
+
+        // Compiler callbacks receive a reduced context containing only the
+        // data source. Never let that reduced context discard the authenticated
+        // datamart session captured when this compiler was created.
+        if (datamartContext.datamartId) mergedContext.datamartId = datamartContext.datamartId;
+        if (datamartContext.datamartSessionId) {
+          mergedContext.datamartSessionId = datamartContext.datamartSessionId;
+        }
+        return mergedContext;
+      };
+
       compilerApi = this.createCompilerApi(
         this.repositoryFactory(context),
         {
           dbType: async (dataSourceContext) => {
-            const dbType = await this.contextToDbType({ ...context, ...dataSourceContext });
+            const dbType = await this.contextToDbType(contextWithDataSource(dataSourceContext));
             return dbType;
           },
           externalDbType: this.contextToExternalDbType(context),
           dialectClass: (dialectContext) => (
             this.options.dialectFactory &&
-            this.options.dialectFactory({ ...context, ...dialectContext })
+            this.options.dialectFactory(contextWithDataSource(dialectContext))
           ),
           externalDialectClass: this.options.externalDialectFactory && this.options.externalDialectFactory(context),
           schemaVersion: currentSchemaVersion,
@@ -591,7 +630,9 @@ export class CubejsServerCore {
         },
       );
 
-      this.compilerCache.set(appId, compilerApi);
+      if (!options.forceRefresh) {
+        this.compilerCache.set(appId, compilerApi);
+      }
     }
 
     compilerApi.schemaVersion = currentSchemaVersion;
@@ -904,7 +945,7 @@ export class CubejsServerCore {
     context: DriverContext,
     options?: OrchestratorInitedOptions,
   ): Promise<BaseDriver> {
-    if (this.multiProjectRuntime) {
+    if (this.multiDatamartRuntime) {
       const driver = await this.resolveDriver(context, options);
       await driver.testConnection();
       return driver;

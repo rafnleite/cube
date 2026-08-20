@@ -70,12 +70,12 @@
       },
       "hierarchies": {
         "newItemLabel": "Nova hierarquia",
-        "keys": ["name", "title", "public", "levels"],
+        "keys": ["title", "name", "public", "levels"],
         "descriptions": {
           "name": "Nome da hierarquia, usado nas queries.",
-          "title": "TÃ­tulo amigÃ¡vel exibido para a hierarquia.",
-          "public": "Controla se a hierarquia Ã© visÃ­vel para os usuÃ¡rios da API.",
-          "levels": "DimensÃµes que formam os nÃ­veis da hierarquia, separadas por vÃ­rgula."
+          "title": "Título amigável exibido para a hierarquia.",
+          "public": "Controla se a hierarquia é visível para os usuários da API.",
+          "levels": "Dimensões que formam os níveis da hierarquia, separadas por vírgula."
         }
       },
       "dimensions": {
@@ -158,7 +158,7 @@
       },
       "segments": {
         "newItemLabel": "Novo segmento",
-        "keys": ["name", "sql", "title", "description", "public"],
+        "keys": ["title", "name", "sql", "description", "public"],
         "descriptions": {
           "name": "Identificador do segment, usado nas queries.",
           "sql": "Condição SQL (WHERE) aplicada quando o segment é usado.",
