@@ -1,3 +1,16 @@
+type OdbcDiagnostic = {
+  state?: string;
+  code?: number | string;
+  message?: string;
+};
+
+export function odbcDiagnostics(cause: unknown): string {
+  const diagnostics = (cause as { odbcErrors?: OdbcDiagnostic[] } | undefined)?.odbcErrors;
+  return Array.isArray(diagnostics) && diagnostics.length
+    ? ` (${diagnostics.map((item) => [item.state, item.code, item.message].filter(Boolean).join(': ')).join('; ')})`
+    : '';
+}
+
 export class NetezzaError extends Error {
   public constructor(message: string, cause?: Error) {
     super(message);
@@ -10,13 +23,14 @@ export class NetezzaError extends Error {
 
 export class NetezzaConnectionError extends NetezzaError {
   public constructor(cause: Error, poolName: string) {
-    const diagnostics = (cause as Error & {
-      odbcErrors?: Array<{ state?: string; code?: number | string; message?: string }>;
-    }).odbcErrors;
-    const detail = Array.isArray(diagnostics) && diagnostics.length
-      ? ` (${diagnostics.map((item) => [item.state, item.code, item.message].filter(Boolean).join(': ')).join('; ')})`
-      : '';
-    super(`Unable to connect to Netezza using pool ${poolName}: ${cause.message}${detail}`, cause);
+    super(`Unable to connect to Netezza using pool ${poolName}: ${cause.message}${odbcDiagnostics(cause)}`, cause);
     this.name = 'NetezzaConnectionError';
+  }
+}
+
+export class NetezzaQueryError extends NetezzaError {
+  public constructor(cause: Error) {
+    super(`Unable to execute Netezza query: ${cause.message}${odbcDiagnostics(cause)}`, cause);
+    this.name = 'NetezzaQueryError';
   }
 }

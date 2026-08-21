@@ -2,6 +2,7 @@ import * as t from '@babel/types';
 import YAML, { isMap, isScalar, isSeq, Pair, Scalar, YAMLMap, YAMLSeq } from 'yaml';
 
 import type { AstByCubeName, CubeConverterInterface, JsSet, YamlSet } from './CubeSchemaConverter';
+import { insertJsCubeSection, insertYamlCubeSection } from './CubeSchemaOrdering';
 
 export type CubePrimaryKeyDefinition = {
   cubeName: string;
@@ -81,7 +82,7 @@ export class CubePrimaryKeyConverter implements CubeConverterInterface {
     const type = inferDimensionType(this.definition.columnType);
 
     if (!dimensionsProperty) {
-      cubeDefinition.properties.push(t.objectProperty(
+      insertJsCubeSection(cubeDefinition, t.objectProperty(
         t.identifier('dimensions'),
         t.objectExpression([
           t.objectProperty(t.identifier(this.definition.columnName), t.objectExpression([
@@ -106,14 +107,21 @@ export class CubePrimaryKeyConverter implements CubeConverterInterface {
         return;
       }
 
-      dimensionsProperty.value.properties.push(t.objectProperty(
+      const property = t.objectProperty(
         t.identifier(this.definition.columnName),
         t.objectExpression([
           t.objectProperty(t.identifier('sql'), t.stringLiteral(this.definition.columnName)),
           t.objectProperty(t.identifier('type'), t.stringLiteral(type)),
           t.objectProperty(t.identifier('primaryKey'), t.booleanLiteral(true)),
         ])
+      );
+      const firstNonPrimary = dimensionsProperty.value.properties.findIndex(candidate => (
+        !t.isObjectProperty(candidate)
+        || !t.isObjectExpression(candidate.value)
+        || !Boolean((jsProperty(candidate.value, ['primaryKey', 'primary_key'])?.value as t.BooleanLiteral | undefined)?.value)
       ));
+      if (firstNonPrimary >= 0) dimensionsProperty.value.properties.splice(firstNonPrimary, 0, property);
+      else dimensionsProperty.value.properties.push(property);
       return;
     }
 
@@ -126,12 +134,18 @@ export class CubePrimaryKeyConverter implements CubeConverterInterface {
         setJsProperty(existing, 'primaryKey', t.booleanLiteral(true));
         return;
       }
-      dimensionsProperty.value.elements.push(t.objectExpression([
+      const dimension = t.objectExpression([
         t.objectProperty(t.identifier('name'), t.stringLiteral(this.definition.columnName)),
         t.objectProperty(t.identifier('sql'), t.stringLiteral(this.definition.columnName)),
         t.objectProperty(t.identifier('type'), t.stringLiteral(type)),
         t.objectProperty(t.identifier('primaryKey'), t.booleanLiteral(true)),
-      ]));
+      ]);
+      const firstNonPrimary = dimensionsProperty.value.elements.findIndex(element => !(
+        t.isObjectExpression(element)
+        && Boolean((jsProperty(element, ['primaryKey', 'primary_key'])?.value as t.BooleanLiteral | undefined)?.value)
+      ));
+      if (firstNonPrimary >= 0) dimensionsProperty.value.elements.splice(firstNonPrimary, 0, dimension);
+      else dimensionsProperty.value.elements.push(dimension);
       return;
     }
 
@@ -148,7 +162,7 @@ export class CubePrimaryKeyConverter implements CubeConverterInterface {
     if (!dimensions) {
       dimensions = yaml.createNode([]) as YAMLSeq;
       dimensionsPair = new Pair(new Scalar('dimensions'), dimensions);
-      cubeDefinition.items.push(dimensionsPair);
+      insertYamlCubeSection(cubeDefinition, dimensionsPair);
     }
 
     let dimension: YAMLMap | undefined = dimensions.items.find((item): item is YAMLMap => {
@@ -164,7 +178,11 @@ export class CubePrimaryKeyConverter implements CubeConverterInterface {
         sql: this.definition.columnName,
         type,
       }) as YAMLMap;
-      dimensions.items.push(dimension);
+      const firstNonPrimary = dimensions.items.findIndex(item => !(
+        isMap(item) && yamlScalar(item, ['primary_key', 'primaryKey']) === 'true'
+      ));
+      if (firstNonPrimary >= 0) dimensions.items.splice(firstNonPrimary, 0, dimension);
+      else dimensions.items.push(dimension);
     }
 
     if (!yamlPair(dimension, ['type'])) {

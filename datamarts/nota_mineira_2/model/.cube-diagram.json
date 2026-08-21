@@ -13,11 +13,15 @@
         "td_faixa_histograma_bilhete": true,
         "td_faixa_histograma_participante": true,
         "td_municipio": true,
+        "td_municipio_participante": true,
+        "td_municipio_entidade": true,
         "td_pagamento_retorno_status": true,
         "td_participante": true,
         "td_periodo": true,
         "td_premio_status": true,
         "td_regiao_fiscal": true,
+        "td_regiao_fiscal_participante": true,
+        "td_regiao_fiscal_entidade": true,
         "td_segmentacao_nfm": true,
         "td_sorteio": true,
         "td_sorteio_status": true,
@@ -79,8 +83,24 @@
           "name": "td_municipio",
           "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
           "position": {
-            "x": 1587.1723507452891,
-            "y": 2509.426095481293
+            "x": 2424.4834849215636,
+            "y": 3850.500747915428
+          }
+        },
+        "td_municipio_participante": {
+          "name": "td_municipio_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": 40,
+            "y": 1388
+          }
+        },
+        "td_municipio_entidade": {
+          "name": "td_municipio_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": 420,
+            "y": 1388
           }
         },
         "td_pagamento_retorno_status": {
@@ -119,8 +139,24 @@
           "name": "td_regiao_fiscal",
           "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
           "position": {
-            "x": 1605.8894149074088,
-            "y": 3472.6319107646354
+            "x": 3378.416171420254,
+            "y": 5111.243522854421
+          }
+        },
+        "td_regiao_fiscal_participante": {
+          "name": "td_regiao_fiscal_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 420,
+            "y": 2746
+          }
+        },
+        "td_regiao_fiscal_entidade": {
+          "name": "td_regiao_fiscal_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 800,
+            "y": 2746
           }
         },
         "td_segmentacao_nfm": {
@@ -199,8 +235,8 @@
           "name": "tf_premiacoes_entidades",
           "source": "\"NOTA_MINEIRA_ARM\".\"TF_PREMIACOES_ENTIDADES\"",
           "position": {
-            "x": 852.3992563002784,
-            "y": 3520.357018962756
+            "x": 565.5840924620361,
+            "y": 3795.583691332786
           }
         },
         "tf_premiacoes_participantes": {
@@ -256,11 +292,15 @@
         "td_faixa_histograma_bilhete": false,
         "td_faixa_histograma_participante": false,
         "td_municipio": true,
+        "td_municipio_participante": true,
+        "td_municipio_entidade": true,
         "td_pagamento_retorno_status": false,
         "td_participante": true,
         "td_periodo": true,
         "td_premio_status": true,
         "td_regiao_fiscal": true,
+        "td_regiao_fiscal_participante": true,
+        "td_regiao_fiscal_entidade": true,
         "td_segmentacao_nfm": false,
         "td_sorteio": true,
         "td_sorteio_status": false,
@@ -499,11 +539,15 @@
         "td_faixa_histograma_bilhete": true,
         "td_faixa_histograma_participante": true,
         "td_municipio": true,
+        "td_municipio_participante": true,
+        "td_municipio_entidade": true,
         "td_pagamento_retorno_status": false,
         "td_participante": false,
         "td_periodo": false,
         "td_premio_status": false,
         "td_regiao_fiscal": true,
+        "td_regiao_fiscal_participante": true,
+        "td_regiao_fiscal_entidade": true,
         "td_segmentacao_nfm": false,
         "td_sorteio": false,
         "td_sorteio_status": false,
@@ -742,11 +786,15 @@
         "td_faixa_histograma_bilhete": false,
         "td_faixa_histograma_participante": false,
         "td_municipio": true,
+        "td_municipio_participante": true,
+        "td_municipio_entidade": true,
         "td_pagamento_retorno_status": false,
         "td_participante": true,
         "td_periodo": true,
         "td_premio_status": true,
         "td_regiao_fiscal": true,
+        "td_regiao_fiscal_participante": true,
+        "td_regiao_fiscal_entidade": true,
         "td_segmentacao_nfm": false,
         "td_sorteio": true,
         "td_sorteio_status": false,
@@ -985,11 +1033,15 @@
         "td_faixa_histograma_bilhete": false,
         "td_faixa_histograma_participante": false,
         "td_municipio": true,
+        "td_municipio_participante": true,
+        "td_municipio_entidade": true,
         "td_pagamento_retorno_status": false,
         "td_participante": true,
         "td_periodo": true,
         "td_premio_status": false,
         "td_regiao_fiscal": true,
+        "td_regiao_fiscal_participante": true,
+        "td_regiao_fiscal_entidade": true,
         "td_segmentacao_nfm": false,
         "td_sorteio": false,
         "td_sorteio_status": false,
@@ -1051,8 +1103,24 @@
           "name": "td_municipio",
           "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
           "position": {
-            "x": 1940.3594093485444,
-            "y": 2230.8947590377525
+            "x": 2130.747203989568,
+            "y": 2559.244723708503
+          }
+        },
+        "td_municipio_participante": {
+          "name": "td_municipio_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": 40,
+            "y": 1388
+          }
+        },
+        "td_municipio_entidade": {
+          "name": "td_municipio_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\"",
+          "position": {
+            "x": 420,
+            "y": 1388
           }
         },
         "td_pagamento_retorno_status": {
@@ -1091,8 +1159,24 @@
           "name": "td_regiao_fiscal",
           "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
           "position": {
-            "x": 1894.9808961221083,
-            "y": 3499.8335381317083
+            "x": 1399.2468616779965,
+            "y": 2175.5429798072996
+          }
+        },
+        "td_regiao_fiscal_participante": {
+          "name": "td_regiao_fiscal_participante",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 420,
+            "y": 2746
+          }
+        },
+        "td_regiao_fiscal_entidade": {
+          "name": "td_regiao_fiscal_entidade",
+          "source": "\"NOTA_MINEIRA_ARM\".\"TD_REGIAO_FISCAL\"",
+          "position": {
+            "x": 800,
+            "y": 2746
           }
         },
         "td_segmentacao_nfm": {
@@ -1228,11 +1312,15 @@
         "td_faixa_histograma_bilhete": false,
         "td_faixa_histograma_participante": false,
         "td_municipio": true,
+        "td_municipio_participante": true,
+        "td_municipio_entidade": true,
         "td_pagamento_retorno_status": false,
         "td_participante": false,
         "td_periodo": true,
         "td_premio_status": false,
         "td_regiao_fiscal": false,
+        "td_regiao_fiscal_participante": true,
+        "td_regiao_fiscal_entidade": true,
         "td_segmentacao_nfm": false,
         "td_sorteio": false,
         "td_sorteio_status": false,
@@ -1471,11 +1559,15 @@
         "td_faixa_histograma_bilhete": false,
         "td_faixa_histograma_participante": false,
         "td_municipio": true,
+        "td_municipio_participante": true,
+        "td_municipio_entidade": true,
         "td_pagamento_retorno_status": false,
         "td_participante": true,
         "td_periodo": true,
         "td_premio_status": false,
         "td_regiao_fiscal": true,
+        "td_regiao_fiscal_participante": true,
+        "td_regiao_fiscal_entidade": true,
         "td_segmentacao_nfm": false,
         "td_sorteio": false,
         "td_sorteio_status": false,
@@ -1714,11 +1806,15 @@
         "td_faixa_histograma_bilhete": false,
         "td_faixa_histograma_participante": false,
         "td_municipio": false,
+        "td_municipio_participante": true,
+        "td_municipio_entidade": true,
         "td_pagamento_retorno_status": false,
         "td_participante": true,
         "td_periodo": true,
         "td_premio_status": false,
         "td_regiao_fiscal": false,
+        "td_regiao_fiscal_participante": true,
+        "td_regiao_fiscal_entidade": true,
         "td_segmentacao_nfm": false,
         "td_sorteio": false,
         "td_sorteio_status": false,
@@ -1957,11 +2053,15 @@
         "td_faixa_histograma_bilhete": false,
         "td_faixa_histograma_participante": false,
         "td_municipio": false,
+        "td_municipio_participante": true,
+        "td_municipio_entidade": true,
         "td_pagamento_retorno_status": false,
         "td_participante": false,
         "td_periodo": true,
         "td_premio_status": false,
         "td_regiao_fiscal": false,
+        "td_regiao_fiscal_participante": true,
+        "td_regiao_fiscal_entidade": true,
         "td_segmentacao_nfm": false,
         "td_sorteio": false,
         "td_sorteio_status": false,
@@ -2200,11 +2300,15 @@
         "td_faixa_histograma_bilhete": false,
         "td_faixa_histograma_participante": false,
         "td_municipio": false,
+        "td_municipio_participante": true,
+        "td_municipio_entidade": true,
         "td_pagamento_retorno_status": false,
         "td_participante": false,
         "td_periodo": false,
         "td_premio_status": false,
         "td_regiao_fiscal": false,
+        "td_regiao_fiscal_participante": true,
+        "td_regiao_fiscal_entidade": true,
         "td_segmentacao_nfm": false,
         "td_sorteio": false,
         "td_sorteio_status": false,
@@ -2443,11 +2547,15 @@
         "td_faixa_histograma_bilhete": false,
         "td_faixa_histograma_participante": false,
         "td_municipio": true,
+        "td_municipio_participante": true,
+        "td_municipio_entidade": true,
         "td_pagamento_retorno_status": false,
         "td_participante": true,
         "td_periodo": true,
         "td_premio_status": false,
         "td_regiao_fiscal": true,
+        "td_regiao_fiscal_participante": true,
+        "td_regiao_fiscal_entidade": true,
         "td_segmentacao_nfm": false,
         "td_sorteio": false,
         "td_sorteio_status": false,
@@ -2686,11 +2794,15 @@
         "td_faixa_histograma_bilhete": false,
         "td_faixa_histograma_participante": false,
         "td_municipio": true,
+        "td_municipio_participante": true,
+        "td_municipio_entidade": true,
         "td_pagamento_retorno_status": false,
         "td_participante": false,
         "td_periodo": true,
         "td_premio_status": false,
         "td_regiao_fiscal": true,
+        "td_regiao_fiscal_participante": true,
+        "td_regiao_fiscal_entidade": true,
         "td_segmentacao_nfm": true,
         "td_sorteio": false,
         "td_sorteio_status": false,
@@ -2929,11 +3041,15 @@
         "td_faixa_histograma_bilhete": false,
         "td_faixa_histograma_participante": false,
         "td_municipio": false,
+        "td_municipio_participante": true,
+        "td_municipio_entidade": true,
         "td_pagamento_retorno_status": false,
         "td_participante": false,
         "td_periodo": false,
         "td_premio_status": false,
         "td_regiao_fiscal": false,
+        "td_regiao_fiscal_participante": true,
+        "td_regiao_fiscal_entidade": true,
         "td_segmentacao_nfm": false,
         "td_sorteio": false,
         "td_sorteio_status": false,

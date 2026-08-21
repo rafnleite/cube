@@ -118,3 +118,33 @@ cubes:
 
     title: Participante
     hierarchies: []
+
+views:
+  - name: td_participante_multifato
+    cubes:
+      - join_path: tf_notas_participante_dia
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_participante_adesao
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_partic_ent_indicacoes
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_premiacoes_entidades
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_premiacoes_participantes
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_quantidade_bilhetes_participante
+        prefix: true
+        includes: '*'
+
+      - join_path: td_participante
+        includes: '*'

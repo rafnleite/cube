@@ -5,7 +5,7 @@
  * @fileoverview IBM Netezza driver implemented through its vendor ODBC driver.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NetezzaDriver = exports.buildNetezzaConnectionString = exports.escapeOdbcConnectionValue = void 0;
+exports.NetezzaDriver = exports.buildNetezzaConnectionString = exports.escapeOdbcConnectionValue = exports.interpolateNetezzaParameters = exports.normalizeNetezzaResultRow = exports.normalizeNetezzaResultValue = void 0;
 const stream_1 = require("stream");
 const odbc = require("odbc");
 const shared_1 = require("@cubejs-backend/shared");
@@ -70,6 +70,128 @@ const NetezzaToGenericType = {
     varbinary: 'binary',
     binary: 'binary',
 };
+/**
+ * node-odbc returns Netezza INTEGER8/NUMERIC values as JavaScript bigint.
+ * JSON.stringify rejects bigint and casting it to number loses precision.
+ * Cube can safely transport measures as strings, so normalize at the driver
+ * boundary while preserving the exact value.
+ */
+function normalizeNetezzaResultValue(value) {
+    if (typeof value === 'bigint')
+        return value.toString();
+    if (Array.isArray(value))
+        return value.map(normalizeNetezzaResultValue);
+    if (value && typeof value === 'object' && !(value instanceof Date) && !Buffer.isBuffer(value)) {
+        return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+            key,
+            normalizeNetezzaResultValue(item),
+        ]));
+    }
+    return value;
+}
+exports.normalizeNetezzaResultValue = normalizeNetezzaResultValue;
+function normalizeNetezzaResultRow(row) {
+    return normalizeNetezzaResultValue(row);
+}
+exports.normalizeNetezzaResultRow = normalizeNetezzaResultRow;
+function netezzaSqlLiteral(value) {
+    if (value === null || value === undefined)
+        return 'NULL';
+    if (typeof value === 'bigint')
+        return value.toString();
+    if (typeof value === 'number') {
+        if (!Number.isFinite(value))
+            throw new errors_1.NetezzaError('Netezza cannot interpolate a non-finite numeric query parameter.');
+        return String(value);
+    }
+    if (typeof value === 'boolean')
+        return value ? 'TRUE' : 'FALSE';
+    if (value instanceof Date) {
+        if (Number.isNaN(value.getTime()))
+            throw new errors_1.NetezzaError('Netezza cannot interpolate an invalid Date query parameter.');
+        return `'${value.toISOString().replace('T', ' ').replace(/Z$/, '')}'`;
+    }
+    if (Buffer.isBuffer(value))
+        return `X'${value.toString('hex')}'`;
+    if (typeof value !== 'string')
+        throw new errors_1.NetezzaError(`Netezza cannot interpolate query parameter of type ${typeof value}.`);
+    // Cube supplies ISO dates in UTC. Netezza TIMESTAMP has no time-zone component.
+    const text = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?$/.test(value)
+        ? value.replace('T', ' ').replace(/Z$/, '')
+        : value;
+    return `'${text.replace(/'/g, "''")}'`;
+}
+/**
+ * Netezza's vendor ODBC driver rejects bound parameter markers for otherwise
+ * valid statements in some versions. Cube still compiles with `?` markers, so
+ * substitute their escaped literals immediately before sending the statement.
+ * Markers inside SQL strings, identifiers, and comments are deliberately left
+ * untouched.
+ */
+function interpolateNetezzaParameters(query, values = []) {
+    let result = '';
+    let valueIndex = 0;
+    let state = 'normal';
+    for (let index = 0; index < query.length; index += 1) {
+        const char = query[index];
+        const next = query[index + 1];
+        if (state === 'normal') {
+            if (char === "'")
+                state = 'singleQuote';
+            else if (char === '"')
+                state = 'doubleQuote';
+            else if (char === '-' && next === '-') {
+                state = 'lineComment';
+                result += char + next;
+                index += 1;
+                continue;
+            }
+            else if (char === '/' && next === '*') {
+                state = 'blockComment';
+                result += char + next;
+                index += 1;
+                continue;
+            }
+            else if (char === '?') {
+                if (valueIndex >= values.length)
+                    throw new errors_1.NetezzaError('Netezza query has more parameter markers than supplied values.');
+                result += netezzaSqlLiteral(values[valueIndex]);
+                valueIndex += 1;
+                continue;
+            }
+        }
+        else if (state === 'singleQuote' && char === "'") {
+            if (next === "'") {
+                result += char + next;
+                index += 1;
+                continue;
+            }
+            state = 'normal';
+        }
+        else if (state === 'doubleQuote' && char === '"') {
+            if (next === '"') {
+                result += char + next;
+                index += 1;
+                continue;
+            }
+            state = 'normal';
+        }
+        else if (state === 'lineComment' && (char === '\n' || char === '\r')) {
+            state = 'normal';
+        }
+        else if (state === 'blockComment' && char === '*' && next === '/') {
+            result += char + next;
+            index += 1;
+            state = 'normal';
+            continue;
+        }
+        result += char;
+    }
+    if (valueIndex !== values.length)
+        throw new errors_1.NetezzaError('Netezza query has more supplied values than parameter markers.');
+    return result;
+}
+exports.interpolateNetezzaParameters = interpolateNetezzaParameters;
 /** Escapes an ODBC connection-string value using ODBC brace escaping. */
 function escapeOdbcConnectionValue(value) {
     return `{${String(value).replace(/}/g, '}}')}}`;
@@ -200,16 +322,19 @@ class NetezzaDriver extends base_driver_1.BaseDriver {
             await this.pool.release(connection);
         }
     }
-    asOdbcParameters(values = []) {
-        return values;
-    }
     async queryResponse(query, values = [], options) {
         const timeout = Number(options?.queryTimeout || this.queryTimeout);
-        return this.withConnection(async (connection) => connection.query(query, this.asOdbcParameters(values), { timeout }));
+        try {
+            const statement = interpolateNetezzaParameters(query, values);
+            return await this.withConnection(async (connection) => connection.query(statement, { timeout }));
+        }
+        catch (error) {
+            throw new errors_1.NetezzaQueryError(error);
+        }
     }
     async query(query, values = [], options) {
         const result = await this.queryResponse(query, values, options);
-        return Array.from(result);
+        return Array.from(result).map(normalizeNetezzaResultRow);
     }
     async testConnection() {
         // eslint-disable-next-line no-underscore-dangle
@@ -234,7 +359,7 @@ class NetezzaDriver extends base_driver_1.BaseDriver {
         }
         const result = await this.queryResponse(query, values);
         return {
-            rows: Array.from(result),
+            rows: Array.from(result).map(normalizeNetezzaResultRow),
             types: this.mapOdbcColumns(result.columns),
         };
     }
@@ -257,20 +382,21 @@ class NetezzaDriver extends base_driver_1.BaseDriver {
             }
         };
         try {
-            cursor = await connection.query(query, this.asOdbcParameters(values), { cursor: true, fetchSize: Math.max(highWaterMark, 1) });
+            const statement = interpolateNetezzaParameters(query, values);
+            cursor = await connection.query(statement, { cursor: true, fetchSize: Math.max(highWaterMark, 1) });
             const activeCursor = cursor;
             const firstBatch = await activeCursor.fetch();
             const types = this.mapOdbcColumns(firstBatch.columns);
             const rows = async function* () {
                 try {
                     for (const row of firstBatch)
-                        yield row;
+                        yield normalizeNetezzaResultRow(row);
                     while (!activeCursor.noData) {
                         const batch = await activeCursor.fetch();
                         if (batch.length === 0)
                             break;
                         for (const row of batch)
-                            yield row;
+                            yield normalizeNetezzaResultRow(row);
                     }
                 }
                 finally {

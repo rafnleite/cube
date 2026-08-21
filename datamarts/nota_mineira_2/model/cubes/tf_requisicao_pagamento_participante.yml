@@ -8,11 +8,21 @@ cubes:
         sql: "{CUBE}.SK_PREMIADO = {tf_premiacoes_participantes}.SK_PREMIADO"
         relationship: many_to_one
 
+      - name: td_pagamento_retorno_status
+        sql: "{CUBE}.SK_STATUS_RETORNO_PAGAMENTO =
+          {td_pagamento_retorno_status}.SK_PAGAMENTO_RETORNO_STATUS"
+
+        relationship: many_to_one
+
+      - name: td_periodo
+        sql: "{CUBE}.DT_REQUISICAO = {td_periodo}.DATA"
+        relationship: many_to_one
+
     dimensions:
       - name: id
         title: ID
         sql: COALESCE({CUBE}."SK_PREMIADO" || '', '') || '-' ||
-          COALESCE({CUBE}."SK_STATUS_RETORNO_PAGAMENTO" || '', '')
+          COALESCE({CUBE}."SQ_REQUISICAO_PAGAM_PREMIO" || '', '')
 
         type: string
         primary_key: true
@@ -33,16 +43,16 @@ cubes:
         type: time
         primary_key: false
 
-      - name: dt_retorno_proc_pag_grp
-        title: Data retorno
-        sql: '{CUBE}."DT_RETORNO_PROC_PAG_GRP"'
-        type: time
-        primary_key: false
-
       - name: sq_requisicao_pagam_premio
         title: SQ Requisição de pagamento do prêmio
         sql: "{CUBE}.SQ_REQUISICAO_PAGAM_PREMIO"
         type: number
+        primary_key: false
+
+      - name: dt_retorno_proc_pag_grp
+        title: Data retorno
+        sql: '{CUBE}."DT_RETORNO_PROC_PAG_GRP"'
+        type: time
         primary_key: false
 
     measures:

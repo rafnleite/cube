@@ -1,0 +1,15 @@
+{
+  "name": "cube-core-nota-mineira-dashboard",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4174",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "echarts": "^6.1.0",
+    "sql-formatter": "^3.1.0",
+    "vite": "^7.0.0"
+  }
+}

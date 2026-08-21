@@ -5,6 +5,7 @@ import YAML, { isMap, isScalar, Scalar, YAMLMap, YAMLSeq, Pair, parseDocument } 
 import { UserError } from '../UserError';
 
 import { AstByCubeName, JsSet, CubeConverterInterface, YamlSet } from './CubeSchemaConverter';
+import { insertJsCubeSection, insertYamlCubeSection } from './CubeSchemaOrdering';
 
 export type PreAggregationDefinition = {
   cubeName: string;
@@ -65,7 +66,7 @@ export class CubePreAggregationConverter implements CubeConverterInterface {
     });
 
     if (anchor === null) {
-      cubeDefinition.properties.push(
+      insertJsCubeSection(cubeDefinition,
         t.objectProperty(
           t.identifier('preAggregations'),
           t.objectExpression([t.objectProperty(t.identifier(preAggregationName), preAggregationNode)])
@@ -118,9 +119,7 @@ export class CubePreAggregationConverter implements CubeConverterInterface {
       const newSeq = new YAMLSeq();
       newSeq.items.push(preAggNode);
 
-      cubeDefinition.items.push(
-        new Pair(new Scalar('pre_aggregations'), newSeq)
-      );
+      insertYamlCubeSection(cubeDefinition, new Pair(new Scalar('pre_aggregations'), newSeq));
     }
   }
 }

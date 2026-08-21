@@ -8,11 +8,23 @@ cubes:
         sql: "{CUBE}.dt_requisicao = {td_periodo}.data"
         relationship: many_to_one
 
+      - name: tf_premiacoes_entidades
+        sql: "{CUBE}.SK_PREMIADO = {tf_premiacoes_entidades}.SK_PREMIADO"
+        relationship: many_to_one
+
+      - name: td_pagamento_retorno_status
+        sql: "{CUBE}.SK_STATUS_RETORNO_PAGAMENTO =
+          {td_pagamento_retorno_status}.SK_PAGAMENTO_RETORNO_STATUS"
+
+        relationship: many_to_one
+
     dimensions:
       - name: id
         title: ID
         sql: COALESCE({CUBE}."SK_PREMIADO" || '', '') || '-' ||
-          COALESCE({CUBE}."SK_STATUS_RETORNO_PAGAMENTO" || '', '')
+          COALESCE({CUBE}."SK_STATUS_RETORNO_PAGAMENTO" || '', '') || '-' ||
+          COALESCE({CUBE}."DT_REQUISICAO" || '', '') || '-' ||
+          COALESCE({CUBE}."DT_RETORNO_PROC_PAG_GRP" || '', '')
 
         type: string
         primary_key: true

@@ -48,3 +48,25 @@ cubes:
 
     title: Bilhetagem
     hierarchies: []
+
+views:
+  - name: td_bilhetagem_multifato
+    cubes:
+      - join_path: tf_bilhetagem_resumo
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_premiacoes_entidades
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_premiacoes_participantes
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_quantidade_bilhetes_participante
+        prefix: true
+        includes: '*'
+
+      - join_path: td_bilhetagem
+        includes: '*'

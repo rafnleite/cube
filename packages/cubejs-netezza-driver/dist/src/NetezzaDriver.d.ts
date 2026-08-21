@@ -36,6 +36,22 @@ export type NetezzaDriverConfiguration = NetezzaConnectionOptions & PoolUserOpti
     queryTimeout?: number;
     readOnly?: boolean;
 };
+/**
+ * node-odbc returns Netezza INTEGER8/NUMERIC values as JavaScript bigint.
+ * JSON.stringify rejects bigint and casting it to number loses precision.
+ * Cube can safely transport measures as strings, so normalize at the driver
+ * boundary while preserving the exact value.
+ */
+export declare function normalizeNetezzaResultValue(value: unknown): unknown;
+export declare function normalizeNetezzaResultRow<R>(row: R): R;
+/**
+ * Netezza's vendor ODBC driver rejects bound parameter markers for otherwise
+ * valid statements in some versions. Cube still compiles with `?` markers, so
+ * substitute their escaped literals immediately before sending the statement.
+ * Markers inside SQL strings, identifiers, and comments are deliberately left
+ * untouched.
+ */
+export declare function interpolateNetezzaParameters(query: string, values?: unknown[]): string;
 /** Escapes an ODBC connection-string value using ODBC brace escaping. */
 export declare function escapeOdbcConnectionValue(value: string | number): string;
 /**
@@ -54,7 +70,6 @@ export declare class NetezzaDriver extends BaseDriver implements DriverInterface
     constructor(config?: NetezzaDriverConfiguration);
     protected createConnection(connectionString: string, poolName: string, config: NetezzaDriverConfiguration): Promise<odbc.Connection>;
     protected withConnection<T>(fn: (connection: odbc.Connection) => Promise<T>): Promise<T>;
-    protected asOdbcParameters(values?: unknown[]): Array<number | string>;
     protected queryResponse<R = unknown>(query: string, values?: unknown[], options?: QueryOptions): Promise<odbc.Result<R>>;
     query<R = unknown>(query: string, values?: unknown[], options?: QueryOptions): Promise<R[]>;
     testConnection(): Promise<void>;

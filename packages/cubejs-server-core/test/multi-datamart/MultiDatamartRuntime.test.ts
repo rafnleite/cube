@@ -44,4 +44,16 @@ describe('MultiDatamartRuntime', () => {
 
     expect(() => runtime.contextFromRequest(req)).toThrow(/does not match/);
   });
+
+  test('changes the schema version when a model file is saved', async () => {
+    const context = { datamartId: 'sales', datamartSessionId: 'session' } as any;
+    const cubeFile = path.join(root, 'datamarts', 'sales', 'model', 'cubes', 'orders.yml');
+    await fs.writeFile(cubeFile, 'cubes:\n  - name: orders\n');
+
+    const firstVersion = await runtime.schemaVersion(context);
+
+    await fs.writeFile(cubeFile, 'cubes:\n  - name: orders\n    title: Orders\n');
+
+    await expect(runtime.schemaVersion(context)).resolves.not.toBe(firstVersion);
+  });
 });

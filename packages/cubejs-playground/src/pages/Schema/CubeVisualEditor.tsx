@@ -897,9 +897,13 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, files = [], t
     const columnReference = `{CUBE}.${column.name}`;
     const usage = columnUsages[column.name];
     const isPrimaryKeyDimension = section === 'dimensions' && Boolean(usage?.primaryKey);
+    const existingItems = cube && Array.isArray(cube[section]) ? cube[section] as CubeItem[] : [];
+    const firstNonPrimaryIndex = isPrimaryKeyDimension
+      ? existingItems.findIndex(item => !item.primary_key && !item.primaryKey)
+      : -1;
     const newIndex = isPrimaryKeyDimension
-      ? 0
-      : (cube && Array.isArray(cube[section]) ? cube[section].length : 0);
+      ? (firstNonPrimaryIndex >= 0 ? firstNonPrimaryIndex : existingItems.length)
+      : existingItems.length;
 
     updateDoc((next) => {
       const c = next.cubes![selectedCubeIndex ?? 0];
@@ -936,7 +940,9 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, files = [], t
           };
 
       if (section === 'dimensions' && item.primary_key) {
-        items.unshift(item);
+        const firstNonPrimary = items.findIndex(current => !current.primary_key && !current.primaryKey);
+        if (firstNonPrimary >= 0) items.splice(firstNonPrimary, 0, item);
+        else items.push(item);
       } else {
         items.push(item);
       }
@@ -944,9 +950,12 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, files = [], t
 
     setExpandedItems((previous) => ({
       ...previous,
-      [section]: isPrimaryKeyDimension
-        ? ['0', ...(previous[section] || []).map((index) => String(Number(index) + 1))]
-        : [...(previous[section] || []), String(newIndex)],
+      [section]: [
+        ...(previous[section] || []).map((index) => (
+          Number(index) >= newIndex ? String(Number(index) + 1) : index
+        )),
+        String(newIndex),
+      ],
     }));
     scrollTarget.current = `visual-editor-item-${section}-${newIndex}`;
     setActiveTab(section);
@@ -994,6 +1003,13 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, files = [], t
     }
 
     const requestedName = primaryKeyDraft.name.trim();
+    const existingDimensions = Array.isArray(cube.dimensions) ? cube.dimensions as CubeItem[] : [];
+    const existingFirstNonPrimary = existingDimensions.findIndex(dimension => (
+      !dimension.primary_key && !dimension.primaryKey
+    ));
+    const dimensionsInsertIndex = existingFirstNonPrimary >= 0
+      ? existingFirstNonPrimary
+      : existingDimensions.length;
     updateDoc((next) => {
       const c = next.cubes![selectedCubeIndex ?? 0];
       const dimensions = Array.isArray(c.dimensions) ? c.dimensions as CubeItem[] : [];
@@ -1004,20 +1020,28 @@ export function CubeVisualEditor({ visible, fileName, yamlContent, files = [], t
         suffix += 1;
       }
 
-      dimensions.unshift({
+      const primaryDimension = {
         name,
         sql,
         type: selectedColumns.length > 1
           ? 'string'
           : inferDimensionType(columns.find((column) => column.name === selectedColumns[0])?.type),
         primary_key: true,
-      });
+      };
+      const firstNonPrimary = dimensions.findIndex(dimension => !dimension.primary_key && !dimension.primaryKey);
+      if (firstNonPrimary >= 0) dimensions.splice(firstNonPrimary, 0, primaryDimension);
+      else dimensions.push(primaryDimension);
       c.dimensions = dimensions;
     });
 
     setExpandedItems((previous) => ({
       ...previous,
-      dimensions: ['0', ...(previous.dimensions || []).map((index) => String(Number(index) + 1))],
+      dimensions: [
+        ...(previous.dimensions || []).map((index) => (
+          Number(index) >= (dimensionsInsertIndex ?? 0) ? String(Number(index) + 1) : index
+        )),
+        String(dimensionsInsertIndex ?? 0),
+      ],
     }));
     scrollTarget.current = 'visual-editor-item-dimensions-0';
     setActiveTab('dimensions');

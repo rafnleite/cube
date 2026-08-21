@@ -4,10 +4,6 @@ cubes:
     data_source: default
 
     joins:
-      - name: td_regiao_fiscal
-        sql: "{CUBE}.sk_regiao_fiscal = {td_regiao_fiscal}.sk_regiao_fiscal"
-        relationship: many_to_one
-
       - name: td_municipio
         sql: "{CUBE}.sk_municipio = {td_municipio}.sk_municipio"
         relationship: many_to_one
@@ -31,11 +27,6 @@ cubes:
         type: string
         primary_key: true
 
-      - name: sk_regiao_fiscal
-        sql: '{CUBE}."SK_REGIAO_FISCAL"'
-        type: number
-        primary_key: false
-
       - name: sk_municipio
         sql: '{CUBE}."SK_MUNICIPIO"'
         type: number
@@ -49,6 +40,11 @@ cubes:
       - name: sk_dt_emissao
         sql: '{CUBE}."SK_DT_EMISSAO"'
         type: time
+        primary_key: false
+
+      - name: sk_regiao_fiscal
+        sql: '{CUBE}."SK_REGIAO_FISCAL"'
+        type: number
         primary_key: false
 
     measures:

@@ -2,6 +2,7 @@ import * as t from '@babel/types';
 import YAML, { isMap, isScalar, isSeq, Pair, Scalar, YAMLMap, YAMLSeq } from 'yaml';
 
 import type { AstByCubeName, CubeConverterInterface, JsSet, YamlSet } from './CubeSchemaConverter';
+import { insertJsCubeSection, insertYamlCubeSection } from './CubeSchemaOrdering';
 
 export type CubeDimensionDefinition = {
   cubeName: string;
@@ -75,6 +76,20 @@ function deleteYamlValue(object: YAMLMap, names: string[]): void {
   names.forEach(name => object.delete(name));
 }
 
+function isPrimaryKeyValue(value: unknown): boolean {
+  return value === true || value === 'true';
+}
+
+function isPrimaryKeyJsDimension(value: t.Node | null | undefined): boolean {
+  return t.isObjectExpression(value) && isPrimaryKeyValue(
+    (jsProperty(value, ['primaryKey', 'primary_key'])?.value as t.BooleanLiteral | t.StringLiteral | undefined)?.value
+  );
+}
+
+function isPrimaryKeyYamlDimension(value: unknown): boolean {
+  return isMap(value) && isPrimaryKeyValue((yamlPair(value, ['primary_key', 'primaryKey'])?.value as any)?.value);
+}
+
 export class CubeDimensionConverter implements CubeConverterInterface {
   public constructor(protected readonly definition: CubeDimensionDefinition) {}
 
@@ -96,7 +111,7 @@ export class CubeDimensionConverter implements CubeConverterInterface {
     ]);
 
     if (!dimensionsProperty) {
-      cubeDefinition.properties.push(t.objectProperty(
+      insertJsCubeSection(cubeDefinition, t.objectProperty(
         t.identifier('dimensions'),
         t.objectExpression([t.objectProperty(t.identifier(this.definition.name), dimensionValue())])
       ));
@@ -118,7 +133,16 @@ export class CubeDimensionConverter implements CubeConverterInterface {
         else deleteJsProperty(existing.value, ['primaryKey', 'primary_key']);
         return;
       }
-      dimensionsProperty.value.properties.unshift(t.objectProperty(t.identifier(this.definition.name), dimensionValue()));
+      const property = t.objectProperty(t.identifier(this.definition.name), dimensionValue());
+      if (this.definition.primaryKey) {
+        const firstNonPrimary = dimensionsProperty.value.properties.findIndex(candidate => (
+          !isPrimaryKeyJsDimension(t.isObjectProperty(candidate) ? candidate.value : undefined)
+        ));
+        if (firstNonPrimary >= 0) dimensionsProperty.value.properties.splice(firstNonPrimary, 0, property);
+        else dimensionsProperty.value.properties.push(property);
+      } else {
+        dimensionsProperty.value.properties.push(property);
+      }
       return;
     }
 
@@ -138,10 +162,17 @@ export class CubeDimensionConverter implements CubeConverterInterface {
         else deleteJsProperty(existing, ['primaryKey', 'primary_key']);
         return;
       }
-      dimensionsProperty.value.elements.unshift(t.objectExpression([
+      const dimension = t.objectExpression([
         t.objectProperty(t.identifier('name'), t.stringLiteral(this.definition.name)),
         ...dimensionValue().properties,
-      ]));
+      ]);
+      if (this.definition.primaryKey) {
+        const firstNonPrimary = dimensionsProperty.value.elements.findIndex(element => !isPrimaryKeyJsDimension(element));
+        if (firstNonPrimary >= 0) dimensionsProperty.value.elements.splice(firstNonPrimary, 0, dimension);
+        else dimensionsProperty.value.elements.push(dimension);
+      } else {
+        dimensionsProperty.value.elements.push(dimension);
+      }
       return;
     }
 
@@ -157,7 +188,7 @@ export class CubeDimensionConverter implements CubeConverterInterface {
     if (!dimensions) {
       dimensions = yaml.createNode([]) as YAMLSeq;
       dimensionsPair = new Pair(new Scalar('dimensions'), dimensions);
-      cubeDefinition.items.push(dimensionsPair);
+      insertYamlCubeSection(cubeDefinition, dimensionsPair);
     }
 
     let dimension: YAMLMap | undefined = dimensions.items.find((item): item is YAMLMap => (
@@ -166,7 +197,13 @@ export class CubeDimensionConverter implements CubeConverterInterface {
 
     if (!dimension) {
       dimension = yaml.createNode({ name: this.definition.name }) as YAMLMap;
-      dimensions.items.unshift(dimension);
+      if (this.definition.primaryKey) {
+        const firstNonPrimary = dimensions.items.findIndex(item => !isPrimaryKeyYamlDimension(item));
+        if (firstNonPrimary >= 0) dimensions.items.splice(firstNonPrimary, 0, dimension);
+        else dimensions.items.push(dimension);
+      } else {
+        dimensions.items.push(dimension);
+      }
     }
 
     setYamlValue(dimension, 'name', this.definition.name);

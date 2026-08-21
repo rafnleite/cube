@@ -15,7 +15,9 @@ cubes:
     dimensions:
       - name: id
         title: ID
-        sql: '{CUBE}."SK_MUNICIPIO"'
+        sql: COALESCE({CUBE}."SK_MUNICIPIO" || '', '') || '-' ||
+          COALESCE({CUBE}."DT_EMISSAO" || '', '')
+
         type: string
         primary_key: true
 

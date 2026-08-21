@@ -154,3 +154,17 @@ cubes:
 
     title: Entidade Social
     hierarchies: []
+
+views:
+  - name: td_entidade_social_multifato
+    cubes:
+      - join_path: tf_partic_ent_indicacoes
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_premiacoes_entidades
+        prefix: true
+        includes: '*'
+
+      - join_path: td_entidade_social
+        includes: '*'

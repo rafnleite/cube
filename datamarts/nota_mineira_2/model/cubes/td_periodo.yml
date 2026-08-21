@@ -100,3 +100,49 @@ cubes:
 
     title: Período
     hierarchies: []
+
+views:
+  - name: td_periodo_multifato
+    cubes:
+      - join_path: tf_notas_emitente_dia
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_notas_participante_dia
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_participante_adesao
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_partic_ent_indicacoes
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_premiacoes_entidades
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_premiacoes_participantes
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_qt_nfce_dia
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_quantidade_bilhetes_participante
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_requisicao_pagamento_entidade
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_requisicao_pagamento_participante
+        prefix: true
+        includes: '*'
+
+      - join_path: td_periodo
+        includes: '*'

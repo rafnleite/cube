@@ -2,6 +2,7 @@ import * as t from '@babel/types';
 import YAML, { isMap, isScalar, isSeq, Pair, Scalar, YAMLMap, YAMLSeq } from 'yaml';
 
 import type { AstByCubeName, CubeConverterInterface, JsSet, YamlSet } from './CubeSchemaConverter';
+import { insertJsCubeSection, insertYamlCubeSection, setYamlCubeProperty } from './CubeSchemaOrdering';
 
 export type CubeSchemaItemSection =
   | 'dimensions'
@@ -75,8 +76,19 @@ function setJsProperty(object: t.ObjectExpression, name: string, value: unknown)
   else object.properties.push(t.objectProperty(jsKey(name), jsValue(value)));
 }
 
-function updateJsObject(object: t.ObjectExpression, values: Record<string, unknown>, includeName: boolean): void {
-  Object.entries(values).forEach(([key, value]) => setJsProperty(object, key, value));
+function updateJsObject(
+  object: t.ObjectExpression,
+  values: Record<string, unknown>,
+  includeName: boolean,
+  orderedProperties = false,
+): void {
+  Object.entries(values).forEach(([key, value]) => {
+    if (orderedProperties && !jsProperty(object, [key]) && value !== null && value !== undefined && value !== '') {
+      insertJsCubeSection(object, t.objectProperty(jsKey(key), jsValue(value)));
+    } else {
+      setJsProperty(object, key, value);
+    }
+  });
   if (includeName && typeof values.name === 'string') setJsProperty(object, 'name', values.name);
 }
 
@@ -93,6 +105,20 @@ function yamlName(item: YAMLMap): string | undefined {
 
 function sameMemberName(left: unknown, right: unknown): boolean {
   return String(left || '').trim().toLowerCase() === String(right || '').trim().toLowerCase();
+}
+
+function isPrimaryKeyValue(value: unknown): boolean {
+  return value === true || value === 'true';
+}
+
+function isPrimaryKeyJsItem(value: t.Node | null | undefined): boolean {
+  return t.isObjectExpression(value) && isPrimaryKeyValue(
+    (jsProperty(value, ['primaryKey', 'primary_key'])?.value as t.BooleanLiteral | t.StringLiteral | undefined)?.value
+  );
+}
+
+function isPrimaryKeyYamlItem(value: unknown): boolean {
+  return isMap(value) && isPrimaryKeyValue((yamlPair(value, ['primary_key', 'primaryKey'])?.value as any)?.value);
 }
 
 function yamlSectionName(section: CubeSchemaItemSection): string {
@@ -115,7 +141,7 @@ export class CubeSchemaItemConverter implements CubeConverterInterface {
       const values = Object.fromEntries(
         Object.entries(this.definition.values).map(([key, value]) => [jsCubePropertyName(key), value])
       );
-      updateJsObject(cubeDefinition, values, false);
+      updateJsObject(cubeDefinition, values, false, true);
       return;
     }
 
@@ -152,7 +178,7 @@ export class CubeSchemaItemConverter implements CubeConverterInterface {
     if (!sectionProperty) {
       const item = t.objectExpression([]);
       updateJsObject(item, values, true);
-      cubeDefinition.properties.push(t.objectProperty(jsKey(jsSectionNames(this.definition.section)[0]), t.objectExpression([
+      insertJsCubeSection(cubeDefinition, t.objectProperty(jsKey(jsSectionNames(this.definition.section)[0]), t.objectExpression([
         t.objectProperty(jsKey(requestedName), item),
       ])));
       return;
@@ -167,7 +193,16 @@ export class CubeSchemaItemConverter implements CubeConverterInterface {
       } else {
         const item = t.objectExpression([]);
         updateJsObject(item, values, true);
-        sectionProperty.value.properties.unshift(t.objectProperty(jsKey(requestedName), item));
+        const property = t.objectProperty(jsKey(requestedName), item);
+        if (this.definition.section === 'dimensions' && isPrimaryKeyValue(values.primary_key ?? values.primaryKey)) {
+          const firstNonPrimary = sectionProperty.value.properties.findIndex(candidate => (
+            !isPrimaryKeyJsItem(t.isObjectProperty(candidate) ? candidate.value : undefined)
+          ));
+          if (firstNonPrimary >= 0) sectionProperty.value.properties.splice(firstNonPrimary, 0, property);
+          else sectionProperty.value.properties.push(property);
+        } else {
+          sectionProperty.value.properties.push(property);
+        }
       }
       return;
     }
@@ -187,7 +222,13 @@ export class CubeSchemaItemConverter implements CubeConverterInterface {
       } else {
         const item = t.objectExpression([]);
         updateJsObject(item, values, true);
-        sectionProperty.value.elements.unshift(item);
+        if (this.definition.section === 'dimensions' && isPrimaryKeyValue(values.primary_key ?? values.primaryKey)) {
+          const firstNonPrimary = sectionProperty.value.elements.findIndex(candidate => !isPrimaryKeyJsItem(candidate));
+          if (firstNonPrimary >= 0) sectionProperty.value.elements.splice(firstNonPrimary, 0, item);
+          else sectionProperty.value.elements.push(item);
+        } else {
+          sectionProperty.value.elements.push(item);
+        }
       }
       return;
     }
@@ -200,7 +241,7 @@ export class CubeSchemaItemConverter implements CubeConverterInterface {
     if (this.definition.section === 'cube') {
       Object.entries(this.definition.values).forEach(([key, value]) => {
         if (value === null || value === undefined || value === '') cubeDefinition.delete(key);
-        else cubeDefinition.set(key, value);
+        else setYamlCubeProperty(cubeDefinition, key, value);
       });
       return;
     }
@@ -231,7 +272,7 @@ export class CubeSchemaItemConverter implements CubeConverterInterface {
     if (!sequence) {
       sequence = yaml.createNode([]) as YAMLSeq;
       sectionPair = new Pair(new Scalar(section), sequence);
-      cubeDefinition.items.push(sectionPair);
+      insertYamlCubeSection(cubeDefinition, sectionPair);
     }
 
     const values = this.definition.values;
@@ -247,7 +288,13 @@ export class CubeSchemaItemConverter implements CubeConverterInterface {
     }) as YAMLMap | undefined;
     if (!item) {
       item = yaml.createNode({}) as YAMLMap;
-      sequence.items.unshift(item);
+      if (this.definition.section === 'dimensions' && isPrimaryKeyValue(values.primary_key ?? values.primaryKey)) {
+        const firstNonPrimary = sequence.items.findIndex(candidate => !isPrimaryKeyYamlItem(candidate));
+        if (firstNonPrimary >= 0) sequence.items.splice(firstNonPrimary, 0, item);
+        else sequence.items.push(item);
+      } else {
+        sequence.items.push(item);
+      }
     }
 
     Object.entries(values).forEach(([key, value]) => {

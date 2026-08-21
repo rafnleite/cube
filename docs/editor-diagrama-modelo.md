@@ -16,7 +16,22 @@ O arquivo `.cube-diagram.json` não é a fonte da verdade do modelo. Ele armazen
 - posição dos cubos;
 - nome e cor de fundo das views.
 
-Os identificadores `diagramItemId` usados nas dimensões, medidas e hierarquias são temporários. Eles ajudam a manipular itens duplicados dentro da tela e não são gravados no arquivo do Cube.
+Os identificadores `diagramItemId` usados nos cubos, colunas, dimensões, medidas,
+hierarquias e relacionamentos são UUIDs temporários. Eles pertencem à projeção do
+diagrama e não são gravados no arquivo do Cube.
+
+Esses UUIDs não devem ser inseridos como propriedades semânticas no YAML/JS
+temporário, porque poderiam ser interpretados pelo compilador. No visualizador da
+cópia YAML, eles aparecem como comentários técnicos (`# diagramItemId: ...`) para
+permitir consulta e auditoria. Esses comentários são removidos antes da prévia e
+da persistência; o arquivo persistido nunca recebe os UUIDs. Assim, a identificação
+não depende do nome, posição ou índice do item no YAML.
+
+Uma alteração deve enviar o UUID do item quando existir. O editor então pode
+reprocessar somente o item e os relacionamentos cujo `sourceElementId` ou
+`targetElementId` apontar para ele. A criação recebe um UUID novo; a exclusão
+remove o UUID; a reordenação preserva o UUID. Relacionamentos não afetados mantêm
+o mesmo UUID e não precisam ser reconstruídos visualmente.
 
 ## 2. Abertura do diagrama
 

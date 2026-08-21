@@ -1,5 +1,6 @@
 import type { Request as ExpressRequest } from 'express';
 import path from 'path';
+import crypto from 'crypto';
 
 import { FileRepository } from '@cubejs-backend/shared';
 import type { BaseDriver } from '@cubejs-backend/query-orchestrator';
@@ -70,6 +71,30 @@ export class MultiDatamartRuntime {
 
   public repository(context: RequestContext | MultiDatamartContext): FileRepository {
     return new FileRepository(this.registry.modelPath(this.datamartId(context)));
+  }
+
+  /**
+   * Produces a deterministic version for a datamart model. The compiler uses
+   * this value to decide whether its cached schema can still be reused.
+   *
+   * Reading the model on demand is deliberate: filesystem watch events are
+   * unreliable for a Windows bind mount consumed by a Linux container. This
+   * keeps schema changes effective on the first request after a file is saved.
+   */
+  public async schemaVersion(context: RequestContext | MultiDatamartContext): Promise<string> {
+    const files = await this.repository(context).dataSchemaFiles();
+    const modelHash = crypto.createHash('sha256');
+
+    [...files]
+      .sort((left, right) => left.fileName.localeCompare(right.fileName))
+      .forEach((file) => {
+        modelHash.update(file.fileName);
+        modelHash.update('\0');
+        modelHash.update(file.content);
+        modelHash.update('\0');
+      });
+
+    return modelHash.digest('hex');
   }
 
   public async driver(context: DriverContext): Promise<DriverConfig> {

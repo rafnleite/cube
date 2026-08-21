@@ -1,4 +1,10 @@
-import { CubePreAggregationConverter, CubeSchemaConverter, CubeSchemaItemConverter } from '../../src';
+import {
+  CubeDimensionConverter,
+  CubePreAggregationConverter,
+  CubePrimaryKeyConverter,
+  CubeSchemaConverter,
+  CubeSchemaItemConverter,
+} from '../../src';
 import {
   createCubeSchema,
   createCubeSchemaWithCustomGranularitiesAndTimeShift,
@@ -64,6 +70,121 @@ describe('CubeSchemaConverter', () => {
     const source = schemaConverter.getSourceFiles()[0].source;
     expect(source).toContain('sql: "{CUBE}.latitude"');
     expect(source).toContain('sql: ({CUBE}.coordinates)[0]');
+  });
+
+  it('appends new items and keeps primary dimensions before regular dimensions', async () => {
+    const orderingRepository = {
+      localPath: () => __dirname,
+      dataSchemaFiles: () => Promise.resolve([{
+        fileName: 'ordering.yml',
+        content: `cubes:
+  - name: ordering
+    sql_table: public.ordering
+    dimensions:
+      - name: id
+        sql: id
+        type: number
+        primary_key: true
+      - name: status
+        sql: status
+        type: string
+    measures:
+      - name: count
+        type: count
+`
+      }])
+    };
+
+    const schemaConverter = new CubeSchemaConverter(orderingRepository, [
+      new CubeSchemaItemConverter({
+        cubeName: 'ordering',
+        section: 'dimensions',
+        values: { name: 'created_at', sql: 'created_at', type: 'time' },
+      }),
+      new CubeSchemaItemConverter({
+        cubeName: 'ordering',
+        section: 'dimensions',
+        values: { name: 'tenant_id', sql: 'tenant_id', type: 'number', primary_key: true },
+      }),
+      new CubeSchemaItemConverter({
+        cubeName: 'ordering',
+        section: 'measures',
+        values: { name: 'total', type: 'sum', sql: 'amount' },
+      }),
+    ]);
+
+    await schemaConverter.generate('ordering');
+    const source = schemaConverter.getSourceFiles()[0].source;
+    expect(source.indexOf('name: id')).toBeLessThan(source.indexOf('name: tenant_id'));
+    expect(source.indexOf('name: tenant_id')).toBeLessThan(source.indexOf('name: status'));
+    expect(source.indexOf('name: status')).toBeLessThan(source.indexOf('name: created_at'));
+    expect(source.indexOf('name: count')).toBeLessThan(source.indexOf('name: total'));
+  });
+
+  it('appends dimensions created through the dedicated dimension converter', async () => {
+    const dimensionRepository = {
+      localPath: () => __dirname,
+      dataSchemaFiles: () => Promise.resolve([{
+        fileName: 'dimension-order.yml',
+        content: `cubes:
+  - name: dimension_order
+    sql_table: public.dimension_order
+    dimensions:
+      - name: sk_regiao_fiscal
+        sql: sk_regiao_fiscal
+        primary_key: true
+      - name: nm_regiao_fiscal
+        sql: nm_regiao_fiscal
+`
+      }])
+    };
+
+    const schemaConverter = new CubeSchemaConverter(dimensionRepository, [new CubeDimensionConverter({
+      cubeName: 'dimension_order',
+      name: 'populacao',
+      sql: 'populacao',
+      type: 'number',
+    })]);
+
+    await schemaConverter.generate('dimension_order');
+    const source = schemaConverter.getSourceFiles()[0].source;
+    expect(source.indexOf('name: nm_regiao_fiscal')).toBeLessThan(source.indexOf('name: populacao'));
+    expect(source.indexOf('name: sk_regiao_fiscal')).toBeLessThan(source.indexOf('name: populacao'));
+  });
+
+  it('inserts new sections in documented order and primary keys at the end of the primary group', async () => {
+    const orderingRepository = {
+      localPath: () => __dirname,
+    dataSchemaFiles: () => Promise.resolve([{
+      fileName: 'section-order.yml',
+      content: `cubes:
+  - name: section_order
+    sql_table: public.section_order
+    measures:
+      - name: count
+        type: count
+`
+      }])
+    };
+
+    const schemaConverter = new CubeSchemaConverter(orderingRepository, [
+      new CubeDimensionConverter({
+        cubeName: 'section_order',
+        name: 'created_at',
+        sql: 'created_at',
+        type: 'time',
+      }),
+      new CubePrimaryKeyConverter({
+        cubeName: 'section_order',
+        columnName: 'tenant_id',
+        columnType: 'number',
+      }),
+    ]);
+
+    await schemaConverter.generate('section_order');
+    const source = schemaConverter.getSourceFiles()[0].source;
+    expect(source.indexOf('dimensions:')).toBeLessThan(source.indexOf('measures:'));
+    expect(source.indexOf('name: tenant_id')).toBeLessThan(source.indexOf('name: created_at'));
   });
 
   it('throws error if can not parse source schema js file (syntax error)', async () => {

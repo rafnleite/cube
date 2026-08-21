@@ -1,6 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NetezzaConnectionError = exports.NetezzaError = void 0;
+exports.NetezzaQueryError = exports.NetezzaConnectionError = exports.NetezzaError = exports.odbcDiagnostics = void 0;
+function odbcDiagnostics(cause) {
+    const diagnostics = cause?.odbcErrors;
+    return Array.isArray(diagnostics) && diagnostics.length
+        ? ` (${diagnostics.map((item) => [item.state, item.code, item.message].filter(Boolean).join(': ')).join('; ')})`
+        : '';
+}
+exports.odbcDiagnostics = odbcDiagnostics;
 class NetezzaError extends Error {
     constructor(message, cause) {
         super(message);
@@ -13,13 +20,16 @@ class NetezzaError extends Error {
 exports.NetezzaError = NetezzaError;
 class NetezzaConnectionError extends NetezzaError {
     constructor(cause, poolName) {
-        const diagnostics = cause.odbcErrors;
-        const detail = Array.isArray(diagnostics) && diagnostics.length
-            ? ` (${diagnostics.map((item) => [item.state, item.code, item.message].filter(Boolean).join(': ')).join('; ')})`
-            : '';
-        super(`Unable to connect to Netezza using pool ${poolName}: ${cause.message}${detail}`, cause);
+        super(`Unable to connect to Netezza using pool ${poolName}: ${cause.message}${odbcDiagnostics(cause)}`, cause);
         this.name = 'NetezzaConnectionError';
     }
 }
 exports.NetezzaConnectionError = NetezzaConnectionError;
+class NetezzaQueryError extends NetezzaError {
+    constructor(cause) {
+        super(`Unable to execute Netezza query: ${cause.message}${odbcDiagnostics(cause)}`, cause);
+        this.name = 'NetezzaQueryError';
+    }
+}
+exports.NetezzaQueryError = NetezzaQueryError;
 //# sourceMappingURL=errors.js.map

@@ -12,16 +12,15 @@ cubes:
         primary_key: true
 
       - name: ds_pagamento_retorno_status
+        title: Status de retorno de pagamento
         sql: '{CUBE}."DS_PAGAMENTO_RETORNO_STATUS"'
         type: string
         primary_key: false
-        title: Status de retorno de pagamento
 
     measures:
       - name: count
-        type: count
         title: Contagem
-        drill_members: []
+        type: count
 
     pre_aggregations:
       # Pre-aggregation definitions go here.
@@ -29,3 +28,17 @@ cubes:
 
     title: Status de retorno de pagamento
     hierarchies: []
+
+views:
+  - name: td_pagamento_retorno_status_multifato
+    cubes:
+      - join_path: tf_requisicao_pagamento_entidade
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_requisicao_pagamento_participante
+        prefix: true
+        includes: '*'
+
+      - join_path: td_pagamento_retorno_status
+        includes: '*'

@@ -9,6 +9,7 @@ import type {
   JsSet,
   YamlSet,
 } from './CubeSchemaConverter';
+import { insertJsCubeSection, insertYamlCubeSection } from './CubeSchemaOrdering';
 
 export type CubeRelationshipOperation = 'create' | 'update' | 'delete';
 
@@ -21,6 +22,14 @@ export type CubeRelationshipDefinition = {
   targetColumnSql?: string;
   relationship?: 'one_to_one' | 'one_to_many' | 'many_to_one';
   operation?: CubeRelationshipOperation;
+};
+
+export type CubeSchemaReorderDefinition = {
+  cubeName: string;
+  section: 'dimensions' | 'measures' | 'hierarchies';
+  itemName: string;
+  direction: 'up' | 'down';
+  itemIndex?: number;
 };
 
 export type CubeDiagramRelationship = {
@@ -40,6 +49,7 @@ export type CubeDiagramMember = {
   sql?: string;
   type?: string;
   primaryKey?: boolean;
+  filters?: Array<{ sql: string }>;
 };
 
 export type CubeDiagramHierarchy = {
@@ -116,6 +126,16 @@ function jsStaticBoolean(node: t.Node | null | undefined): boolean | undefined {
   return t.isBooleanLiteral(node) ? node.value : undefined;
 }
 
+function jsMeasureFilters(value: t.Node | null | undefined): Array<{ sql: string }> | undefined {
+  if (!value || !t.isArrayExpression(value)) return undefined;
+  const filters = value.elements.flatMap(element => {
+    if (!t.isObjectExpression(element)) return [];
+    const sql = jsStaticString(jsProperty(element, ['sql'])?.value);
+    return sql ? [{ sql }] : [];
+  });
+  return filters.length ? filters : undefined;
+}
+
 function readJsMembers(cubeDefinition: t.ObjectExpression, section: string): CubeDiagramMember[] {
   const sectionProperty = jsProperty(cubeDefinition, [section]);
   if (!sectionProperty || !t.isObjectExpression(sectionProperty.value) && !t.isArrayExpression(sectionProperty.value)) {
@@ -126,12 +146,16 @@ function readJsMembers(cubeDefinition: t.ObjectExpression, section: string): Cub
   const readMember = (name: string | undefined, value: t.Node | null | undefined) => {
     if (!name || !t.isObjectExpression(value)) return;
     const primaryKey = jsStaticBoolean(jsProperty(value, ['primaryKey', 'primary_key'])?.value);
+    const filters = section === 'measures'
+      ? jsMeasureFilters(jsProperty(value, ['filters'])?.value)
+      : undefined;
     members.push({
       name,
       title: jsStaticString(jsProperty(value, ['title'])?.value),
       sql: jsStaticString(jsProperty(value, ['sql'])?.value),
       type: jsStaticString(jsProperty(value, ['type'])?.value),
       ...(primaryKey === undefined ? {} : { primaryKey }),
+      ...(filters ? { filters } : {}),
     });
   };
 
@@ -158,12 +182,21 @@ function readYamlMembers(cubeDefinition: YAMLMap, section: string): CubeDiagramM
     const primaryKey = primaryKeyPair && isScalar(primaryKeyPair.value)
       ? Boolean(primaryKeyPair.value.value)
       : undefined;
+    const filtersPair = section === 'measures' ? yamlPair(item, ['filters']) : undefined;
+    const filters = filtersPair && isSeq(filtersPair.value)
+      ? filtersPair.value.items.flatMap(filter => {
+        if (!isMap(filter)) return [];
+        const sql = yamlStaticString(yamlPair(filter, ['sql']));
+        return sql ? [{ sql }] : [];
+      })
+      : undefined;
     return [{
       name: yamlStaticString(yamlPair(item, ['name'])) || '',
       title: yamlStaticString(yamlPair(item, ['title'])),
       sql: yamlStaticString(yamlPair(item, ['sql'])),
       type: yamlStaticString(yamlPair(item, ['type'])),
       ...(primaryKey === undefined ? {} : { primaryKey }),
+      ...(filters?.length ? { filters } : {}),
     }].filter(member => member.name);
   });
 }
@@ -503,7 +536,7 @@ export class CubeRelationshipConverter implements CubeConverterInterface {
       }
       joins = t.objectExpression([]);
       joinsProperty = t.objectProperty(t.identifier('joins'), joins);
-      cubeDefinition.properties.push(joinsProperty);
+      insertJsCubeSection(cubeDefinition, joinsProperty);
     }
 
     const existingJoin = matchingEntries[0]?.join;
@@ -570,7 +603,7 @@ export class CubeRelationshipConverter implements CubeConverterInterface {
       }
       joins = yaml.createNode([]) as YAMLSeq;
       joinsPair = new Pair(new Scalar('joins'), joins);
-      cubeDefinition.items.push(joinsPair);
+      insertYamlCubeSection(cubeDefinition, joinsPair);
     }
 
     let join: any = joins.items.find(
@@ -595,6 +628,61 @@ export class CubeRelationshipConverter implements CubeConverterInterface {
       createJoinSql(sourceColumn, targetCube, targetColumn, sourceColumnSql, targetColumnSql)
     );
     setYamlScalar(join, 'relationship', relationship);
+  }
+}
+
+/** Reorders source nodes without replacing the surrounding schema section. */
+export class CubeSchemaReorderConverter implements CubeConverterInterface {
+  public constructor(protected readonly definition: CubeSchemaReorderDefinition) {}
+
+  public convert(astByCubeName: AstByCubeName): void {
+    const cubeDefSet = astByCubeName[this.definition.cubeName];
+    if (!cubeDefSet) throw new UserError(`Cube '${this.definition.cubeName}' was not found`);
+    if ('ast' in cubeDefSet) this.convertJS(cubeDefSet);
+    else this.convertYaml(cubeDefSet);
+  }
+
+  protected convertJS(cubeDefSet: JsSet): void {
+    const sectionProperty = jsProperty(cubeDefSet.cubeDefinition, [this.definition.section]);
+    if (!sectionProperty) return;
+    const value = sectionProperty.value;
+    const requestedIndex = this.definition.itemIndex || 0;
+    const matches = (name: string | undefined) => name?.toLowerCase() === this.definition.itemName.toLowerCase();
+    if (t.isArrayExpression(value)) {
+      const indexes = value.elements.flatMap((element, index) => matches(jsStaticString(t.isObjectExpression(element)
+        ? jsProperty(element, ['name'])?.value
+        : undefined)) ? [index] : []);
+      const index = indexes[requestedIndex];
+      if (index === undefined) return;
+      const next = this.definition.direction === 'up' ? index - 1 : index + 1;
+      if (next < 0 || next >= value.elements.length) return;
+      [value.elements[index], value.elements[next]] = [value.elements[next], value.elements[index]];
+      return;
+    }
+    if (t.isObjectExpression(value)) {
+      const indexes = value.properties.flatMap((property, index) => matches(jsPropertyName(property) || undefined) ? [index] : []);
+      const index = indexes[requestedIndex];
+      if (index === undefined) return;
+      const next = this.definition.direction === 'up' ? index - 1 : index + 1;
+      if (next < 0 || next >= value.properties.length) return;
+      [value.properties[index], value.properties[next]] = [value.properties[next], value.properties[index]];
+    }
+  }
+
+  protected convertYaml(cubeDefSet: YamlSet): void {
+    const pair = yamlPair(cubeDefSet.cubeDefinition, [this.definition.section]);
+    if (!pair || !isSeq(pair.value)) return;
+    const requestedIndex = this.definition.itemIndex || 0;
+    const indexes = pair.value.items.flatMap((item, index) => (
+      isMap(item) && yamlStaticString(yamlPair(item, ['name']))?.toLowerCase() === this.definition.itemName.toLowerCase()
+        ? [index]
+        : []
+    ));
+    const index = indexes[requestedIndex];
+    if (index === undefined) return;
+    const next = this.definition.direction === 'up' ? index - 1 : index + 1;
+    if (next < 0 || next >= pair.value.items.length) return;
+    [pair.value.items[index], pair.value.items[next]] = [pair.value.items[next], pair.value.items[index]];
   }
 }
 

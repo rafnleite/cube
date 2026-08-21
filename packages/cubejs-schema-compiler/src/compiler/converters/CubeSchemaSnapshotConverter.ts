@@ -1,7 +1,8 @@
 import * as t from '@babel/types';
-import YAML, { YAMLMap } from 'yaml';
+import YAML, { isScalar, Pair, YAMLMap } from 'yaml';
 
 import type { AstByCubeName, CubeConverterInterface, JsSet, YamlSet } from './CubeSchemaConverter';
+import { insertJsCubeSection, insertYamlCubeSection, setYamlCubeProperty } from './CubeSchemaOrdering';
 
 export type CubeSchemaSnapshot = {
   cubeName: string;
@@ -67,7 +68,12 @@ function yamlRecord(record: Record<string, unknown>): Record<string, unknown> {
 }
 
 function yamlSection(cubeDefinition: YAMLMap, yaml: YAML.Document, name: string, items: Record<string, unknown>[]): void {
-  cubeDefinition.set(name, yaml.createNode(items.map(item => yamlRecord(item))));
+  const value = yaml.createNode(items.map(item => yamlRecord(item)));
+  const existing = cubeDefinition.items.find(item => (
+    isScalar((item as Pair).key) && String(((item as Pair).key as any).value) === name
+  ));
+  if (existing) cubeDefinition.set(name, value);
+  else insertYamlCubeSection(cubeDefinition, new Pair(name, value));
 }
 
 function jsSection(
@@ -88,7 +94,7 @@ function jsSection(
       .map(([key, itemValue]) => t.objectProperty(jsKey(key), jsValue(itemValue))))));
 
   if (existing) existing.value = value;
-  else cubeDefinition.properties.push(t.objectProperty(jsKey(name), value));
+  else insertJsCubeSection(cubeDefinition, t.objectProperty(jsKey(name), value));
 }
 
 function jsCubePropertyName(name: string): string {
@@ -120,7 +126,7 @@ export class CubeSchemaSnapshotConverter implements CubeConverterInterface {
         } else if (existing) {
           existing.value = jsValue(value);
         } else {
-          cubeDefinition.properties.push(t.objectProperty(jsKey(propertyName), jsValue(value)));
+          insertJsCubeSection(cubeDefinition, t.objectProperty(jsKey(propertyName), jsValue(value)));
         }
       });
     }
@@ -135,7 +141,7 @@ export class CubeSchemaSnapshotConverter implements CubeConverterInterface {
     if (this.snapshot.cube) {
       Object.entries(this.snapshot.cube).forEach(([key, value]) => {
         if (!isPersistableValue(value)) cubeDefinition.delete(key);
-        else cubeDefinition.set(key, value);
+        else setYamlCubeProperty(cubeDefinition, key, value);
       });
     }
     if (this.snapshot.dimensions) yamlSection(cubeDefinition, yaml, 'dimensions', this.snapshot.dimensions);

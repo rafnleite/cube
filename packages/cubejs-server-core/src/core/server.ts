@@ -204,6 +204,7 @@ export class CubejsServerCore {
     this.multiDatamartRuntime = MultiDatamartRuntime.fromEnv();
     if (this.multiDatamartRuntime) {
       const originalExtendContext = opts.extendContext;
+      const originalSchemaVersion = opts.schemaVersion;
       const runtime = this.multiDatamartRuntime;
       opts = {
         ...opts,
@@ -222,6 +223,10 @@ export class CubejsServerCore {
           `DATAMART_${runtime.datamartId(context)}_${datamartContextCacheKey(context)}`
         ),
         repositoryFactory: context => runtime.repository(context),
+        schemaVersion: async context => JSON.stringify({
+          model: await runtime.schemaVersion(context),
+          configured: originalSchemaVersion ? await originalSchemaVersion(context) : undefined,
+        }),
         driverFactory: context => runtime.driver(context),
       };
     }

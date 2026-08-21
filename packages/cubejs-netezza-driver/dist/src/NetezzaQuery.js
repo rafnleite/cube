@@ -2,6 +2,13 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.NetezzaQuery = void 0;
 const schema_compiler_1 = require("@cubejs-backend/schema-compiler");
+class NetezzaFilter extends schema_compiler_1.BaseFilter {
+    likeIgnoreCase(column, not, param, type) {
+        const prefix = (!type || type === 'contains' || type === 'ends') ? "'%' || " : '';
+        const suffix = (!type || type === 'contains' || type === 'starts') ? " || '%'" : '';
+        return `LOWER(${column})${not ? ' NOT' : ''} LIKE ${prefix}LOWER(${this.allocateParam(param)})${suffix}`;
+    }
+}
 class NetezzaParamAllocator extends schema_compiler_1.ParamAllocator {
     paramPlaceHolder(_paramIndex) {
         return '?';
@@ -12,6 +19,9 @@ class NetezzaParamAllocator extends schema_compiler_1.ParamAllocator {
  * positional question-mark parameters instead of PostgreSQL protocol binds.
  */
 class NetezzaQuery extends schema_compiler_1.PostgresQuery {
+    newFilter(filter) {
+        return new NetezzaFilter(this, filter);
+    }
     newParamAllocator(expressionParams) {
         return new NetezzaParamAllocator(expressionParams);
     }
@@ -39,6 +49,9 @@ class NetezzaQuery extends schema_compiler_1.PostgresQuery {
         templates.types.binary = 'VARBINARY(64000)';
         templates.types.timestamp = 'TIMESTAMP';
         templates.expressions.timestamp_literal = 'CAST(\'{{ value | replace("T", " ") | replace("Z", "") }}\' AS TIMESTAMP)';
+        // Netezza does not implement PostgreSQL's null-safe comparison operator.
+        // Multi-fact views use this operator when merging the per-fact CTEs.
+        delete templates.operators.is_not_distinct_from;
         return templates;
     }
     get shouldReuseParams() {

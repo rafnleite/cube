@@ -13,6 +13,7 @@ import {
   LoadingOutlined,
   ReloadOutlined,
   RightOutlined,
+  SyncOutlined,
   WarningFilled,
 } from '../../shared/icons/FontAwesomeIcons';
 
@@ -362,6 +363,7 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
       editingFileName: null,
       editingContent: '',
       savingFile: false,
+      convertingFile: false,
       deletingFile: false,
       fileDialog: null,
       fileDialogName: '',
@@ -808,6 +810,52 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
     }
   }
 
+  async convertSelectedFile() {
+    const { selectedFile } = this.state;
+    if (!selectedFile) return;
+
+    const sourceIsYaml = selectedFile.endsWith('.yml') || selectedFile.endsWith('.yaml');
+    const sourceBaseName = this.cubeFileName(selectedFile);
+    const sourceExtension = sourceBaseName.match(/\.(yml|yaml|js)$/i)?.[0] || '';
+    if (!sourceExtension) return;
+    const targetFileName = `${sourceBaseName.slice(0, -sourceExtension.length)}${sourceIsYaml ? '.js' : '.yml'}`;
+    const targetPath = `cubes/${targetFileName}`;
+
+    this.setState({ convertingFile: true });
+    try {
+      const response = await playgroundFetch('playground/files/convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceFileName: selectedFile, targetFileName }),
+      });
+      if (response.status !== 200) {
+        throw new Error(await responseErrorMessage(response));
+      }
+
+      await this.loadFiles();
+      this.setState({
+        selectedFile: targetPath,
+        editingFileName: null,
+        editingContent: '',
+        visualEditorFileName: null,
+      });
+      message.success(`Arquivo convertido para ${sourceIsYaml ? 'JavaScript' : 'YAML'}`);
+      playgroundAction('Convert File Success', {
+        sourceFileName: selectedFile,
+        targetFileName: targetPath,
+      });
+    } catch (e: any) {
+      message.error(e?.message || 'Não foi possível converter o arquivo');
+      playgroundAction('Convert File Fail', {
+        sourceFileName: selectedFile,
+        targetFileName: targetPath,
+        error: e?.toString?.() || String(e),
+      });
+    } finally {
+      this.setState({ convertingFile: false });
+    }
+  }
+
   cubeFileName(fileName: string) {
     const separator = fileName.lastIndexOf('/');
     return separator >= 0 ? fileName.slice(separator + 1) : fileName;
@@ -1024,6 +1072,7 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
       editingFileName,
       editingContent,
       savingFile,
+      convertingFile,
       deletingFile,
       fileDialog,
       fileDialogName,
@@ -1364,9 +1413,21 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
                     Editor visual
                   </Button>
                 )}
+                {(selectedFile.endsWith('.yml') || selectedFile.endsWith('.yaml') || selectedFile.endsWith('.js')) ? (
+                  <Button
+                    icon={<SyncOutlined />}
+                    loading={convertingFile}
+                    disabled={Boolean(editingFileName) || deletingFile || fileDialogLoading}
+                    onClick={() => this.convertSelectedFile()}
+                  >
+                    Converter para {selectedFile.endsWith('.yml') || selectedFile.endsWith('.yaml')
+                      ? 'JavaScript'
+                      : 'YAML'}
+                  </Button>
+                ) : null}
                   <Button
                     icon={<CopyOutlined />}
-                    disabled={Boolean(editingFileName) || deletingFile || fileDialogLoading}
+                    disabled={Boolean(editingFileName) || convertingFile || deletingFile || fileDialogLoading}
                     onClick={() => this.openFileDialog('copy')}
                   >
                     Copiar arquivo
@@ -1374,7 +1435,7 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
                   {(selectedFile.endsWith('.yml') || selectedFile.endsWith('.yaml')) && (
                     <Button
                       icon={<EditOutlined />}
-                      disabled={Boolean(editingFileName) || deletingFile || fileDialogLoading}
+                      disabled={Boolean(editingFileName) || convertingFile || deletingFile || fileDialogLoading}
                       onClick={() => this.openFileDialog('rename')}
                     >
                       Renomear arquivo
@@ -1384,7 +1445,7 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
                 <Space style={{ marginLeft: 'auto' }}>
                   <Button
                     icon={<SearchOutlined />}
-                    disabled={Boolean(editingFileName) || deletingFile || fileDialogLoading}
+                    disabled={Boolean(editingFileName) || convertingFile || deletingFile || fileDialogLoading}
                     onClick={() => this.openSampleData()}
                   >
                     Ver amostra de dados
@@ -1401,7 +1462,7 @@ export class SchemaPage extends Component<SchemaPageProps, any> {
                       danger
                       icon={<TrashOutlined />}
                       loading={deletingFile}
-                      disabled={savingFile || fileDialogLoading}
+                      disabled={savingFile || convertingFile || fileDialogLoading}
                     >
                       Excluir arquivo
                     </Button>

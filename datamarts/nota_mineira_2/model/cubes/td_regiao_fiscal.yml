@@ -39,3 +39,103 @@ cubes:
 
     title: Região Fiscal
     hierarchies: []
+
+  # Role-playing dimensions for TF_PARTIC_ENT_INDICACOES. They use the same
+  # physical table as td_regiao_fiscal but represent different foreign keys.
+  - name: td_regiao_fiscal_participante
+    sql_table: '"NOTA_MINEIRA_ARM"."TD_REGIAO_FISCAL"'
+    data_source: default
+
+    joins: []
+    dimensions:
+      - name: sk_regiao_fiscal
+        sql: '{CUBE}."SK_REGIAO_FISCAL"'
+        type: number
+        primary_key: true
+
+      - name: nm_regiao_fiscal
+        title: Região fiscal do participante
+        sql: '{CUBE}."NM_REGIAO_FISCAL"'
+        type: string
+        primary_key: false
+
+    measures:
+      - name: count
+        type: count
+
+    title: Td Regiao Fiscal Participante
+    hierarchies: []
+
+  - name: td_regiao_fiscal_entidade
+    sql_table: '"NOTA_MINEIRA_ARM"."TD_REGIAO_FISCAL"'
+    data_source: default
+
+    joins: []
+    dimensions:
+      - name: sk_regiao_fiscal
+        sql: '{CUBE}."SK_REGIAO_FISCAL"'
+        type: number
+        primary_key: true
+
+      - name: nm_regiao_fiscal
+        title: Região fiscal da entidade
+        sql: '{CUBE}."NM_REGIAO_FISCAL"'
+        type: string
+        primary_key: false
+
+      - name: populacao
+        title: População
+        type: number
+        sql: "{CUBE}.POPULACAO"
+
+    measures:
+      - name: count
+        type: count
+
+    title: Td Regiao Fiscal Entidade
+    hierarchies: []
+
+views:
+  - name: td_regiao_fiscal_multifato
+    cubes:
+      - join_path: tf_bilhetagem_resumo
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_notas_emitente_dia
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_notas_participante_dia
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_participante_adesao
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_premiacoes_entidades
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_premiacoes_participantes
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_qt_nfce_dia
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_quantidade_bilhetes_participante
+        prefix: true
+        includes: '*'
+
+      - join_path: td_municipio
+        includes:
+          - ds_municipio_ibge
+          - ds_df_circunscricao
+          - populacao
+
+      - join_path: td_regiao_fiscal
+        includes:
+          - nm_regiao_fiscal

@@ -20,10 +20,6 @@ cubes:
         sql: "{CUBE}.sk_municipio = {td_municipio}.sk_municipio"
         relationship: many_to_one
 
-      - name: td_regiao_fiscal
-        sql: "{CUBE}.sk_regiao_fiscal = {td_regiao_fiscal}.sk_regiao_fiscal"
-        relationship: many_to_one
-
       - name: td_premio_status
         sql: "{CUBE}.sk_premio_status = {td_premio_status}.sk_premio_status"
         relationship: many_to_one
@@ -66,11 +62,6 @@ cubes:
         type: number
         primary_key: false
 
-      - name: sk_regiao_fiscal
-        sql: '{CUBE}."SK_REGIAO_FISCAL"'
-        type: number
-        primary_key: false
-
       - name: sk_premio_status
         sql: '{CUBE}."SK_PREMIO_STATUS"'
         type: number
@@ -94,6 +85,11 @@ cubes:
       - name: sk_premiado
         sql: '{CUBE}."SK_PREMIADO"'
         type: string
+        primary_key: false
+
+      - name: sk_regiao_fiscal
+        sql: '{CUBE}."SK_REGIAO_FISCAL"'
+        type: number
         primary_key: false
 
       - name: dt_bilhetagem
@@ -141,12 +137,28 @@ cubes:
         title: Contagem
         type: count
 
+      - name: count_distinct_premiado
+        title: Total de CNPJs premiados
+        sql: '{td_entidade_social.id_entidade_social}'
+        type: count_distinct
+
       - name: vlr_premio_entidade
         sql: '{CUBE}."VLR_PREMIO_ENTIDADE"'
         type: sum
 
       - name: qtd_requisicoes
         sql: '{CUBE}."QTD_REQUISICOES"'
+        type: sum
+
+      - name: count_requisitado_pago
+        title: Número de premiações requisitadas ou pagas
+        type: count
+        filters:
+          - sql: 'COALESCE({CUBE}."QTD_REQUISICOES", 0) > 0 OR COALESCE({CUBE}."FL_PREMIO_PAGO", 0) = 1'
+
+      - name: vlr_premio_requisitado_pago
+        title: Valor de premiações requisitadas ou pagas
+        sql: 'CASE WHEN COALESCE({CUBE}."QTD_REQUISICOES", 0) > 0 OR COALESCE({CUBE}."FL_PREMIO_PAGO", 0) = 1 THEN {CUBE}."VLR_PREMIO_ENTIDADE" ELSE 0 END'
         type: sum
 
     pre_aggregations:

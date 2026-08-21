@@ -171,6 +171,33 @@ cubes:
     }));
   });
 
+  test('preserves YAML measure filters for the relationship diagram', async () => {
+    const reader = new CubeRelationshipReader();
+    const converter = new CubeSchemaConverter(repository([
+      {
+        fileName: 'orders.yml',
+        content: `cubes:
+  - name: orders
+    sql_table: public.orders
+    measures:
+      - name: completed_count
+        title: Pedidos concluídos
+        type: count
+        filters:
+          - sql: "{CUBE}.status = 'completed'"
+`,
+      },
+    ]), [reader]);
+
+    await converter.generate();
+    expect(reader.getModels().find(model => model.name === 'orders')?.measures).toContainEqual({
+      name: 'completed_count',
+      title: 'Pedidos concluídos',
+      type: 'count',
+      filters: [{ sql: "{CUBE}.status = 'completed'" }],
+    });
+  });
+
   test('reads exact joins using raw columns and member references, but not composite conditions', async () => {
     const reader = new CubeRelationshipReader();
     const converter = new CubeSchemaConverter(repository([

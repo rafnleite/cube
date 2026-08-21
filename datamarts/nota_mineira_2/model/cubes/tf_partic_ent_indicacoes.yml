@@ -16,6 +16,22 @@ cubes:
         sql: "{CUBE}.DATA = {td_periodo}.DATA"
         relationship: many_to_one
 
+      - name: td_municipio_participante
+        sql: "{CUBE}.SK_MUNICIPIO_PART = {td_municipio_participante}.SK_MUNICIPIO"
+        relationship: many_to_one
+
+      - name: td_municipio_entidade
+        sql: "{CUBE}.SK_MUNICIPIO_ENT = {td_municipio_entidade}.SK_MUNICIPIO"
+        relationship: many_to_one
+
+      - name: td_regiao_fiscal_participante
+        sql: "{CUBE}.SK_REGIAO_PART = {td_regiao_fiscal_participante}.SK_REGIAO_FISCAL"
+        relationship: many_to_one
+
+      - name: td_regiao_fiscal_entidade
+        sql: "{CUBE}.SK_REGIAO_ENT = {td_regiao_fiscal_entidade}.CD_REGIAO_FISCAL"
+        relationship: many_to_one
+
     dimensions:
       - name: id
         title: ID

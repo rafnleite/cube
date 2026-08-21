@@ -28,3 +28,32 @@ cubes:
 
     title: Tipo de sorteio
     hierarchies: []
+
+views:
+  - name: td_sorteio_tipo_multifato
+    cubes:
+      - join_path: tf_bilhetagem_resumo
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_premiacoes_entidades
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_premiacoes_participantes
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_quantidade_bilhetes_participante
+        prefix: true
+        includes: '*'
+
+      - join_path: td_bilhetagem
+        includes:
+          - dt_gerar_bilhete
+          - dt_inicio_ref_compra
+          - dt_fim_ref_compra
+
+      - join_path: td_sorteio_tipo
+        includes:
+          - ds_sorteio_tipo

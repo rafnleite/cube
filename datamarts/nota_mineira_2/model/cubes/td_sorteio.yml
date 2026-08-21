@@ -3,7 +3,10 @@ cubes:
     sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_SORTEIO\""
     data_source: default
 
-    joins: []
+    joins:
+      - name: td_bilhetagem
+        sql: "{CUBE}.SK_BILHETAGEM = {td_bilhetagem}.SK_BILHETAGEM"
+        relationship: many_to_one
 
     dimensions:
       - name: sk_sorteio
@@ -11,15 +14,15 @@ cubes:
         type: number
         primary_key: true
 
+      - name: sk_bilhetagem
+        sql: '{CUBE}."SK_BILHETAGEM"'
+        type: number
+        primary_key: false
+
       - name: ds_sorteio
         title: Descrição
         sql: '{CUBE}."DS_SORTEIO"'
         type: string
-        primary_key: false
-
-      - name: sk_bilhetagem
-        sql: '{CUBE}."SK_BILHETAGEM"'
-        type: number
         primary_key: false
 
       - name: dt_previsao_sorteio
@@ -69,3 +72,17 @@ cubes:
 
     title: Sorteio
     hierarchies: []
+
+views:
+  - name: td_sorteio_multifato
+    cubes:
+      - join_path: tf_premiacoes_entidades
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_premiacoes_participantes
+        prefix: true
+        includes: '*'
+
+      - join_path: td_sorteio
+        includes: '*'

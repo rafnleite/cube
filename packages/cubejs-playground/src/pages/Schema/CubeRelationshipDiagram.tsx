@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -66,6 +66,7 @@ import {
 const { Text } = Typography;
 
 type DiagramColumn = {
+  diagramItemId?: string;
   name: string;
   type?: string;
   primaryKey?: boolean;
@@ -88,6 +89,7 @@ type DiagramMeasure = {
   title?: string;
   sql?: string;
   type?: string;
+  filters?: Array<{ sql: string }>;
 };
 
 type DiagramHierarchy = {
@@ -98,6 +100,7 @@ type DiagramHierarchy = {
 };
 
 type DiagramCube = {
+  diagramItemId?: string;
   name: string;
   title?: string;
   description?: string;
@@ -118,6 +121,11 @@ type DiagramCube = {
 };
 
 type DiagramRelationship = {
+  diagramItemId?: string;
+  sourceCubeId?: string;
+  targetCubeId?: string;
+  sourceElementId?: string;
+  targetElementId?: string;
   sourceCube: string;
   targetCube: string;
   sourceColumn?: string;
@@ -128,9 +136,16 @@ type DiagramRelationship = {
   sql: string;
 };
 
+type DiagramSourceFile = {
+  fileName: string;
+  content: string;
+};
+
 type DiagramResponse = {
   cubes: DiagramCube[];
   relationships: DiagramRelationship[];
+  relationshipsComplete?: boolean;
+  files?: DiagramSourceFile[];
 };
 
 type CubeVisibilityRow = {
@@ -196,6 +211,7 @@ const DIAGRAM_VIEW_COLORS = [
 type RelationshipType = 'one_to_one' | 'one_to_many' | 'many_to_one';
 
 type RelationshipDraft = {
+  diagramItemId?: string;
   sourceCube: string;
   targetCube: string;
   sourceColumn?: string;
@@ -271,6 +287,7 @@ type SchemaItemDraft = {
   cubeName: string;
   section: SchemaItemSection;
   itemName?: string;
+  diagramItemId?: string;
   values: Record<string, any>;
 };
 
@@ -318,6 +335,7 @@ function DiagramEditorModalTitle({
 
 type CubePropertiesDraft = {
   cubeName: string;
+  diagramItemId?: string;
   sourceMode: 'sql_table' | 'sql';
   values: Record<string, any>;
 };
@@ -588,15 +606,27 @@ function hydrateRelationshipColumns(join: DiagramRelationship): DiagramRelations
   };
 }
 
-function normalizeDiagramForDisplay(result: DiagramResponse): { diagram: DiagramResponse; changed: boolean } {
+function normalizeDiagramForDisplay(
+  result: DiagramResponse,
+  previous?: DiagramResponse,
+  change?: PendingDiagramChange,
+): { diagram: DiagramResponse; changed: boolean } {
   let changed = false;
-  const relationships = result.relationships.map(hydrateRelationshipColumns).map(join => {
+  const identified = hydrateDiagramIdentities({
+    ...result,
+    relationships: result.relationships.map(hydrateRelationshipColumns),
+  }, previous, change);
+  const relationships = identified.relationships.map(join => {
     if (join.relationship !== 'one_to_many' || !join.sourceColumn || !join.targetColumn) return join;
     changed = true;
     return {
       ...join,
       sourceCube: join.targetCube,
       targetCube: join.sourceCube,
+      sourceCubeId: join.targetCubeId,
+      targetCubeId: join.sourceCubeId,
+      sourceElementId: join.targetElementId,
+      targetElementId: join.sourceElementId,
       sourceColumn: join.targetColumn,
       targetColumn: join.sourceColumn,
       sourceColumns: join.targetColumns,
@@ -606,19 +636,10 @@ function normalizeDiagramForDisplay(result: DiagramResponse): { diagram: Diagram
     };
   });
 
-  const cubes = result.cubes.map(cube => {
-    const dimensions = (cube.dimensions || []).map((dimension, index) => ({
-      ...dimension,
-      diagramItemId: diagramItemId('dimension', cube.name, index),
-    }));
-    const measures = (cube.measures || []).map((measure, index) => ({
-      ...measure,
-      diagramItemId: diagramItemId('measure', cube.name, index),
-    }));
-    const hierarchies = (cube.hierarchies || []).map((hierarchy, index) => ({
-      ...hierarchy,
-      diagramItemId: diagramItemId('hierarchy', cube.name, index),
-    }));
+  const cubes = identified.cubes.map(cube => {
+    const dimensions = cube.dimensions || [];
+    const measures = cube.measures || [];
+    const hierarchies = cube.hierarchies || [];
     const orderedDimensions = canonicalDimensionOrder(cube, dimensions, relationships);
     if (orderedDimensions.some((dimension, index) => dimension !== dimensions[index])) changed = true;
     return {
@@ -629,12 +650,197 @@ function normalizeDiagramForDisplay(result: DiagramResponse): { diagram: Diagram
     };
   });
 
-  return { diagram: { cubes, relationships }, changed };
+  return {
+    diagram: {
+      ...identified,
+      cubes,
+      relationships,
+    },
+    changed,
+  };
+}
+
+function affectedCubeNamesForChange(change: PendingDiagramChange): Set<string> | undefined {
+  if (change.endpoint === 'playground/schema/normalize-diagram') return undefined;
+
+  const names = [
+    change.body?.cubeName,
+    change.body?.sourceCube,
+    change.body?.targetCube,
+  ].filter((name): name is string => typeof name === 'string' && name.length > 0);
+  return names.length ? new Set(names) : undefined;
+}
+
+/**
+ * Applies an incremental server preview without replacing unaffected nodes or
+ * relationships. Only an explicit relationship change replaces connected
+ * edges; adding or editing a dimension/measure must never make existing joins
+ * disappear just because the preview response is scoped to one cube.
+ */
+type RelationshipChangeScope = {
+  explicit: boolean;
+  operation?: 'create' | 'update' | 'delete';
+  relationshipIds: Set<string>;
+  elementIds: Set<string>;
+  requested?: Partial<DiagramRelationship>;
+};
+
+function relationshipChangeScope(
+  change: PendingDiagramChange,
+  current: DiagramResponse,
+): RelationshipChangeScope {
+  const body = change.body || {};
+  if (change.endpoint === 'playground/schema/relationship') {
+    const relationshipIds = body.diagramItemId ? new Set([body.diagramItemId]) : new Set<string>();
+    return {
+      explicit: true,
+      operation: body.operation === 'update' || body.operation === 'delete' ? body.operation : 'create',
+      relationshipIds,
+      elementIds: new Set<string>(),
+      requested: body,
+    };
+  }
+  if (change.endpoint === 'playground/schema/reorder') {
+    return { explicit: false, relationshipIds: new Set(), elementIds: new Set() };
+  }
+  if (body.section === 'cube' && body.diagramItemId) {
+    const relationshipIds = new Set(
+      current.relationships
+        .filter(relationship => (
+          relationship.sourceCubeId === body.diagramItemId
+          || relationship.targetCubeId === body.diagramItemId
+        ))
+        .map(relationship => relationship.diagramItemId)
+        .filter((id): id is string => Boolean(id)),
+    );
+    return { explicit: false, relationshipIds, elementIds: new Set() };
+  }
+  if (!body.diagramItemId) {
+    return { explicit: false, relationshipIds: new Set(), elementIds: new Set() };
+  }
+  const elementIds = new Set([body.diagramItemId]);
+  const relationshipIds = new Set(
+    current.relationships
+      .filter(relationship => (
+        relationship.sourceElementId === body.diagramItemId
+        || relationship.targetElementId === body.diagramItemId
+      ))
+      .map(relationship => relationship.diagramItemId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  return { explicit: false, relationshipIds, elementIds };
+}
+
+function sameRelationshipEndpoint(left: DiagramRelationship, right: Partial<DiagramRelationship>): boolean {
+  const sameColumn = (a?: string, b?: string) => !b || itemIdentityKey(a) === itemIdentityKey(b);
+  return left.sourceCube === right.sourceCube
+    && left.targetCube === right.targetCube
+    && sameColumn(left.sourceColumn, right.sourceColumn)
+    && sameColumn(left.targetColumn, right.targetColumn);
+}
+
+function relationshipMatchesChange(
+  relationship: DiagramRelationship,
+  scope: RelationshipChangeScope,
+): boolean {
+  return scope.relationshipIds.has(relationship.diagramItemId || '')
+    || scope.elementIds.has(relationship.sourceElementId || '')
+    || scope.elementIds.has(relationship.targetElementId || '');
+}
+
+function mergeRelationshipsByUuid(
+  current: DiagramRelationship[],
+  patch: DiagramRelationship[],
+  scope: RelationshipChangeScope,
+): DiagramRelationship[] {
+  const patchById = new Map(
+    patch
+      .filter(relationship => relationship.diagramItemId)
+      .map(relationship => [relationship.diagramItemId as string, relationship]),
+  );
+  const patchByKey = new Map(patch.map(relationship => [diagramRelationshipKey(relationship), relationship]));
+
+  if (scope.explicit) {
+    if (scope.operation === 'delete') {
+      return current.filter(relationship => {
+        if (scope.relationshipIds.has(relationship.diagramItemId || '')) return false;
+        return !(scope.requested && sameRelationshipEndpoint(relationship, scope.requested));
+      });
+    }
+
+    const replacement = Array.from(scope.relationshipIds)
+      .map(id => patchById.get(id))
+      .find(Boolean)
+      || patch.find(relationship => scope.requested && sameRelationshipEndpoint(relationship, scope.requested));
+
+    if (scope.operation === 'update') {
+      if (!replacement) return current;
+      return current.map(relationship => (
+        relationshipMatchesChange(relationship, scope)
+          ? { ...replacement, diagramItemId: relationship.diagramItemId }
+          : relationship
+      ));
+    }
+
+    if (!replacement) return current;
+    const alreadyPresent = current.some(relationship => (
+      relationship.diagramItemId === replacement.diagramItemId
+      || diagramRelationshipKey(relationship) === diagramRelationshipKey(replacement)
+    ));
+    return alreadyPresent ? current : [...current, replacement];
+  }
+
+  // For cube/member changes, never remove from the current collection. Only
+  // replace an affected relation when its UUID (or stable fallback key) is
+  // present in the patch returned by the server.
+  return current.map(relationship => {
+    if (!relationshipMatchesChange(relationship, scope)) return relationship;
+    const replacement = patchById.get(relationship.diagramItemId || '')
+      || patchByKey.get(diagramRelationshipKey(relationship));
+    return replacement
+      ? { ...replacement, diagramItemId: relationship.diagramItemId }
+      : relationship;
+  });
+}
+
+function mergeDiagramPatch(
+  current: DiagramResponse,
+  patch: DiagramResponse,
+  affectedCubeNames?: Set<string>,
+  scope: RelationshipChangeScope = { explicit: false, relationshipIds: new Set(), elementIds: new Set() },
+): DiagramResponse {
+  if (!affectedCubeNames) {
+    return {
+      ...patch,
+      relationships: scope.explicit
+        ? mergeRelationshipsByUuid(current.relationships, patch.relationships, scope)
+        : current.relationships.length > 0
+          ? mergeRelationshipsByUuid(current.relationships, patch.relationships, scope)
+          : patch.relationships,
+    };
+  }
+
+  const patchCubes = new Map(patch.cubes.map(cube => [cube.name, cube]));
+  const cubes = current.cubes
+    .map(cube => patchCubes.get(cube.name) || cube)
+    .concat(patch.cubes.filter(cube => !current.cubes.some(currentCube => currentCube.name === cube.name)));
+  const relationships = !patch.relationshipsComplete
+    ? current.relationships
+    : mergeRelationshipsByUuid(current.relationships, patch.relationships, scope);
+
+  return { ...current, cubes, relationships };
 }
 
 function schemaSnapshotForSave(cubes: DiagramCube[], relationships: DiagramRelationship[]) {
   const stripDiagramMetadata = (item: Record<string, any>) => {
-    const { diagramItemId, ...persisted } = item;
+    const {
+      diagramItemId,
+      sourceCubeId,
+      targetCubeId,
+      sourceElementId,
+      targetElementId,
+      ...persisted
+    } = item;
     return persisted;
   };
 
@@ -672,13 +878,235 @@ function schemaSnapshotSource(diagram: DiagramResponse): string {
   return JSON.stringify(schemaSnapshotForSave(diagram.cubes, diagram.relationships));
 }
 
+const DIAGRAM_ID_COMMENT = /^\s*#\s*diagram(?:ItemId|SourceCubeId|TargetCubeId|SourceElementId|TargetElementId):.*$/i;
+
+function stripDiagramIdentityComments(content: string): string {
+  return content
+    .split(/\r?\n/)
+    .filter(line => !DIAGRAM_ID_COMMENT.test(line))
+    .join('\n');
+}
+
+function yamlCommentScalar(value: string): string {
+  return value.trim().replace(/^(?:['"])(.*)(?:['"])$/, '$1');
+}
+
+function diagramIdentityComment(item: {
+  diagramItemId?: string;
+  sourceCubeId?: string;
+  targetCubeId?: string;
+  sourceElementId?: string;
+  targetElementId?: string;
+}): string[] {
+  if (!item.diagramItemId) return [];
+  return [
+    `# diagramItemId: ${item.diagramItemId}`,
+    ...(item.sourceCubeId ? [`# diagramSourceCubeId: ${item.sourceCubeId}`] : []),
+    ...(item.targetCubeId ? [`# diagramTargetCubeId: ${item.targetCubeId}`] : []),
+    ...(item.sourceElementId ? [`# diagramSourceElementId: ${item.sourceElementId}`] : []),
+    ...(item.targetElementId ? [`# diagramTargetElementId: ${item.targetElementId}`] : []),
+  ];
+}
+
+/**
+ * Keeps the temporary YAML inspectable without turning editor identity into
+ * Cube schema. Comments are accepted by YAML, shown in the temporary source
+ * viewer, and stripped before preview/persistence requests.
+ */
+function decorateTemporarySchemaFiles(
+  files: DiagramSourceFile[],
+  diagram: DiagramResponse,
+): DiagramSourceFile[] {
+  const cubesByFile = new Map<string, DiagramCube[]>();
+  diagram.cubes.forEach(cube => {
+    const key = cube.fileName.replace(/\\/g, '/');
+    cubesByFile.set(key, [...(cubesByFile.get(key) || []), cube]);
+  });
+
+  return files.map(file => {
+    if (!/\.(yml|yaml)$/i.test(file.fileName)) return file;
+    const fileCubes = cubesByFile.get(file.fileName.replace(/\\/g, '/')) || [];
+    if (!fileCubes.length) return { ...file, content: stripDiagramIdentityComments(file.content) };
+
+    const lines = stripDiagramIdentityComments(file.content).split(/\r?\n/);
+    const output: string[] = [];
+    let currentCube: DiagramCube | undefined;
+    let cubeIndent = -1;
+    let section: 'joins' | 'dimensions' | 'measures' | 'hierarchies' | undefined;
+    let sectionIndent = -1;
+    const occurrences = new Map<string, number>();
+
+    lines.forEach(line => {
+      const nameMatch = line.match(/^(\s*)-\s+name:\s*(.*?)\s*$/);
+      const indent = nameMatch ? nameMatch[1].length : line.match(/^(\s*)/)?.[1].length || 0;
+
+      if (nameMatch) {
+        const name = yamlCommentScalar(nameMatch[2]);
+        if (indent <= cubeIndent || !currentCube) {
+          currentCube = fileCubes.find(cube => cube.name === name);
+          cubeIndent = currentCube ? indent : -1;
+          section = undefined;
+          sectionIndent = -1;
+          occurrences.clear();
+          if (currentCube) output.push(...diagramIdentityComment(currentCube));
+          output.push(line);
+          return;
+        }
+
+        if (currentCube && section && indent > sectionIndent) {
+          const occurrenceKey = `${section}:${name.toLowerCase()}`;
+          const occurrence = occurrences.get(occurrenceKey) || 0;
+          occurrences.set(occurrenceKey, occurrence + 1);
+          let identity: DiagramDimension | DiagramMeasure | DiagramHierarchy | DiagramRelationship | undefined;
+          if (section === 'dimensions') identity = (currentCube.dimensions || []).filter(item => item.name.toLowerCase() === name.toLowerCase())[occurrence];
+          if (section === 'measures') identity = (currentCube.measures || []).filter(item => item.name.toLowerCase() === name.toLowerCase())[occurrence];
+          if (section === 'hierarchies') identity = (currentCube.hierarchies || []).filter(item => item.name.toLowerCase() === name.toLowerCase())[occurrence];
+          if (section === 'joins') identity = diagram.relationships
+            .filter(relationship => relationship.sourceCube === currentCube?.name && relationship.targetCube === name)[occurrence];
+          if (identity) output.push(...diagramIdentityComment(identity));
+        }
+        output.push(line);
+        return;
+      }
+
+      const sectionMatch = line.match(/^(\s+)(joins|dimensions|measures|hierarchies):\s*$/);
+      if (currentCube && sectionMatch && sectionMatch[1].length > cubeIndent) {
+        section = sectionMatch[2] as typeof section;
+        sectionIndent = sectionMatch[1].length;
+        output.push(line);
+        return;
+      }
+
+      output.push(line);
+    });
+
+    return { ...file, content: output.join('\n') };
+  });
+}
+
+function temporaryFilesForRequest(files: DiagramSourceFile[]): DiagramSourceFile[] {
+  return files.map(file => ({ ...file, content: stripDiagramIdentityComments(file.content) }));
+}
+
 let diagramItemSequence = 0;
 
-function diagramItemId(section: string, cubeName: string, index?: number): string {
-  const randomId = typeof globalThis.crypto?.randomUUID === 'function'
-    ? globalThis.crypto.randomUUID()
-    : `${Date.now()}-${++diagramItemSequence}`;
-  return `diagram:${section}:${cubeName}:${index ?? 'new'}:${randomId}`;
+function diagramItemId(_section: string, _cubeName: string, _index?: number): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
+  return `diagram-${Date.now()}-${++diagramItemSequence}`;
+}
+
+function itemIdentityKey(name: unknown): string {
+  return String(name || '').trim().toLowerCase();
+}
+
+function assignStableItemIds<T extends { name: string; diagramItemId?: string }>(
+  items: T[],
+  previousItems: T[] = [],
+  preferredItemId?: string,
+): T[] {
+  const previousByName = new Map<string, T[]>();
+  previousItems.forEach(item => {
+    const key = itemIdentityKey(item.name);
+    previousByName.set(key, [...(previousByName.get(key) || []), item]);
+  });
+  const occurrenceByName = new Map<string, number>();
+  return items.map(item => {
+    const key = itemIdentityKey(item.name);
+    const occurrence = occurrenceByName.get(key) || 0;
+    occurrenceByName.set(key, occurrence + 1);
+    const preferred = preferredItemId
+      ? previousItems.find(previous => previous.diagramItemId === preferredItemId)
+      : undefined;
+    const previous = preferred || previousByName.get(key)?.[occurrence];
+    return {
+      ...item,
+      diagramItemId: item.diagramItemId || previous?.diagramItemId || diagramItemId('item', key),
+    };
+  });
+}
+
+function diagramRelationshipKey(relationship: DiagramRelationship): string {
+  return [
+    itemIdentityKey(relationship.sourceCube),
+    itemIdentityKey(relationship.targetCube),
+    (relationship.sourceColumns || [relationship.sourceColumn || '']).map(itemIdentityKey).join(','),
+    (relationship.targetColumns || [relationship.targetColumn || '']).map(itemIdentityKey).join(','),
+    relationship.relationship,
+  ].join('|');
+}
+
+function relationshipElementId(cube: DiagramCube | undefined, columnName?: string): string | undefined {
+  if (!cube || !columnName) return undefined;
+  const column = cube.columns.find(item => itemIdentityKey(item.name) === itemIdentityKey(columnName));
+  const dimension = cube.dimensions?.find(item => (
+    itemIdentityKey(item.name) === itemIdentityKey(columnName)
+    || Boolean(column && expressionReferencesColumn(item.sql, column.name))
+  ));
+  return dimension?.diagramItemId || column?.diagramItemId;
+}
+
+function hydrateDiagramIdentities(
+  result: DiagramResponse,
+  previous?: DiagramResponse,
+  change?: PendingDiagramChange,
+): DiagramResponse {
+  const cubes = result.cubes.map(cube => {
+    const previousCube = previous?.cubes.find(item => (
+      item.name === cube.name || item.fileName === cube.fileName
+    ));
+    const body = change?.body || {};
+    const sameCube = body.cubeName === cube.name;
+    return {
+      ...cube,
+      diagramItemId: cube.diagramItemId || previousCube?.diagramItemId || diagramItemId('cube', cube.name),
+      columns: assignStableItemIds(cube.columns, previousCube?.columns),
+      dimensions: assignStableItemIds(
+        cube.dimensions || [],
+        previousCube?.dimensions || [],
+        sameCube && body.section === 'dimensions' ? body.diagramItemId : undefined,
+      ),
+      measures: assignStableItemIds(
+        cube.measures || [],
+        previousCube?.measures || [],
+        sameCube && body.section === 'measures' ? body.diagramItemId : undefined,
+      ),
+      hierarchies: assignStableItemIds(
+        cube.hierarchies || [],
+        previousCube?.hierarchies || [],
+        sameCube && body.section === 'hierarchies' ? body.diagramItemId : undefined,
+      ),
+    };
+  });
+  const cubeByName = new Map<string, DiagramCube>(
+    [...(previous?.cubes || []), ...cubes].map(cube => [cube.name, cube]),
+  );
+  const previousRelationshipsByKey = new Map(
+    (previous?.relationships || []).map(relationship => [diagramRelationshipKey(relationship), relationship]),
+  );
+  const preferredRelationshipId = change?.body?.diagramItemId;
+  const preferredRelationship = preferredRelationshipId
+    ? previous?.relationships.find(relationship => relationship.diagramItemId === preferredRelationshipId)
+    : undefined;
+  const relationships = result.relationships.map(relationship => {
+    const sourceCube = cubeByName.get(relationship.sourceCube);
+    const targetCube = cubeByName.get(relationship.targetCube);
+    const previousRelationship = previousRelationshipsByKey.get(diagramRelationshipKey(relationship));
+    return {
+      ...relationship,
+      diagramItemId: relationship.diagramItemId
+        || previousRelationship?.diagramItemId
+        || (preferredRelationship && relationship.sourceCube === preferredRelationship.sourceCube
+          && relationship.targetCube === preferredRelationship.targetCube
+          ? preferredRelationship.diagramItemId
+          : undefined)
+        || diagramItemId('relationship', relationship.sourceCube),
+      sourceCubeId: sourceCube?.diagramItemId,
+      targetCubeId: targetCube?.diagramItemId,
+      sourceElementId: relationshipElementId(sourceCube, relationship.sourceColumn),
+      targetElementId: relationshipElementId(targetCube, relationship.targetColumn),
+    };
+  });
+  return { ...result, cubes, relationships };
 }
 
 function updateDiagramCube(
@@ -987,8 +1415,10 @@ function defaultRelationship(
 }
 
 function relationshipForStorage(draft: RelationshipDraft) {
+  const identity = draft.diagramItemId ? { diagramItemId: draft.diagramItemId } : {};
   if (draft.relationship !== 'one_to_many') {
     return {
+      ...identity,
       sourceCube: draft.sourceCube,
       targetCube: draft.targetCube,
       sourceColumn: draft.sourceColumn,
@@ -1000,6 +1430,7 @@ function relationshipForStorage(draft: RelationshipDraft) {
   // Cube stores the relationship on the many side. The UI keeps the
   // natural 1:N wording, but writes the equivalent N:1 definition.
   return {
+    ...identity,
     sourceCube: draft.targetCube,
     targetCube: draft.sourceCube,
     sourceColumn: draft.targetColumn,
@@ -1192,8 +1623,11 @@ const ColumnActionButton = styled(Button)`
   display: none !important;
 `;
 
-const COLUMN_ROW_HEIGHT = 46;
-const COLUMN_RESIZE_HANDLE_HEIGHT = 14;
+// React Flow needs an initial spacing estimate before the DOM has measured the
+// cards. This fallback is only for the first layout pass; the table height
+// itself is always measured from the rendered DOM below.
+const INITIAL_NODE_LAYOUT_ROW_HEIGHT = 46;
+const INITIAL_NODE_LAYOUT_HANDLE_HEIGHT = 14;
 
 const ColumnList = styled.div`
   position: relative;
@@ -1426,9 +1860,9 @@ function CubeDiagramNode({ id, data }: any) {
   const relationships = (data.relationships || []) as DiagramRelationship[];
   const updateNodeInternals = useUpdateNodeInternals();
   const selectedCubeName = data.selectedCubeName as string | null;
-  const relationshipColumnNames = new Set(
-    ((data.relationshipColumnNames || []) as string[]).map(columnName => columnName.toLowerCase())
-  );
+  // Join columns are physical columns, not necessarily dimensions. Keep them
+  // in the diagram's key projection so a relationship can target their row.
+  const relationshipColumnNames = relationshipColumnNamesForCube(relationships, cube.name);
   const hierarchies = cube.hierarchies || [];
   const hierarchyDimensionLabels = new Map(
     (cube.dimensions || []).map(dimension => [dimension.name.toLowerCase(), dimension.title || dimension.name])
@@ -1437,7 +1871,7 @@ function CubeDiagramNode({ id, data }: any) {
   const markColumnAsPrimaryKey = data.markColumnAsPrimaryKey as (cubeName: string, column: DiagramColumn) => void;
   const openDimensionEditor = data.openDimensionEditor as (cube: DiagramCube, column: DiagramColumn, dimension?: DiagramDimension) => void;
   const openSchemaItemEditor = data.openSchemaItemEditor as (action: string, cube: DiagramCube, column?: DiagramColumn, item?: any) => void;
-  const confirmDeleteSchemaItem = data.confirmDeleteSchemaItem as (cubeName: string, section: 'dimensions' | 'measures' | 'hierarchies', itemName: string, label: string, itemIndex?: number) => void;
+  const confirmDeleteSchemaItem = data.confirmDeleteSchemaItem as (cubeName: string, section: 'dimensions' | 'measures' | 'hierarchies', itemName: string, label: string, itemIndex?: number, diagramItemId?: string) => void;
   const moveSchemaItem = data.moveSchemaItem as (cubeName: string, section: ReorderableSchemaItemSection, itemName: string, direction: 'up' | 'down', itemIndex?: number, relationships?: DiagramRelationship[]) => void;
   const openCubePropertiesEditor = data.openCubePropertiesEditor as (cube: DiagramCube) => void;
   const isolateCube = data.isolateCube as (cube: DiagramCube) => void;
@@ -1487,8 +1921,19 @@ function CubeDiagramNode({ id, data }: any) {
     return (originalColumnOrder.get(left.name.toLowerCase()) || 0)
       - (originalColumnOrder.get(right.name.toLowerCase()) || 0);
   });
+  // A physical join key must be rendered even when the schema intentionally
+  // does not expose it as a dimension (for example CD_REGIAO_FISCAL).
   const dimensionColumns = orderedColumns.filter(column => (
     Boolean(dimensionForColumn(cube, column))
+    || relationshipColumnNames.has(column.name.toLowerCase())
+  ));
+  const dimensionNamesShownInColumnRows = new Set(
+    dimensionColumns
+      .map(column => dimensionForColumn(cube, column)?.name.toLowerCase())
+      .filter((name): name is string => Boolean(name)),
+  );
+  const standaloneDimensions = (cube.dimensions || []).filter(dimension => (
+    !dimensionNamesShownInColumnRows.has(dimension.name.toLowerCase())
   ));
   const duplicateDimensions = (cube.dimensions || []).flatMap((dimension, index, dimensions) => {
     const itemIndex = dimensions
@@ -1552,20 +1997,44 @@ function CubeDiagramNode({ id, data }: any) {
     !primaryDimensionColumns.includes(column) && !secondaryKeyColumns.includes(column)
   ));
   const compositeKeyInsertColumn = secondaryKeyColumns[0] || regularDimensionColumns[0];
-  const totalItemCount = dimensionColumns.length
-    + duplicateDimensions.length
-    + (compositeKeyColumns.length > 1 ? 1 : 0)
-    + hierarchies.length
-    + (cube.measures?.length || 0)
-    + unusedColumns.length;
-  const columnListContentHeight = totalItemCount * COLUMN_ROW_HEIGHT;
-  const columnListVisibleHeight = Math.min(totalItemCount, 10) * COLUMN_ROW_HEIGHT;
+  const hierarchyLayoutKey = hierarchies
+    .map(hierarchy => `${hierarchy.name}:${hierarchy.title || ''}:${hierarchy.levels.join('|')}`)
+    .join('||');
+  const columnListContentKey = [
+    cube.name,
+    dimensionColumns.map(column => `${column.name}:${column.type || ''}`).join('|'),
+    standaloneDimensions.map(dimension => `${dimension.name}:${dimension.title || ''}`).join('|'),
+    duplicateDimensions.map(({ dimension, itemIndex }) => `${dimension.name}:${itemIndex}`).join('|'),
+    hierarchyLayoutKey,
+    (cube.measures || []).map(measure => `${measure.name}:${measure.title || ''}:${measure.type || ''}`).join('|'),
+    unusedColumns.map(column => `${column.name}:${column.type || ''}`).join('|'),
+  ].join('||');
   const columnListRef = useRef<HTMLDivElement>(null);
+  const resizeHandleRef = useRef<HTMLDivElement>(null);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
-  const previousContentCountRef = useRef(totalItemCount);
-  const columnListMaxHeight = columnListContentHeight + COLUMN_RESIZE_HANDLE_HEIGHT;
-  const columnListDefaultHeight = columnListVisibleHeight + COLUMN_RESIZE_HANDLE_HEIGHT;
-  const [columnListHeight, setColumnListHeight] = useState(columnListDefaultHeight);
+  const [columnListMaxHeight, setColumnListMaxHeight] = useState<number | null>(null);
+  const [columnListHeight, setColumnListHeight] = useState<number | null>(null);
+
+  // Measure the table in its natural state. Do not infer its height from a
+  // nominal row size: hierarchy levels, titles and custom content can all
+  // change the actual height of a row.
+  useLayoutEffect(() => {
+    const element = columnListRef.current;
+    if (!element) return;
+
+    const previousInlineHeight = element.style.height;
+    element.style.height = 'auto';
+    const contentHeight = Math.max(0, element.scrollHeight);
+    const resizeHandleHeight = resizeHandleRef.current?.getBoundingClientRect().height || 0;
+    const maxHeight = contentHeight + resizeHandleHeight;
+    element.style.height = previousInlineHeight;
+
+    setColumnListMaxHeight(previous => previous === maxHeight ? previous : maxHeight);
+    // Recalculate the full natural height whenever the table structure or a
+    // hierarchy's wrapped levels change. This guarantees that the card grows
+    // through the actual table height, regardless of row count or row size.
+    setColumnListHeight(previous => previous === maxHeight ? previous : maxHeight);
+  }, [columnListContentKey]);
 
   // The handles are rendered inside rows whose height changes with the
   // temporary schema. React Flow must recalculate their bounds after every
@@ -1586,24 +2055,20 @@ function CubeDiagramNode({ id, data }: any) {
     updateNodeInternals,
   ]);
 
-  useEffect(() => {
-    if (previousContentCountRef.current === totalItemCount) return;
-
-    previousContentCountRef.current = totalItemCount;
-    setColumnListHeight(columnListDefaultHeight);
-  }, [columnListDefaultHeight, totalItemCount]);
-
   const startColumnResize = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
     resizeCleanupRef.current?.();
 
     const startY = event.clientY;
-    const startHeight = columnListHeight;
+    const startHeight = columnListHeight
+      ?? columnListRef.current?.scrollHeight
+      ?? columnListMaxHeight
+      ?? 0;
     const onMouseMove = (moveEvent: MouseEvent) => {
       const nextHeight = Math.max(
-        columnListDefaultHeight,
-        Math.min(columnListMaxHeight, startHeight + moveEvent.clientY - startY),
+        0,
+        Math.min(columnListMaxHeight ?? startHeight, startHeight + moveEvent.clientY - startY),
       );
       setColumnListHeight(nextHeight);
     };
@@ -1618,12 +2083,12 @@ function CubeDiagramNode({ id, data }: any) {
     document.body.style.userSelect = 'none';
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', cleanup);
-  }, [columnListDefaultHeight, columnListHeight, columnListMaxHeight]);
+  }, [columnListHeight, columnListMaxHeight]);
 
   const expandColumnList = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    setColumnListHeight(columnListMaxHeight);
+    if (columnListMaxHeight !== null) setColumnListHeight(columnListMaxHeight);
   }, [columnListMaxHeight]);
 
   useEffect(() => () => resizeCleanupRef.current?.(), []);
@@ -1655,7 +2120,7 @@ function CubeDiagramNode({ id, data }: any) {
           <Menu.Item
             key="delete-dimension"
             danger
-            onClick={() => confirmDeleteSchemaItem(cube.name, 'dimensions', dimension.name, 'dimensão', dimensionOccurrenceIndex(dimension))}
+            onClick={() => confirmDeleteSchemaItem(cube.name, 'dimensions', dimension.name, 'dimensão', dimensionOccurrenceIndex(dimension), dimension.diagramItemId)}
           >
             Excluir dimensão
           </Menu.Item>
@@ -1784,7 +2249,7 @@ function CubeDiagramNode({ id, data }: any) {
         <Menu.Item
           key="delete-duplicate-dimension"
           danger
-          onClick={() => confirmDeleteSchemaItem(cube.name, 'dimensions', dimension.name, 'dimensão', itemIndex)}
+          onClick={() => confirmDeleteSchemaItem(cube.name, 'dimensions', dimension.name, 'dimensão', itemIndex, dimension.diagramItemId)}
         >
           Excluir dimensão
         </Menu.Item>
@@ -1813,6 +2278,67 @@ function CubeDiagramNode({ id, data }: any) {
                   {displayName}
                 </Text>
               ) : null}
+            </div>
+          </Space>
+          <Text type="secondary" style={{ marginLeft: 8, fontSize: 10 }}>{dimension.type || ''}</Text>
+        </ColumnRow>
+      </Dropdown>
+    );
+  }
+
+  function renderStandaloneDimensionRow({ dimension, itemIndex }: { dimension: DiagramDimension; itemIndex: number }) {
+    const displayTitle = dimension.title || dimension.name;
+    const standaloneMenu = (
+      <Menu>
+        <Menu.Item
+          key="edit-standalone-dimension"
+          onClick={() => openSchemaItemEditor('dimensions', cube, undefined, { ...dimension, itemIndex })}
+        >
+          Editar dimensão
+        </Menu.Item>
+        <Menu.Divider />
+        <Menu.Item
+          key="move-standalone-dimension-up"
+          disabled={!canMoveSchemaItem(cube, 'dimensions', dimension.name, 'up', itemIndex, relationships)}
+          onClick={() => moveSchemaItem(cube.name, 'dimensions', dimension.name, 'up', itemIndex, relationships)}
+        >
+          Mover dimensão para cima
+        </Menu.Item>
+        <Menu.Item
+          key="move-standalone-dimension-down"
+          disabled={!canMoveSchemaItem(cube, 'dimensions', dimension.name, 'down', itemIndex, relationships)}
+          onClick={() => moveSchemaItem(cube.name, 'dimensions', dimension.name, 'down', itemIndex, relationships)}
+        >
+          Mover dimensão para baixo
+        </Menu.Item>
+        <Menu.Item
+          key="delete-standalone-dimension"
+          danger
+          onClick={() => confirmDeleteSchemaItem(cube.name, 'dimensions', dimension.name, 'dimensão', itemIndex, dimension.diagramItemId)}
+        >
+          Excluir dimensão
+        </Menu.Item>
+      </Menu>
+    );
+    return (
+      <Dropdown
+        key={`${dimension.name}:standalone:${itemIndex}`}
+        overlay={standaloneMenu}
+        trigger={['click']}
+        placement="bottomRight"
+      >
+        <ColumnRow className="nodrag" onClick={(event) => event.stopPropagation()}>
+          <Space size={6} style={{ minWidth: 0, flex: 1 }}>
+            <Tooltip title={`Dimensão: ${displayTitle}`}>
+              <CubeIcon style={{ color: '#7568d8', fontSize: 13 }} />
+            </Tooltip>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <Text ellipsis style={{ maxWidth: 190, display: 'block', fontSize: 12 }}>
+                {displayTitle}
+              </Text>
+              <Text type="secondary" ellipsis style={{ maxWidth: 190, display: 'block', fontSize: 10 }}>
+                {dimension.name}
+              </Text>
             </div>
           </Space>
           <Text type="secondary" style={{ marginLeft: 8, fontSize: 10 }}>{dimension.type || ''}</Text>
@@ -1927,7 +2453,7 @@ function CubeDiagramNode({ id, data }: any) {
       <ColumnList
         ref={columnListRef}
         className="nodrag nowheel"
-        style={{ height: columnListHeight }}
+        style={columnListHeight === null ? undefined : { height: columnListHeight }}
       >
         {cube.columnError ? (
           <Tooltip title={cube.columnError}>
@@ -1973,7 +2499,7 @@ function CubeDiagramNode({ id, data }: any) {
                   <Menu.Item
                     key="delete-dimension"
                     danger
-                    onClick={() => confirmDeleteSchemaItem(cube.name, 'dimensions', dimension.name, 'dimensão', dimensionOccurrenceIndex(dimension))}
+                    onClick={() => confirmDeleteSchemaItem(cube.name, 'dimensions', dimension.name, 'dimensão', dimensionOccurrenceIndex(dimension), dimension.diagramItemId)}
                   >
                     Excluir dimensão
                   </Menu.Item>
@@ -2135,6 +2661,10 @@ function CubeDiagramNode({ id, data }: any) {
               </React.Fragment>
             );
           })}
+            {standaloneDimensions.map((dimension) => renderStandaloneDimensionRow({
+              dimension,
+              itemIndex: dimensionOccurrenceIndex(dimension),
+            }))}
             {hierarchies.map((hierarchy) => (
               <Dropdown
                 overlay={(
@@ -2163,7 +2693,7 @@ function CubeDiagramNode({ id, data }: any) {
                     <Menu.Item
                       key="delete-hierarchy"
                       danger
-                      onClick={() => confirmDeleteSchemaItem(cube.name, 'hierarchies', hierarchy.name, 'hierarquia')}
+                      onClick={() => confirmDeleteSchemaItem(cube.name, 'hierarchies', hierarchy.name, 'hierarquia', undefined, hierarchy.diagramItemId)}
                     >
                       Excluir hierarquia
                     </Menu.Item>
@@ -2226,7 +2756,7 @@ function CubeDiagramNode({ id, data }: any) {
                     <Menu.Item
                       key="delete-measure"
                       danger
-                      onClick={() => confirmDeleteSchemaItem(cube.name, 'measures', measure.name, 'medida')}
+                      onClick={() => confirmDeleteSchemaItem(cube.name, 'measures', measure.name, 'medida', undefined, measure.diagramItemId)}
                     >
                       Excluir medida
                     </Menu.Item>
@@ -2268,6 +2798,7 @@ function CubeDiagramNode({ id, data }: any) {
           </>
         )}
         <ColumnResizeHandle
+          ref={resizeHandleRef}
           className="nodrag"
           onMouseDown={startColumnResize}
           onDoubleClick={expandColumnList}
@@ -2309,8 +2840,8 @@ function layoutNodes(
       ...row.map(cube => {
         const itemCount = uniqueDiagramColumns(cube.columns).length + (cube.measures?.length || 0);
         return 125
-          + Math.min(Math.max(itemCount, 1), 10) * COLUMN_ROW_HEIGHT
-          + COLUMN_RESIZE_HANDLE_HEIGHT;
+          + Math.min(Math.max(itemCount, 1), 10) * INITIAL_NODE_LAYOUT_ROW_HEIGHT
+          + INITIAL_NODE_LAYOUT_HANDLE_HEIGHT;
       }),
       240
     );
@@ -2358,6 +2889,12 @@ function relationshipEdges(relationships: DiagramRelationship[], cubes: DiagramC
         : targetColumn ? [targetColumn] : [];
       const sourceCompositeColumns = compositeColumnsByCube.get(source.name) || [];
       const targetCompositeColumns = compositeColumnsByCube.get(target.name) || [];
+      const sourceHasColumn = Boolean(sourceColumn && source.columns.some(column => (
+        column.name.toLowerCase() === sourceColumn.toLowerCase()
+      )));
+      const targetHasColumn = Boolean(targetColumn && target.columns.some(column => (
+        column.name.toLowerCase() === targetColumn.toLowerCase()
+      )));
       const sourceHasDimension = Boolean(sourceColumn && dimensionForColumn(source, { name: sourceColumn }));
       const targetHasDimension = Boolean(targetColumn && dimensionForColumn(target, { name: targetColumn }));
       const sourceUsesCompositeRow = sourceColumns.length === 1 && !sourceHasDimension
@@ -2368,19 +2905,19 @@ function relationshipEdges(relationships: DiagramRelationship[], cubes: DiagramC
         && targetCompositeColumns.some(column => column.toLowerCase() === targetColumn.toLowerCase());
       const sourceHandle = sourceColumns.length > 1 || sourceUsesCompositeRow
         ? compositeHandleId('source', sourceCompositeColumns.length > 1 ? sourceCompositeColumns : sourceColumns, sourceSide)
-        : sourceHasDimension
+        : sourceHasColumn
           ? handleId('source', sourceColumn, sourceSide)
           : handleId('source', undefined, sourceSide);
       const targetHandle = targetColumns.length > 1 || targetUsesCompositeRow
         ? compositeHandleId('target', targetCompositeColumns.length > 1 ? targetCompositeColumns : targetColumns, targetSide)
-        : targetHasDimension
+        : targetHasColumn
           ? handleId('target', targetColumn, targetSide)
           : handleId('target', undefined, targetSide);
       return {
         // The pair is normally unique, but keeping the relationship index in
         // the React Flow id prevents one edge from replacing another when a
         // model has multiple joins between the same cubes.
-        id: `${source.name}->${target.name}:${relationshipIndex}`,
+        id: join.diagramItemId || `${source.name}->${target.name}:${relationshipIndex}`,
         source: source.name,
         target: target.name,
         sourceHandle,
@@ -2630,17 +3167,39 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     backgroundColor: DIAGRAM_VIEW_COLORS[0],
   });
   const [sampleCube, setSampleCube] = useState<DiagramCube | null>(null);
+  const [temporarySourceFileName, setTemporarySourceFileName] = useState<string | null>(null);
   const [pendingChanges, setPendingChanges] = useState<PendingDiagramChange[]>([]);
+  const [temporarySchemaFiles, setTemporarySchemaFiles] = useState<DiagramSourceFile[]>([]);
   const [relationshipsDirty, setRelationshipsDirty] = useState(false);
   const [projectLockToken, setProjectLockToken] = useState<string | null>(null);
   const [projectLockError, setProjectLockError] = useState<string | null>(null);
   const nodesRef = useRef<Node[]>([]);
+  const diagramRef = useRef<DiagramResponse>(temporarySchemaSnapshot);
   const relationshipsRef = useRef<DiagramRelationship[]>([]);
+  // React Flow must not lose its edge source because a scoped preview briefly
+  // returns an empty relationship collection. This ref is updated from every
+  // accepted diagram state and explicitly from relationship mutations.
+  const stableRelationshipsRef = useRef<DiagramRelationship[]>([]);
+  const temporarySchemaFilesRef = useRef<DiagramSourceFile[]>([]);
+  const originalSchemaFilesRef = useRef<DiagramSourceFile[]>([]);
+  const previewQueueRef = useRef(Promise.resolve());
+  const previewSessionRef = useRef(0);
   const originalSchemaSnapshotRef = useRef<string | null>(null);
   const relationshipsDirtyRef = useRef(false);
   const projectLockTokenRef = useRef<string | null>(null);
   const activeViewIdRef = useRef('default');
   const viewportInitializedRef = useRef(false);
+  const [viewportFitRequest, setViewportFitRequest] = useState(0);
+
+  const closeDiagramActionMenus = useCallback(() => {
+    setColumnMenuKey(null);
+    setCubeActionMenuKey(null);
+  }, []);
+
+  const requestViewportFit = useCallback(() => {
+    viewportInitializedRef.current = false;
+    setViewportFitRequest(previous => previous + 1);
+  }, []);
 
   const positionsKey = `cube-relationship-diagram:${datamartId || window.location.pathname}`;
   const viewsKey = `${positionsKey}:views`;
@@ -2711,6 +3270,20 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     [activeViewId, diagramViews]
   );
 
+  const temporarySourceFile = useMemo(
+    () => temporarySchemaFiles.find(file => file.fileName === temporarySourceFileName)
+      || temporarySchemaFiles[0],
+    [temporarySchemaFiles, temporarySourceFileName]
+  );
+
+  const openTemporarySourceViewer = useCallback((cube: DiagramCube) => {
+    const normalizedCubeFileName = cube.fileName.replace(/\\/g, '/');
+    const cubeFile = temporarySchemaFilesRef.current.find(file => (
+      file.fileName.replace(/\\/g, '/') === normalizedCubeFileName
+    ));
+    setTemporarySourceFileName(cubeFile?.fileName || null);
+  }, []);
+
   useEffect(() => {
     activeViewIdRef.current = activeViewId;
   }, [activeViewId]);
@@ -2747,8 +3320,19 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
   }, [setNodes]);
 
   useEffect(() => {
-    relationshipsRef.current = diagram.relationships;
-  }, [diagram.relationships]);
+    diagramRef.current = diagram;
+  }, [diagram]);
+
+  const renderedRelationships = diagram.relationships.length > 0 || stableRelationshipsRef.current.length === 0
+    ? diagram.relationships
+    : stableRelationshipsRef.current;
+
+  useEffect(() => {
+    if (diagram.relationships.length > 0) {
+      stableRelationshipsRef.current = diagram.relationships;
+    }
+    relationshipsRef.current = renderedRelationships;
+  }, [diagram.relationships, renderedRelationships]);
 
   useEffect(() => {
     renderDiagram(temporarySchemaSnapshot);
@@ -2764,6 +3348,56 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
       return false;
     }
     setPendingChanges(previous => [...previous, change]);
+    const previewSession = previewSessionRef.current;
+    previewQueueRef.current = previewQueueRef.current.then(async () => {
+      if (previewSession !== previewSessionRef.current) return;
+      const files = temporaryFilesForRequest(temporarySchemaFilesRef.current);
+      if (!files.length) return;
+      const response = await playgroundFetch('playground/schema/changes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Cube-Project-Lock': projectLockTokenRef.current || '',
+        },
+        body: JSON.stringify({ preview: true, files, changes: [change] }),
+      });
+      if (!response.ok) throw new Error(await relationshipResponseError(response));
+      if (previewSession !== previewSessionRef.current) return;
+      const result = await response.json() as {
+        files?: DiagramSourceFile[];
+        diagram?: DiagramResponse;
+      };
+      if (Array.isArray(result.files)) {
+        temporarySchemaFilesRef.current = result.files;
+      }
+      if (result.diagram) {
+        const normalizedPatch = normalizeDiagramForDisplay(
+          result.diagram,
+          diagramRef.current,
+          change,
+        ).diagram;
+        const previous = diagramRef.current;
+        const merged = mergeDiagramPatch(
+          previous,
+          normalizedPatch,
+          affectedCubeNamesForChange(change),
+          relationshipChangeScope(change, previous),
+        );
+        diagramRef.current = merged;
+        const displayFiles = decorateTemporarySchemaFiles(
+          result.files || temporarySchemaFilesRef.current,
+          merged,
+        );
+        stableRelationshipsRef.current = merged.relationships;
+        temporarySchemaFilesRef.current = displayFiles;
+        setTemporarySchemaFiles(displayFiles);
+        setDiagram(merged);
+      }
+    }).catch((error: any) => {
+      const errorMessage = error?.message || String(error);
+      setLoadError(errorMessage);
+      message.error(`A prévia do arquivo temporário falhou: ${errorMessage}`);
+    });
     return true;
   }, [projectLockError]);
 
@@ -2777,20 +3411,24 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
   ) => {
     const cube = diagram.cubes.find(item => item.name === cubeName);
     if (!cube || !canMoveSchemaItem(cube, section, itemName, direction, itemIndex, relationships)) return;
+    const members = section === 'dimensions'
+      ? cube.dimensions || []
+      : section === 'measures'
+        ? cube.measures || []
+        : cube.hierarchies || [];
+    const memberIndex = schemaItemIndex(members, itemName, itemIndex);
     if (!stageChange({
       endpoint: 'playground/schema/reorder',
-      body: { cubeName, section, itemName, direction, itemIndex },
+      body: {
+        cubeName,
+        section,
+        itemName,
+        direction,
+        itemIndex,
+        diagramItemId: memberIndex >= 0 ? members[memberIndex].diagramItemId : undefined,
+      },
     })) return;
 
-    setDiagram(previous => moveSchemaItemInDiagram(
-      previous,
-      cubeName,
-      section,
-      itemName,
-      direction,
-      itemIndex,
-      relationships,
-    ));
     setColumnMenuKey(null);
     message.info('Ordem alterada localmente. Clique em Salvar para validar.');
   }, [diagram.cubes, diagram.relationships, stageChange]);
@@ -2877,10 +3515,13 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
         throw new Error(await relationshipResponseError(response));
       }
       const result = await response.json() as DiagramResponse;
+      const loadedSourceFiles = Array.isArray(result.files) ? result.files : [];
+      temporarySchemaFilesRef.current = loadedSourceFiles;
+      originalSchemaFilesRef.current = loadedSourceFiles.map(file => ({ ...file }));
       // Keep the file order as the persisted baseline. The temporary snapshot
       // may be normalized below and must then be saved back to the source files.
       const originalSource = schemaSnapshotSource(result);
-      const normalized = normalizeDiagramForDisplay(result);
+      const normalized = normalizeDiagramForDisplay(result, diagramRef.current);
       // Keep the currently loaded relationships if a transient schema/compiler
       // failure causes the refresh endpoint to return an empty relationship
       // collection. A successful deletion still results in an empty ref here,
@@ -2898,6 +3539,11 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
         ...normalized.diagram,
         relationships: loadedRelationships,
       };
+      const displaySourceFiles = decorateTemporarySchemaFiles(loadedSourceFiles, loadedDiagram);
+      temporarySchemaFilesRef.current = displaySourceFiles;
+      setTemporarySchemaFiles(displaySourceFiles);
+      diagramRef.current = loadedDiagram;
+      stableRelationshipsRef.current = loadedDiagram.relationships;
       originalSchemaSnapshotRef.current = originalSource;
       const serverState = stateResponse?.ok ? await stateResponse.json() as DiagramState : undefined;
       const localState = readStoredViewState();
@@ -2917,11 +3563,10 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
       setActiveViewId(initialView.id);
       setCubeVisibility(initialView.visibility);
       renderDiagram(loadedDiagram, positionsForView(initialView));
+      requestViewportFit();
       if (normalized.changed) {
         setRelationshipsDirty(true);
-        setPendingChanges(previous => previous.some(change => change.endpoint === 'playground/schema/normalize-diagram')
-          ? previous
-          : [...previous, { endpoint: 'playground/schema/normalize-diagram', body: {} }]);
+        stageChange({ endpoint: 'playground/schema/normalize-diagram', body: {} });
         message.info('O diagrama ajustou a ordem das chaves e a orientação das relações. Clique em Salvar para persistir.');
       }
     } catch (e: any) {
@@ -2929,7 +3574,7 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     } finally {
       setLoading(false);
     }
-  }, [readStoredPositions, readStoredViewState, renderDiagram]);
+  }, [readStoredPositions, readStoredViewState, renderDiagram, requestViewportFit, stageChange]);
 
   const openSampleData = useCallback((cube: DiagramCube) => {
     setSelectedCubeName(cube.name);
@@ -2938,36 +3583,17 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
 
   const markColumnAsPrimaryKey = useCallback((cubeName: string, column: DiagramColumn) => {
     const savingKey = `${cubeName}:${column.name}`;
+    const cube = diagramRef.current.cubes.find(item => item.name === cubeName);
     setColumnMenuKey(null);
     setPrimaryKeySaving(savingKey);
     stageChange({
       endpoint: 'playground/schema/primary-key',
-      body: { cubeName, columnName: column.name },
+      body: {
+        cubeName,
+        columnName: column.name,
+        diagramItemId: relationshipElementId(cube, column.name) || column.diagramItemId,
+      },
     });
-    setDiagram(previous => updateDiagramCube(previous, cubeName, cube => {
-      const dimensions = [...(cube.dimensions || [])];
-      const existingIndex = dimensions.findIndex(dimension => (
-        dimension.name === column.name || memberReferencesColumn(dimension, column.name)
-      ));
-      if (existingIndex >= 0) {
-        dimensions[existingIndex] = { ...dimensions[existingIndex], primaryKey: true };
-      } else {
-        dimensions.push({
-          name: column.name.toLowerCase(),
-          sql: column.name,
-          type: inferDimensionType(column.type),
-          primaryKey: true,
-        });
-      }
-      const primaryDimensions = dimensions.filter(dimension => dimension.primaryKey);
-      const otherDimensions = dimensions.filter(dimension => !dimension.primaryKey);
-      return {
-        ...cube,
-        hasPrimaryKey: true,
-        dimensions: [...primaryDimensions, ...otherDimensions],
-        columns: cube.columns.map(item => item.name === column.name ? { ...item, primaryKey: true } : item),
-      };
-    }));
     message.info(`'${column.name}' foi marcada como chave primária. Clique em Salvar para validar.`);
     setPrimaryKeySaving(null);
   }, [stageChange]);
@@ -2979,15 +3605,22 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
       setDiagramViews([]);
       setActiveViewId('default');
       setViewEditorMode(null);
-      viewportInitializedRef.current = false;
+      setTemporarySourceFileName(null);
+      requestViewportFit();
+      previewSessionRef.current += 1;
+      previewQueueRef.current = Promise.resolve();
       setDiagram({ cubes: [], relationships: [] });
+      temporarySchemaFilesRef.current = [];
+      originalSchemaFilesRef.current = [];
+      setTemporarySchemaFiles([]);
       relationshipsRef.current = [];
+      stableRelationshipsRef.current = [];
       originalSchemaSnapshotRef.current = null;
       setNodes([]);
     } else {
-      viewportInitializedRef.current = false;
+      requestViewportFit();
     }
-  }, [loadDiagram, setNodes, visible]);
+  }, [loadDiagram, requestViewportFit, setNodes, visible]);
 
   useEffect(() => {
     if (!visible) {
@@ -3130,6 +3763,7 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
       cubeName: cube.name,
       section,
       itemName: item?.name,
+      diagramItemId: item?.diagramItemId,
       values: defaults[section],
     });
   }, [openDimensionEditor]);
@@ -3139,6 +3773,7 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     setCubeActionMenuKey(null);
     setCubePropertiesDraft({
       cubeName: cube.name,
+      diagramItemId: cube.diagramItemId,
       sourceMode: cube.sourceType === 'sql' ? 'sql' : 'sql_table',
       values: {
         name: cube.name,
@@ -3181,11 +3816,11 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     setActiveViewId(nextView.id);
     setCubeVisibility(nextView.visibility);
     renderDiagram(diagram, positionsForView(nextView));
-    viewportInitializedRef.current = false;
+    requestViewportFit();
     setSelectedCubeName(null);
     setCubeActionMenuKey(null);
     setColumnMenuKey(null);
-  }, [activeViewId, cubeVisibility, diagram, diagramViews, renderDiagram]);
+  }, [activeViewId, cubeVisibility, diagram, diagramViews, renderDiagram, requestViewportFit]);
 
   const createDiagramViewFromCurrent = useCallback(async (name: string, backgroundColor: string) => {
     const currentView = activeView
@@ -3206,9 +3841,9 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     setActiveViewId(newView.id);
     setCubeVisibility(newView.visibility);
     renderDiagram(diagram, positionsForView(newView));
-    viewportInitializedRef.current = false;
+    requestViewportFit();
     await persistDiagramViews(createdViews, newView.id);
-  }, [activeView, cubeVisibility, diagram, diagramViews, persistDiagramViews, renderDiagram]);
+  }, [activeView, cubeVisibility, diagram, diagramViews, persistDiagramViews, renderDiagram, requestViewportFit]);
 
   const openCreateDiagramView = useCallback(() => {
     setViewEditorDraft({
@@ -3255,8 +3890,8 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     setActiveViewId(nextView.id);
     setCubeVisibility(nextView.visibility);
     renderDiagram(diagram, positionsForView(nextView));
-    viewportInitializedRef.current = false;
-  }, [activeViewId, diagram, diagramViews, renderDiagram]);
+    requestViewportFit();
+  }, [activeViewId, diagram, diagramViews, renderDiagram, requestViewportFit]);
 
   const isolateCube = useCallback((cube: DiagramCube) => {
     const visibleCubeNames = new Set<string>([cube.name]);
@@ -3270,8 +3905,8 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     setSelectedCubeName(cube.name);
     setCubeActionMenuKey(null);
     setColumnMenuKey(null);
-    viewportInitializedRef.current = false;
-  }, [applyViewVisibility, diagram.cubes, diagram.relationships]);
+    requestViewportFit();
+  }, [applyViewVisibility, diagram.cubes, diagram.relationships, requestViewportFit]);
 
   const isolateCubeByName = useCallback((cubeName: string) => {
     const cube = diagram.cubes.find(item => item.name === cubeName);
@@ -3299,14 +3934,14 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
 
   const showFullDiagram = useCallback(() => {
     applyViewVisibility(Object.fromEntries(diagram.cubes.map(cube => [cube.name, true])));
-    viewportInitializedRef.current = false;
-  }, [applyViewVisibility, diagram.cubes]);
+    requestViewportFit();
+  }, [applyViewVisibility, diagram.cubes, requestViewportFit]);
 
   const setCubeVisibilityForName = useCallback((cubeName: string, visibleCube: boolean) => {
     const nextVisibility = { ...cubeVisibility, [cubeName]: visibleCube };
     applyViewVisibility(nextVisibility);
-    viewportInitializedRef.current = false;
-  }, [applyViewVisibility, cubeVisibility]);
+    requestViewportFit();
+  }, [applyViewVisibility, cubeVisibility, requestViewportFit]);
 
   const visibleCubeNames = useMemo(() => new Set(
     diagram.cubes
@@ -3364,10 +3999,6 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     const filter = search.trim().toLocaleLowerCase();
     return nodes.map(node => {
       const cube = (diagram.cubes.find(item => item.name === node.id) || node.data.cube) as DiagramCube;
-      const relationshipColumnNames = diagram.relationships.flatMap(relationship => [
-        relationship.sourceCube === cube.name ? relationship.sourceColumn : undefined,
-        relationship.targetCube === cube.name ? relationship.targetColumn : undefined,
-      ]).filter((columnName): columnName is string => Boolean(columnName));
       const matches = cube.name.toLocaleLowerCase().includes(filter)
         || cube.title?.toLocaleLowerCase().includes(filter)
         || cube.columns.some(column => column.name.toLocaleLowerCase().includes(filter));
@@ -3376,7 +4007,7 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
         data: {
           ...node.data,
           cube,
-          relationships: diagram.relationships,
+          relationships: renderedRelationships,
           primaryKeySaving,
           markColumnAsPrimaryKey,
           openDimensionEditor,
@@ -3389,7 +4020,6 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
           setCubeActionMenuKey,
           columnMenuKey,
           setColumnMenuKey,
-          relationshipColumnNames,
           selectedCubeName,
         },
         hidden: (filter ? !matches : false)
@@ -3399,12 +4029,31 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
   }, [columnMenuKey, confirmDeleteSchemaItem, cubeActionMenuKey, diagram.cubes, diagram.relationships, isolateCube, markColumnAsPrimaryKey, moveSchemaItem, nodes, openCubePropertiesEditor, openDimensionEditor, openSchemaItemEditor, primaryKeySaving, search, selectedCubeName, visibleCubeNames]);
 
   const renderedEdges = useMemo(() => {
-    return relationshipEdges(diagram.relationships, diagram.cubes, nodes);
-  }, [diagram.cubes, diagram.relationships, nodes, visibleCubeNames]);
+    return relationshipEdges(renderedRelationships, diagram.cubes, nodes);
+  }, [diagram.cubes, nodes, renderedRelationships, visibleCubeNames]);
 
   const visibleEdges = useMemo(() => renderedEdges
     .filter(edge => visibleCubeNames.has(edge.source) && visibleCubeNames.has(edge.target)),
   [renderedEdges, visibleCubeNames]);
+
+  useEffect(() => {
+    if (!visible) return undefined;
+
+    const handleOutsideDiagramPointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+
+      // Dropdown overlays are rendered outside React Flow by Ant Design. Keep
+      // their own clicks intact while closing menus when the user clicks the
+      // toolbar, visibility panel, modal title or any other area outside the
+      // diagram canvas.
+      if (target.closest('.ant-dropdown')) return;
+      if (!target.closest('.react-flow')) closeDiagramActionMenus();
+    };
+
+    document.addEventListener('mousedown', handleOutsideDiagramPointerDown);
+    return () => document.removeEventListener('mousedown', handleOutsideDiagramPointerDown);
+  }, [closeDiagramActionMenus, visible]);
 
   useEffect(() => {
     if (!visible) return undefined;
@@ -3418,13 +4067,17 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
           )),
         }
         : diagram;
-      const edgeByRelationshipIndex = new Map(
-        renderedEdges.map(edge => [Number(String(edge.id).split(':').pop()), edge])
+      const edgeByRelationshipId = new Map(
+        renderedEdges.map(edge => [
+          (edge.data?.relationship as DiagramRelationship | undefined)?.diagramItemId,
+          edge,
+        ])
       );
 
       return {
         datamartId,
         temporarySchemaSnapshot: cloneDiagramDebugValue(snapshot),
+        temporarySchemaFiles: cloneDiagramDebugValue(temporarySchemaFiles),
         originalSchemaSnapshot: originalSchemaSnapshotRef.current
           ? JSON.parse(originalSchemaSnapshotRef.current)
           : null,
@@ -3452,7 +4105,7 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
           const targetPhysicalColumn = target
             ? physicalColumnForRelationship(target, relationship.targetColumn)
             : undefined;
-          const edge = edgeByRelationshipIndex.get(index);
+          const edge = edgeByRelationshipId.get(relationship.diagramItemId);
           return {
             index,
             sourceCube: relationship.sourceCube,
@@ -3485,7 +4138,7 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     return () => {
       if (debugWindow.cubeDiagramDebug === debugFunction) delete debugWindow.cubeDiagramDebug;
     };
-  }, [datamartId, diagram, nodes, pendingChanges, renderedEdges, visible]);
+  }, [datamartId, diagram, nodes, pendingChanges, renderedEdges, temporarySchemaFiles, visible]);
 
   useEffect(() => {
     if (!flowInstance || !visible || viewportInitializedRef.current) return undefined;
@@ -3510,7 +4163,7 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [diagram, flowInstance, hiddenCubeCount, search, visible, visibleCubeNames]);
+  }, [flowInstance, visible, viewportFitRequest]);
 
   const openRelationship = useCallback((
     sourceCube: string,
@@ -3533,6 +4186,7 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     if (reverse) {
       message.info('Já existe uma junção entre estes cubos. A definição existente será editada.');
       setDraft({
+        diagramItemId: reverse.diagramItemId,
         sourceCube: reverse.sourceCube,
         targetCube: reverse.targetCube,
         sourceColumn: reverse.sourceColumn,
@@ -3549,6 +4203,7 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     const selectedTargetColumn = targetColumn || existing?.targetColumn;
 
     setDraft({
+      diagramItemId: existing?.diagramItemId,
       sourceCube,
       targetCube,
       sourceColumn: selectedSourceColumn,
@@ -3590,28 +4245,6 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     };
     stageChange({ endpoint: 'playground/schema/relationship', body: change });
     setRelationshipsDirty(true);
-    setDiagram(previous => {
-      const relationship: DiagramRelationship = {
-        sourceCube: stored.sourceCube,
-        targetCube: stored.targetCube,
-        sourceColumn: stored.sourceColumn,
-        targetColumn: stored.targetColumn,
-        relationship: stored.relationship,
-        sql: relationshipSqlForStorage(
-          stored.targetCube,
-          stored.sourceColumn,
-          stored.targetColumn,
-        ),
-      };
-      const relationships = previous.relationships.filter(item => !(
-        (item.sourceCube === draft.sourceCube && item.targetCube === draft.targetCube)
-          || (item.sourceCube === draft.targetCube && item.targetCube === draft.sourceCube)
-      ));
-      return {
-        ...previous,
-        relationships: [...relationships, relationship],
-      };
-    });
     message.info(`${draft.operation === 'create' ? 'Relacionamento criado' : 'Relacionamento atualizado'} localmente. Clique em Salvar para validar.`);
     setDraft(null);
   }, [draft, stageChange]);
@@ -3621,19 +4254,13 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     stageChange({
       endpoint: 'playground/schema/relationship',
       body: {
+        diagramItemId: draft.diagramItemId,
         sourceCube: draft.sourceCube,
         targetCube: draft.targetCube,
         operation: 'delete',
       },
     });
     setRelationshipsDirty(true);
-    setDiagram(previous => ({
-      ...previous,
-      relationships: previous.relationships.filter(item => !(
-        (item.sourceCube === draft.sourceCube && item.targetCube === draft.targetCube)
-          || (item.sourceCube === draft.targetCube && item.targetCube === draft.sourceCube)
-      )),
-    }));
     message.info('Relacionamento removido localmente. Clique em Salvar para validar.');
     setDraft(null);
   }, [draft, stageChange]);
@@ -3691,26 +4318,10 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
         cubeName: dimensionDraft.cubeName,
         section: 'dimensions',
         itemName: dimensionDraft.dimensionName || undefined,
+        diagramItemId: dimensionDraft.diagramItemId,
         ...(dimensionDraft.itemIndex !== undefined ? { itemIndex: dimensionDraft.itemIndex } : {}),
         values,
       },
-    });
-    setDiagram(previous => {
-      const updated = updateDiagramCubeMembers(
-        previous,
-        dimensionDraft.cubeName,
-        'dimensions',
-        dimensionDraft.dimensionName,
-        { ...values, primaryKey: dimensionDraft.primaryKey },
-        'upsert',
-        dimensionDraft.itemIndex,
-      );
-      return renameDimensionReferences(
-        updated,
-        dimensionDraft.cubeName,
-        dimensionDraft.dimensionName,
-        name,
-      );
     });
     if (dimensionDraft.dimensionName && dimensionDraft.dimensionName.toLowerCase() !== name.toLowerCase()) {
       setRelationshipsDirty(true);
@@ -3725,6 +4336,7 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     itemName: string,
     label: string,
     itemIndex?: number,
+    itemId?: string,
   ) {
     stageChange({
       endpoint: 'playground/schema/item',
@@ -3732,13 +4344,11 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
         cubeName,
         section,
         itemName,
+        diagramItemId: itemId,
         ...(itemIndex !== undefined ? { itemIndex } : {}),
         operation: 'delete',
       },
     });
-    setDiagram(previous => section === 'hierarchies'
-      ? updateDiagramCubeHierarchy(previous, cubeName, itemName, {}, 'delete')
-      : updateDiagramCubeMembers(previous, cubeName, section, itemName, {}, 'delete', itemIndex));
     message.info(`${label} removida localmente. Clique em Salvar para validar.`);
   }
 
@@ -3748,6 +4358,7 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
     itemName: string,
     label: string,
     itemIndex?: number,
+    itemId?: string,
   ) {
     Modal.confirm({
       title: `Excluir ${label}?`,
@@ -3755,7 +4366,7 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
       okText: 'Excluir',
       okType: 'danger',
       cancelText: 'Cancelar',
-      onOk: () => deleteSchemaItem(cubeName, section, itemName, label, itemIndex),
+      onOk: () => deleteSchemaItem(cubeName, section, itemName, label, itemIndex, itemId),
     });
   }
 
@@ -3768,19 +4379,11 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
         cubeName: dimensionDraft.cubeName,
         section: 'dimensions',
         itemName: dimensionDraft.dimensionName,
+        diagramItemId: dimensionDraft.diagramItemId,
         ...(dimensionDraft.itemIndex !== undefined ? { itemIndex: dimensionDraft.itemIndex } : {}),
         operation: 'delete',
       },
     });
-    setDiagram(previous => updateDiagramCubeMembers(
-      previous,
-      dimensionDraft.cubeName,
-      'dimensions',
-      dimensionDraft.dimensionName,
-      {},
-      'delete',
-      dimensionDraft.itemIndex,
-    ));
     message.info('Dimensão removida localmente. Clique em Salvar para validar.');
     setDimensionDraft(null);
   }, [dimensionDraft, stageChange]);
@@ -3825,26 +4428,10 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
         cubeName: schemaItemDraft.cubeName,
         section: schemaItemDraft.section,
         itemName: schemaItemDraft.itemName,
+        diagramItemId: schemaItemDraft.diagramItemId,
         values,
       },
     });
-    if (schemaItemDraft.section === 'measures') {
-      setDiagram(previous => updateDiagramCubeMembers(
-        previous,
-        schemaItemDraft.cubeName,
-        'measures',
-        schemaItemDraft.itemName,
-        values,
-      ));
-    }
-    if (schemaItemDraft.section === 'hierarchies') {
-      setDiagram(previous => updateDiagramCubeHierarchy(
-        previous,
-        schemaItemDraft.cubeName,
-        schemaItemDraft.itemName,
-        values,
-      ));
-    }
     message.info('Item alterado localmente. Clique em Salvar para validar.');
     setSchemaItemDraft(null);
   }, [schemaItemDraft, stageChange]);
@@ -3868,20 +4455,10 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
       body: {
         cubeName: cubePropertiesDraft.cubeName,
         section: 'cube',
+        diagramItemId: cubePropertiesDraft.diagramItemId,
         values,
       },
     });
-    setDiagram(previous => updateDiagramCube(previous, cubePropertiesDraft.cubeName, cube => ({
-      ...cube,
-      title: values.title,
-      description: values.description,
-      source: values.sql_table || values.sql || cube.source,
-      sourceType: values.sql ? 'sql' : 'sql_table',
-      dataSource: values.data_source || cube.dataSource,
-      extends: values.extends,
-      public: values.public,
-      refresh_key: values.refresh_key,
-    })));
     message.info('Propriedades alteradas localmente. Clique em Salvar para validar.');
     setCubePropertiesDraft(null);
   }, [cubePropertiesDraft, stageChange]);
@@ -3934,8 +4511,10 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
       message.error(projectLockError || 'Não é possível salvar porque o projeto está bloqueado por outra sessão.');
       return;
     }
-    const temporarySource = schemaSnapshotSource(diagram);
-    const sourceChanged = originalSchemaSnapshotRef.current === null || originalSchemaSnapshotRef.current !== temporarySource;
+    await previewQueueRef.current;
+    const temporarySource = JSON.stringify(temporarySchemaFilesRef.current);
+    const originalSource = JSON.stringify(originalSchemaFilesRef.current);
+    const sourceChanged = originalSchemaFilesRef.current.length === 0 || originalSource !== temporarySource;
     if (!pendingChanges.length || !sourceChanged) {
       setPendingChanges([]);
       await persistDiagramState();
@@ -3956,7 +4535,8 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
           'X-Cube-Project-Lock': projectLockTokenRef.current || '',
         },
         body: JSON.stringify({
-          cubes: schemaSnapshotForSave(diagram.cubes, diagram.relationships),
+          files: temporaryFilesForRequest(temporarySchemaFilesRef.current),
+          baseFiles: temporaryFilesForRequest(originalSchemaFilesRef.current),
         }),
       });
       if (!response.ok) {
@@ -3966,6 +4546,7 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
 
       setPendingChanges([]);
       originalSchemaSnapshotRef.current = temporarySource;
+      originalSchemaFilesRef.current = temporarySchemaFilesRef.current.map(file => ({ ...file }));
       relationshipsDirtyRef.current = false;
       setRelationshipsDirty(false);
       // The temporary schema snapshot is already the render source of truth.
@@ -4106,7 +4687,10 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
             <Input.Search
               allowClear
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                requestViewportFit();
+              }}
               placeholder="Buscar cubo ou coluna"
               style={{ width: 280 }}
             />
@@ -4122,6 +4706,13 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
               onClick={() => selectedCube && openSampleData(selectedCube)}
             >
               Ver amostra de dados
+            </Button>
+            <Button
+              icon={<ReadmeOutlined />}
+              disabled={!selectedCube || !temporarySchemaFiles.length}
+              onClick={() => selectedCube && openTemporarySourceViewer(selectedCube)}
+            >
+              Consultar fonte temporária
             </Button>
             <Button icon={<ReloadOutlined />} onClick={() => loadDiagram()} loading={loading} disabled={Boolean(pendingChanges.length)}>
               Atualizar
@@ -4299,12 +4890,13 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
               onInit={(instance) => {
                 setFlowInstance(instance);
               }}
-              onMoveStart={() => {
-                setColumnMenuKey(null);
-                setCubeActionMenuKey(null);
-              }}
+              onMoveStart={closeDiagramActionMenus}
+              onMove={closeDiagramActionMenus}
               onNodeClick={(_event, node) => setSelectedCubeName(node.id)}
-              onPaneClick={() => setSelectedCubeName(null)}
+              onPaneClick={() => {
+                closeDiagramActionMenus();
+                setSelectedCubeName(null);
+              }}
               onEdgeClick={(_event, edge) => {
                 const relationship = edge.data?.relationship as DiagramRelationship | undefined;
                 if (relationship) {
@@ -4396,6 +4988,45 @@ export function CubeRelationshipDiagram({ visible, datamartId, tablesSchema, onC
         columnTypes={sampleColumnTypes}
         onClose={() => setSampleCube(null)}
       />
+
+      <Modal
+        title="Fonte temporária do diagrama"
+        visible={Boolean(temporarySourceFileName)}
+        onCancel={() => setTemporarySourceFileName(null)}
+        destroyOnClose
+        width="88%"
+        footer={[
+          <Button key="close" onClick={() => setTemporarySourceFileName(null)}>Fechar</Button>,
+        ]}
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <Select
+            showSearch
+            value={temporarySourceFile?.fileName}
+            options={temporarySchemaFiles.map(file => ({ label: file.fileName, value: file.fileName }))}
+            onChange={setTemporarySourceFileName}
+            placeholder="Selecione o arquivo temporário"
+            style={{ width: '100%' }}
+          />
+          <pre
+            style={{
+              margin: 0,
+              maxHeight: '65vh',
+              overflow: 'auto',
+              padding: 16,
+              border: '1px solid #e5e3f0',
+              borderRadius: 6,
+              background: '#faf9ff',
+              whiteSpace: 'pre',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+              fontSize: 12,
+              lineHeight: 1.55,
+            }}
+          >
+            {temporarySourceFile?.content || 'Nenhum arquivo temporário disponível.'}
+          </pre>
+        </Space>
+      </Modal>
 
       <Modal
         title={schemaItemDraft ? `${schemaItemDraft.itemName ? 'Editar' : 'Nova'} ${schemaItemDraft.section === 'measures' ? 'medida' : schemaItemDraft.section === 'segments' ? 'segmento' : schemaItemDraft.section === 'hierarchies' ? 'hierarquia' : 'pré-agregação'}` : ''}

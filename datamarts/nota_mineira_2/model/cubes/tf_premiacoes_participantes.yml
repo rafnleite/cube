@@ -20,10 +20,6 @@ cubes:
         sql: "{CUBE}.sk_municipio = {td_municipio}.sk_municipio"
         relationship: many_to_one
 
-      - name: td_regiao_fiscal
-        sql: "{CUBE}.sk_regiao_fiscal = {td_regiao_fiscal}.sk_regiao_fiscal"
-        relationship: many_to_one
-
       - name: td_premio_status
         sql: "{CUBE}.sk_premio_status = {td_premio_status}.sk_premio_status"
         relationship: many_to_one
@@ -53,11 +49,6 @@ cubes:
         type: number
         primary_key: false
 
-      - name: sk_regiao_fiscal
-        sql: '{CUBE}."SK_REGIAO_FISCAL"'
-        type: number
-        primary_key: false
-
       - name: sk_participante_premiado
         sql: '{CUBE}."SK_PARTICIPANTE_PREMIADO"'
         type: number
@@ -72,6 +63,11 @@ cubes:
         title: Data de sorteio
         sql: '{CUBE}."DT_SORTEIO"'
         type: time
+        primary_key: false
+
+      - name: sk_regiao_fiscal
+        sql: '{CUBE}."SK_REGIAO_FISCAL"'
+        type: number
         primary_key: false
 
       - name: nr_bilhete_premiado
@@ -121,6 +117,11 @@ cubes:
         title: Contagem
         type: count
 
+      - name: count_distinct_premiado
+        title: Total de CPFs premiados
+        sql: '{td_participante.id_participante}'
+        type: count_distinct
+
       - name: vlr_premio_participante
         title: Valor do prêmio do participante
         sql: '{CUBE}."VLR_PREMIO_PARTICIPANTE"'
@@ -129,6 +130,17 @@ cubes:
       - name: qtd_requisicoes
         title: Quantidade de requisições
         sql: '{CUBE}."QTD_REQUISICOES"'
+        type: sum
+
+      - name: count_requisitado_pago
+        title: Número de premiações requisitadas ou pagas
+        type: count
+        filters:
+          - sql: 'COALESCE({CUBE}."QTD_REQUISICOES", 0) > 0 OR COALESCE({CUBE}."FL_PREMIO_PAGO", 0) = 1'
+
+      - name: vlr_premio_requisitado_pago
+        title: Valor de premiações requisitadas ou pagas
+        sql: 'CASE WHEN COALESCE({CUBE}."QTD_REQUISICOES", 0) > 0 OR COALESCE({CUBE}."FL_PREMIO_PAGO", 0) = 1 THEN {CUBE}."VLR_PREMIO_PARTICIPANTE" ELSE 0 END'
         type: sum
 
     pre_aggregations:

@@ -12,10 +12,6 @@ cubes:
         sql: "{CUBE}.sk_participante = {td_participante}.sk_participante"
         relationship: many_to_one
 
-      - name: td_regiao_fiscal
-        sql: "{CUBE}.sk_regiao_fiscal = {td_regiao_fiscal}.sk_regiao_fiscal"
-        relationship: many_to_one
-
       - name: td_periodo
         sql: "{CUBE}.SK_DT_ADESAO = {td_periodo}.data"
         relationship: many_to_one
@@ -41,14 +37,14 @@ cubes:
         type: number
         primary_key: false
 
-      - name: sk_regiao_fiscal
-        sql: '{CUBE}."SK_REGIAO_FISCAL"'
-        type: number
-        primary_key: false
-
       - name: sk_dt_adesao
         sql: '{CUBE}."SK_DT_ADESAO"'
         type: time
+        primary_key: false
+
+      - name: sk_regiao_fiscal
+        sql: '{CUBE}."SK_REGIAO_FISCAL"'
+        type: number
         primary_key: false
 
       - name: dt_inicio_adesao
@@ -75,6 +71,22 @@ cubes:
         type: number
         primary_key: false
 
+      - name: fl_last_update
+        title: Flag - Última atualização
+        type: number
+        sql: "CASE \r
+
+          \ WHEN {CUBE}.SK_DT_ADESAO = (SELECT MAX(SK_DT_ADESAO) FROM
+          NOTA_MINEIRA_ARM.TF_PARTICIPANTE_ADESAO) \r
+
+          \ THEN 1 \r
+
+          \ ELSE 0 \r
+
+          END"
+
+        primary_key: false
+
     measures:
       - name: count
         title: Contagem
@@ -92,9 +104,50 @@ cubes:
         filters:
           - sql: "{CUBE}.FL_PART_ATIVO = 1"
 
+      - name: count_active_eligibles
+        title: Contagem ativos não impedidos
+        type: count
+        drill_members: []
+        filters:
+          - sql: "{CUBE}.FL_PART_ATIVO = 1 AND {CUBE}.FL_PART_IMPEDIDO = 0"
+
+      - name: last_update_date
+        title: Data de atualização
+        sql: '{CUBE}."SK_DT_ADESAO"'
+        type: max
+        drill_members: []
+
+      - name: count_current_actives
+        title: Contagem ativos atual
+        type: count
+        drill_members: []
+        filters:
+          - sql: "{CUBE}.FL_PART_ATIVO = 1 AND {fl_last_update} = 1"
+
+      - name: count_current_actives_eligible
+        title: Contagem ativos e não impedidos atual
+        type: count
+        drill_members: []
+        filters:
+          - sql: "{CUBE}.FL_PART_ATIVO = 1 AND {CUBE}.FL_PART_IMPEDIDO = 0 AND
+              {fl_last_update} = 1"
+
+      - name: count_current_blocked
+        title: Contagem ativos impedidos atual
+        type: count
+        drill_members: []
+        filters:
+          - sql: "{CUBE}.FL_PART_ATIVO = 1 AND {CUBE}.FL_PART_IMPEDIDO = 1 AND
+              {fl_last_update} = 1"
+
     pre_aggregations:
       # Pre-aggregation definitions go here.
       # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
 
     title: Fato - Participante adesão
-    hierarchies: []
+    hierarchies:
+      - name: localizacao_fiscal
+        title: Localização fiscal
+        levels:
+          - td_regiao_fiscal.nm_regiao_fiscal
+          - td_municipio.ds_municipio_ibge

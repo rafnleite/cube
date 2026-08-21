@@ -6,6 +6,7 @@ import {
   CubeDimensionOrderConverter,
   CubePrimaryKeyConverter,
   CubeRelationshipConverter,
+  CubeSchemaReorderConverter,
   CubeRelationshipReader,
   CubeSchemaConverter,
   CubeSchemaItemConverter,
@@ -33,6 +34,7 @@ import { CubejsServerCore } from './server';
 import { ExternalDbTypeFn, ServerCoreInitializedOptions, DatabaseType } from './types';
 import DriverDependencies from './DriverDependencies';
 import { MultiDatamartRuntime } from './multi-datamart/MultiDatamartRuntime';
+import { convertSchemaContent, schemaFormatFromFileName } from './SchemaFormatConverter';
 
 const repo = {
   owner: 'cube-js',
@@ -112,6 +114,21 @@ function isSafeSchemaFileName(fileName: unknown): fileName is string {
     && !path.isAbsolute(fileName)
     && !fileName.includes('..')
     && !fileName.includes('\\');
+}
+
+function normalizedSchemaFileName(fileName: string): string {
+  return fileName.replace(/\\/g, '/');
+}
+
+// Diagram UUIDs are represented as YAML comments in the editor's temporary
+// source viewer. They are identity metadata, not Cube schema, and must never
+// reach a persisted model file.
+const DIAGRAM_ID_COMMENT = /^\s*#\s*diagram(?:ItemId|SourceCubeId|TargetCubeId|SourceElementId|TargetElementId):.*$/gmi;
+
+function stripDiagramIdentityComments(content: string): string {
+  return content
+    .replace(DIAGRAM_ID_COMMENT, '')
+    .replace(/\n{3,}/g, '\n\n');
 }
 
 function isSafeCubeFileName(fileName: unknown): fileName is string {
@@ -615,7 +632,15 @@ export class DevServer {
       connectionId: string;
     }>();
 
-    const loadRelationshipDefinitions = async (req: Request) => {
+    type TemporarySchemaFile = {
+      fileName: string;
+      content: string;
+    };
+
+    const loadRelationshipDefinitions = async (
+      req: Request,
+      temporaryFiles?: TemporarySchemaFile[],
+    ) => {
       const requestId = getRequestIdFromRequest(req);
       const datamartContext = multiDatamart?.contextFromRequest(req);
       const context = {
@@ -624,9 +649,21 @@ export class DevServer {
         requestId,
         ...(datamartContext || {}),
       };
-      const repository = multiDatamart
+      const baseRepository = multiDatamart
         ? multiDatamart.repository(datamartContext!)
         : this.cubejsServer.repository;
+      // A diagram preview must be compiled from its in-memory source copy.
+      // Keep the real repository untouched until the explicit Save action.
+      const repository: any = temporaryFiles
+        ? {
+          ...baseRepository,
+          dataSchemaFiles: async () => temporaryFiles,
+        }
+        : baseRepository;
+      const schemaFiles = (temporaryFiles || await baseRepository.dataSchemaFiles()).map(file => ({
+        ...file,
+        fileName: normalizedSchemaFileName(file.fileName),
+      }));
       const reader = new CubeRelationshipReader();
       const schemaConverter = new CubeSchemaConverter(repository, [reader]);
       await schemaConverter.generate();
@@ -636,6 +673,7 @@ export class DevServer {
         datamartContext,
         context,
         repository,
+        schemaFiles,
         models: reader.getModels(),
         relationships: reader.getRelationships(),
       };
@@ -745,16 +783,18 @@ export class DevServer {
 
           const dataSource = evaluatedCube?.dataSource || model.dataSource || 'default';
           const metaCube = metaCubes.find(cube => cube.config?.name === model.name)?.config;
-          const primaryKeyNames = compilers?.cubeEvaluator?.primaryKeys?.[model.name]
-            || (model.dimensions || [])
-              .filter((dimension: any) => Boolean(dimension.primaryKey))
-              .map((dimension: any) => dimension.name);
-          const configuredDimensions = Array.isArray(model.dimensions) && model.dimensions.length
+          const configuredPrimaryKeyNames = (model.dimensions || [])
+            .filter((dimension: any) => Boolean(dimension.primaryKey))
+            .map((dimension: any) => dimension.name);
+          const primaryKeyNames = Array.isArray(model.dimensions)
+            ? configuredPrimaryKeyNames
+            : compilers?.cubeEvaluator?.primaryKeys?.[model.name] || [];
+          const configuredDimensions = Array.isArray(model.dimensions)
             ? model.dimensions
             : Array.isArray(metaCube?.dimensions)
             ? metaCube.dimensions
             : Object.entries(evaluatedCube?.dimensions || {}).map(([name, dimension]) => ({ name, ...(dimension as any) }));
-          const configuredMeasures = Array.isArray(model.measures) && model.measures.length
+          const configuredMeasures = Array.isArray(model.measures)
             ? model.measures
             : Array.isArray(metaCube?.measures)
             ? metaCube.measures
@@ -894,7 +934,13 @@ export class DevServer {
 
         return {
           cubes,
+          // Metadata loading is incremental, but relationships are already
+          // available from the in-memory schema reader. Returning the complete
+          // set keeps a cube patch self-contained and prevents the client from
+          // losing unrelated edges while replacing one cube.
           relationships,
+          relationshipsComplete: true,
+          files: definitions.schemaFiles,
         };
       } finally {
         if (multiDatamart) {
@@ -1909,12 +1955,86 @@ export class DevServer {
     app.post('/playground/schema/snapshot', catchErrors(async (req: Request, res: Response) => {
       this.cubejsServer.event('Dev Server Schema Snapshot Save');
       requireProjectLock(req);
+      const definitions = await loadRelationshipDefinitions(req);
+      const { repository } = definitions;
+
+      // The relationship diagram edits a complete in-memory copy of the
+      // source files. Persist that copy verbatim; the reduced diagram
+      // snapshot below remains only as a compatibility path for older clients.
+      if (Array.isArray(req.body?.files)) {
+        const sourceFiles = req.body.files as any[];
+        const baseFiles = req.body?.baseFiles;
+        if (sourceFiles.length === 0 || sourceFiles.length > 1000
+          || !Array.isArray(baseFiles) || baseFiles.length === 0 || baseFiles.length > 1000) {
+          return res.status(400).json({ error: 'files and baseFiles must be non-empty arrays with at most 1000 items' });
+        }
+
+        const parseFiles = (input: any[], label: string): TemporarySchemaFile[] => {
+          const names = new Set<string>();
+          return input.map(file => {
+            if (!isSafeSchemaFileName(file?.fileName) || typeof file?.content !== 'string') {
+              throw new SchemaMutationError(400, `Invalid ${label} schema file`);
+            }
+            if (names.has(file.fileName)) {
+              throw new SchemaMutationError(400, `Duplicated ${label} schema file '${file.fileName}'`);
+            }
+            names.add(file.fileName);
+            return { fileName: file.fileName, content: stripDiagramIdentityComments(file.content) };
+          });
+        };
+
+        const requestedFiles = parseFiles(sourceFiles, 'temporary');
+        const originalFiles = parseFiles(baseFiles, 'base');
+        const repositoryFiles = await definitions.repository.dataSchemaFiles();
+        const originalByName = new Map(originalFiles.map(file => [file.fileName, file]));
+        const currentByName = new Map<string, { content: string }>(repositoryFiles.map((file: any) => [normalizedSchemaFileName(file.fileName), file]));
+        originalFiles.forEach(file => {
+          if (currentByName.get(file.fileName)?.content !== file.content) {
+            throw new SchemaMutationError(409, 'Um arquivo do modelo mudou enquanto o diagrama estava aberto. Recarregue o diagrama antes de salvar.');
+          }
+        });
+
+        const changedFiles = requestedFiles.filter(file => (
+          originalByName.get(file.fileName)?.content !== file.content
+        ));
+        changedFiles.forEach(file => {
+          if (!currentByName.has(file.fileName)) {
+            throw new SchemaMutationError(404, `The schema file '${file.fileName}' was not found`);
+          }
+          repository.writeDataSchemaFile(file.fileName, file.content);
+        });
+
+        if (!changedFiles.length) return res.json({ status: 'ok', changed: false, files: [] });
+
+        try {
+          const compilerApi = await this.cubejsServer.getCompilerApi(definitions.context);
+          await compilerApi.getCompilers({ requestId: definitions.requestId });
+        } catch (error: any) {
+          const filesAfterFailure = await repository.dataSchemaFiles();
+          const stillWritten = changedFiles.every(file => (
+            filesAfterFailure.find(current => current.fileName === file.fileName)?.content === file.content
+          ));
+          if (stillWritten) {
+            originalFiles.forEach(file => repository.writeDataSchemaFile(file.fileName, file.content));
+            try {
+              const compilerApi = await this.cubejsServer.getCompilerApi(definitions.context);
+              await compilerApi.getCompilers({ requestId: `${definitions.requestId}-schema-files-rollback` });
+            } catch (_rollbackError) {
+              // Preserve the original sources even if rollback compilation fails.
+            }
+          }
+          const reason = compilerValidationReason(error);
+          throw new SchemaMutationError(400, `A estrutura de dados nÃ£o foi salva porque o modelo ficaria invÃ¡lido${reason ? `: ${reason}` : ''}`);
+        }
+
+        return res.json({ status: 'ok', changed: true, files: changedFiles });
+      }
+
       const snapshots = req.body?.cubes;
       if (!Array.isArray(snapshots) || snapshots.length === 0 || snapshots.length > 200) {
         return res.status(400).json({ error: 'cubes must be a non-empty array with at most 200 items' });
       }
 
-      const definitions = await loadRelationshipDefinitions(req);
       const cubeNames: string[] = [];
       snapshots.forEach((snapshot: any) => {
         if (!snapshot || typeof snapshot.cubeName !== 'string' || !snapshot.cubeName
@@ -1932,7 +2052,7 @@ export class DevServer {
         });
       });
 
-      const { repository, requestId } = definitions;
+      const { requestId } = definitions;
       const files = await repository.dataSchemaFiles();
       const fileNames = new Set(cubeNames.map(cubeName => (
         definitions.models.find(cube => cube.name === cubeName)?.fileName
@@ -1946,7 +2066,7 @@ export class DevServer {
         new CubeSchemaSnapshotConverter(snapshot)
       )));
       await converter.generate();
-      const originalByFile = new Map(originalFiles.map(file => [file.fileName, file]));
+      const originalByFile = new Map<string, { content: string }>(originalFiles.map((file: any) => [file.fileName, file]));
       const generatedFiles = converter.getSourceFiles()
         .filter(file => originalByFile.has(file.fileName));
       const sourceChanged = generatedFiles.length !== originalFiles.length || generatedFiles.some(file => (
@@ -1979,11 +2099,31 @@ export class DevServer {
     app.post('/playground/schema/changes', catchErrors(async (req: Request, res: Response) => {
       this.cubejsServer.event('Dev Server Schema Changes Save');
       const changes = req.body?.changes;
+      const preview = req.body?.preview === true;
       if (!Array.isArray(changes) || changes.length === 0 || changes.length > 100) {
         return res.status(400).json({ error: 'changes must be a non-empty array with at most 100 items' });
       }
 
-      const definitions = await loadRelationshipDefinitions(req);
+      let temporaryFiles: TemporarySchemaFile[] | undefined;
+      if (preview) {
+        const files = req.body?.files;
+        if (!Array.isArray(files) || files.length === 0 || files.length > 1000) {
+          return res.status(400).json({ error: 'files must be a non-empty array with at most 1000 items' });
+        }
+        const seenFiles = new Set<string>();
+        temporaryFiles = files.map((file: any) => {
+          if (!isSafeSchemaFileName(file?.fileName) || typeof file?.content !== 'string') {
+            throw new SchemaMutationError(400, 'Invalid temporary schema file');
+          }
+          if (seenFiles.has(file.fileName)) {
+            throw new SchemaMutationError(400, `Duplicated temporary schema file '${file.fileName}'`);
+          }
+          seenFiles.add(file.fileName);
+          return { fileName: file.fileName, content: stripDiagramIdentityComments(file.content) };
+        });
+      }
+
+      const definitions = await loadRelationshipDefinitions(req, temporaryFiles);
       const { repository, requestId } = definitions;
       const converters: any[] = [];
       const cubeNames = new Set<string>();
@@ -2052,6 +2192,25 @@ export class DevServer {
             converters.push(new CubePrimaryKeyConverter({ cubeName, columnName, columnType: column.type }));
             converters.push(new CubeDimensionOrderConverter());
           }
+          continue;
+        }
+
+        if (endpoint === 'playground/schema/reorder') {
+          const { cubeName, section, itemName, direction, itemIndex } = body;
+          if (typeof cubeName !== 'string' || typeof section !== 'string'
+            || !['dimensions', 'measures', 'hierarchies'].includes(section)
+            || typeof itemName !== 'string' || !['up', 'down'].includes(direction)
+            || (itemIndex !== undefined && (!Number.isInteger(itemIndex) || itemIndex < 0))) {
+            throw new SchemaMutationError(400, 'Invalid schema reorder change');
+          }
+          addCube(cubeName);
+          converters.push(new CubeSchemaReorderConverter({
+            cubeName,
+            section: section as 'dimensions' | 'measures' | 'hierarchies',
+            itemName,
+            direction,
+            itemIndex,
+          }));
           continue;
         }
 
@@ -2202,7 +2361,15 @@ export class DevServer {
         throw new SchemaMutationError(400, `Unsupported schema change endpoint: ${endpoint}`);
       }
 
-      if (!converters.length) return res.json({ status: 'ok', changed: false });
+      if (!converters.length) {
+        if (!preview) return res.json({ status: 'ok', changed: false });
+        const diagram = await loadRelationshipDiagram(
+          req,
+          cubeNames.size ? cubeNames : undefined,
+          definitions,
+        );
+        return res.json({ status: 'ok', changed: false, files: definitions.schemaFiles, diagram });
+      }
       const files = await repository.dataSchemaFiles();
       const fileNames = new Set(Array.from(cubeNames).map(cubeName => (
         definitions.models.find(cube => cube.name === cubeName)?.fileName
@@ -2213,6 +2380,19 @@ export class DevServer {
       }
 
       const converter = new CubeSchemaConverter(repository, converters);
+      if (preview) {
+        await converter.generate();
+        const updatedByFile = new Map(
+          converter.getSourceFiles().map(file => [file.fileName, file.source])
+        );
+        const updatedFiles = definitions.schemaFiles.map(file => ({
+          fileName: file.fileName,
+          content: updatedByFile.get(file.fileName) || file.content,
+        }));
+        const previewDefinitions = await loadRelationshipDefinitions(req, updatedFiles);
+        const diagram = await loadRelationshipDiagram(req, cubeNames, previewDefinitions);
+        return res.json({ status: 'ok', changed: true, files: updatedFiles, diagram });
+      }
       const updatedFiles = await saveValidatedSchemaChanges({
         definitions,
         cubeNames: Array.from(cubeNames),
@@ -2525,6 +2705,84 @@ export class DevServer {
           ...f,
           absPath: path.resolve(path.join(repository.localPath(), f.fileName))
         }))
+      });
+    }));
+
+    app.post('/playground/files/convert', catchErrors(async (req, res) => {
+      this.cubejsServer.event('Dev Server File Convert');
+
+      const { sourceFileName, targetFileName } = req.body || {};
+      if (!isSafeCubeFileName(sourceFileName) || !isSafeCubeFileBaseName(targetFileName)) {
+        return res.status(400).json({ error: 'Invalid file name' });
+      }
+
+      const sourceFormat = schemaFormatFromFileName(sourceFileName);
+      const targetFormat = schemaFormatFromFileName(targetFileName);
+      if (!sourceFormat || !targetFormat || sourceFormat === targetFormat) {
+        return res.status(400).json({ error: 'The source and target formats must be different' });
+      }
+
+      const cubeTargetFileName = path.join('cubes', targetFileName);
+      if (sourceFileName === cubeTargetFileName) {
+        return res.status(400).json({ error: 'The target file must be different' });
+      }
+
+      const repository = multiDatamart
+        ? multiDatamart.repository(multiDatamart.contextFromRequest(req))
+        : this.cubejsServer.repository;
+      const files = await repository.dataSchemaFiles();
+      const sourceFile = files.find(file => file.fileName === sourceFileName);
+      if (!sourceFile) {
+        return res.status(404).json({ error: `File '${sourceFileName}' was not found` });
+      }
+      if (files.some(file => file.fileName === cubeTargetFileName)) {
+        return res.status(409).json({ error: `File '${cubeTargetFileName}' already exists` });
+      }
+
+      let convertedContent: string;
+      try {
+        convertedContent = convertSchemaContent(sourceFile.content, sourceFormat, targetFormat);
+      } catch (error: any) {
+        return res.status(400).json({
+          error: 'O arquivo não pôde ser convertido automaticamente',
+          details: error?.message || String(error),
+        });
+      }
+
+      const repositoryPath = path.resolve(repository.localPath());
+      const sourcePath = path.resolve(repositoryPath, sourceFileName);
+      const targetPath = path.resolve(repositoryPath, cubeTargetFileName);
+      if (![sourcePath, targetPath].every(filePath => filePath.startsWith(`${repositoryPath}${path.sep}`))) {
+        return res.status(400).json({ error: 'Invalid file name' });
+      }
+
+      const backupPath = path.join(repositoryPath, `.cube-conversion-backup-${crypto.randomUUID()}`);
+      await fs.move(sourcePath, backupPath);
+      try {
+        await fs.writeFile(targetPath, convertedContent, 'utf-8');
+        const requestId = getRequestIdFromRequest(req);
+        const datamartContext = multiDatamart?.contextFromRequest(req);
+        const compilerApi = await this.cubejsServer.getCompilerApi({
+          authInfo: null,
+          securityContext: null,
+          requestId,
+          ...(datamartContext || {}),
+        });
+        await compilerApi.getCompilers({ requestId });
+        await fs.remove(backupPath);
+      } catch (error: any) {
+        await fs.remove(targetPath);
+        await fs.move(backupPath, sourcePath);
+        return res.status(400).json({
+          error: 'O arquivo não foi convertido porque o schema resultante é inválido',
+          details: compilerValidationReason(error),
+        });
+      }
+
+      return res.json({
+        status: 'ok',
+        sourceFileName,
+        targetFileName: cubeTargetFileName,
       });
     }));
 

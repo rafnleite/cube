@@ -28,3 +28,17 @@ cubes:
 
     title: Status do prêmio
     hierarchies: []
+
+views:
+  - name: td_premio_status_multifato
+    cubes:
+      - join_path: tf_premiacoes_entidades
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_premiacoes_participantes
+        prefix: true
+        includes: '*'
+
+      - join_path: td_premio_status
+        includes: '*'

@@ -1,4 +1,7 @@
-import { ParamAllocator, PostgresQuery } from '@cubejs-backend/schema-compiler';
+import { BaseFilter, ParamAllocator, PostgresQuery } from '@cubejs-backend/schema-compiler';
+declare class NetezzaFilter extends BaseFilter {
+    likeIgnoreCase(column: string, not: boolean, param: unknown, type: string): string;
+}
 declare class NetezzaParamAllocator extends ParamAllocator {
     paramPlaceHolder(_paramIndex: number): string;
 }
@@ -7,6 +10,7 @@ declare class NetezzaParamAllocator extends ParamAllocator {
  * positional question-mark parameters instead of PostgreSQL protocol binds.
  */
 export declare class NetezzaQuery extends PostgresQuery {
+    newFilter(filter: any): NetezzaFilter;
     newParamAllocator(expressionParams: unknown[]): NetezzaParamAllocator;
     /**
      * Netezza TIMESTAMP has no time-zone component. Cube therefore treats source

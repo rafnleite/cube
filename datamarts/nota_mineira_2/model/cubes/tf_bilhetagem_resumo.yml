@@ -12,10 +12,6 @@ cubes:
         sql: "{CUBE}.sk_municipio = {td_municipio}.sk_municipio"
         relationship: many_to_one
 
-      - name: td_regiao_fiscal
-        sql: "{CUBE}.sk_regiao_fiscal = {td_regiao_fiscal}.sk_regiao_fiscal"
-        relationship: many_to_one
-
       - name: td_faixa_histograma_bilhete
         sql: "{CUBE}.SK_FAIXA_QTD_BILHETE = {td_faixa_histograma_bilhete}.SK_FAIXA"
         relationship: many_to_one
@@ -49,11 +45,6 @@ cubes:
         type: number
         primary_key: false
 
-      - name: sk_regiao_fiscal
-        sql: '{CUBE}."SK_REGIAO_FISCAL"'
-        type: number
-        primary_key: false
-
       - name: sk_faixa_qtd_participante
         sql: '{CUBE}."SK_FAIXA_QTD_PARTICIPANTE"'
         type: number
@@ -61,6 +52,11 @@ cubes:
 
       - name: sk_faixa_qtd_bilhete
         sql: '{CUBE}."SK_FAIXA_QTD_BILHETE"'
+        type: number
+        primary_key: false
+
+      - name: sk_regiao_fiscal
+        sql: '{CUBE}."SK_REGIAO_FISCAL"'
         type: number
         primary_key: false
 

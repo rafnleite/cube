@@ -3,13 +3,22 @@ cubes:
     sql_table: "\"NOTA_MINEIRA_ARM\".\"TD_MUNICIPIO\""
     data_source: default
 
-    joins: []
+    joins:
+      - name: td_regiao_fiscal
+        sql: "{CUBE}.SK_REGIAO_FISCAL = {td_regiao_fiscal}.CD_REGIAO_FISCAL"
+        relationship: many_to_one
 
     dimensions:
       - name: sk_municipio
         sql: '{CUBE}."SK_MUNICIPIO"'
         type: number
         primary_key: true
+
+      - name: sk_regiao_fiscal
+        title: SK Região Fiscal
+        sql: '{CUBE}."SK_REGIAO_FISCAL"'
+        type: number
+        primary_key: false
 
       - name: id_municipio_siare
         title: ID SIARE
@@ -137,12 +146,6 @@ cubes:
         type: number
         primary_key: false
 
-      - name: sk_regiao_fiscal
-        title: SK Região Fiscal
-        sql: '{CUBE}."SK_REGIAO_FISCAL"'
-        type: number
-        primary_key: false
-
     measures:
       - name: populacao
         title: População
@@ -159,3 +162,111 @@ cubes:
 
     title: Município
     hierarchies: []
+
+  # Role-playing dimensions for TF_PARTIC_ENT_INDICACOES. They use the same
+  # physical table as td_municipio but represent different foreign keys.
+  - name: td_municipio_participante
+    sql_table: '"NOTA_MINEIRA_ARM"."TD_MUNICIPIO"'
+    data_source: default
+
+    joins: []
+    dimensions:
+      - name: sk_municipio
+        sql: '{CUBE}."SK_MUNICIPIO"'
+        type: number
+        primary_key: true
+
+      - name: ds_municipio_ibge
+        title: Município do participante
+        sql: '{CUBE}."DS_MUNICIPIO_IBGE"'
+        type: string
+        primary_key: false
+
+      - name: ds_df_circunscricao
+        title: Delegacia fiscal do participante
+        sql: '{CUBE}."DS_DF_CIRCUNSCRICAO"'
+        type: string
+        primary_key: false
+
+    measures:
+      - name: count
+        type: count
+
+    title: Td Municipio Participante
+    hierarchies: []
+
+  - name: td_municipio_entidade
+    sql_table: '"NOTA_MINEIRA_ARM"."TD_MUNICIPIO"'
+    data_source: default
+
+    joins: []
+    dimensions:
+      - name: sk_municipio
+        sql: '{CUBE}."SK_MUNICIPIO"'
+        type: number
+        primary_key: true
+
+      - name: ds_municipio_ibge
+        title: Município da entidade
+        sql: '{CUBE}."DS_MUNICIPIO_IBGE"'
+        type: string
+        primary_key: false
+
+      - name: ds_df_circunscricao
+        title: Delegacia fiscal da entidade
+        sql: '{CUBE}."DS_DF_CIRCUNSCRICAO"'
+        type: string
+        primary_key: false
+
+    measures:
+      - name: count
+        type: count
+
+    title: Td Municipio Entidade
+    hierarchies: []
+
+views:
+  - name: td_municipio_indicadores
+    cubes:
+      - join_path: tf_participante_adesao
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_qt_nfce_dia
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_bilhetagem_resumo
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_notas_emitente_dia
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_notas_participante_dia
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_premiacoes_entidades
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_premiacoes_participantes
+        prefix: true
+        includes: '*'
+
+      - join_path: tf_quantidade_bilhetes_participante
+        prefix: true
+        includes: '*'
+
+      - join_path: td_municipio
+        includes:
+          - sk_municipio
+          - ds_municipio_ibge
+          - ds_df_circunscricao
+          - populacao
+
+      - join_path: td_municipio.td_regiao_fiscal
+        includes:
+          - nm_regiao_fiscal

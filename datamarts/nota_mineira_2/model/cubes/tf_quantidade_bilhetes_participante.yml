@@ -20,10 +20,6 @@ cubes:
         sql: "{CUBE}.sk_municipio = {td_municipio}.sk_municipio"
         relationship: many_to_one
 
-      - name: td_regiao_fiscal
-        sql: "{CUBE}.sk_regiao_fiscal = {td_regiao_fiscal}.sk_regiao_fiscal"
-        relationship: many_to_one
-
     dimensions:
       - name: id
         title: ID
@@ -50,14 +46,20 @@ cubes:
         type: number
         primary_key: false
 
+      - name: dt_bilhetagem
+        sql: '{CUBE}."DT_BILHETAGEM"'
+        type: time
+        primary_key: false
+
       - name: sk_regiao_fiscal
         sql: '{CUBE}."SK_REGIAO_FISCAL"'
         type: number
         primary_key: false
 
-      - name: dt_bilhetagem
-        sql: '{CUBE}."DT_BILHETAGEM"'
-        type: time
+      - name: qtd_bilhetes_participante
+        title: Quantidade de bilhetes do participante
+        sql: '{CUBE}."QTD_BILHETES"'
+        type: number
         primary_key: false
 
     measures:
