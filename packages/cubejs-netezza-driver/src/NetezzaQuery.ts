@@ -55,6 +55,9 @@ export class NetezzaQuery extends PostgresQuery {
     templates.types.binary = 'VARBINARY(64000)';
     templates.types.timestamp = 'TIMESTAMP';
     templates.expressions.timestamp_literal = 'CAST(\'{{ value | replace("T", " ") | replace("Z", "") }}\' AS TIMESTAMP)';
+    templates.expressions.ilike = 'LOWER({{ expr }}) {% if negated %}NOT {% endif %}LIKE LOWER({{ pattern }})';
+    templates.tesseract.ilike = 'LOWER({{ expr }}) {% if negated %}NOT {% endif %}LIKE LOWER({{ pattern }})';
+    templates.filters.like_pattern = '{% if start_wild %}\'%\' || {% endif %}LOWER({{ value }}){% if end_wild %} || \'%\'{% endif %}';
     // Netezza does not implement PostgreSQL's null-safe comparison operator.
     // Multi-fact views use this operator when merging the per-fact CTEs.
     delete templates.operators.is_not_distinct_from;

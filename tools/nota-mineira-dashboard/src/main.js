@@ -48,6 +48,7 @@ const state = {
   awardWinnersTotalsCache: new Map(),
   ticketTopPage: 0,
   ticketTopPageSize: 20,
+  ticketTopSearch: '',
   ticketTopRequest: 0,
   ticketTopPageCache: new Map(),
   ticketTopTotalsCache: new Map(),
@@ -74,6 +75,7 @@ const state = {
   bilhetagemSelectedType: '',
   ticketHistogramMetric: 'participantes',
   ticketHistogramRows: { participantes: [], bilhetes: [] },
+  ticketOverviewCache: null,
   activeGroup: 'municipio',
   activeHierarchy: null,
   activeChurn: { showStart: true, showEnd: true },
@@ -375,7 +377,7 @@ async function loadBlock(id, taskFactory, renderer, loadingOptions = {}) {
     return;
   }
   if (id === 'ticket-top') {
-    loadTicketTopPaged();
+    loadTicketTopPaged(loadingOptions.selector ? loadingOptions : { selector: '.table-wrap', mode: 'table' });
     return;
   }
   if (id === 'ticket-histogram') {
@@ -1299,6 +1301,42 @@ async function loadTicketHistogram() {
   }
   const version = state.version;
   beginBlockLoading('ticket-histogram');
+  const participantQuery = {
+    dimensions: ['tf_bilhetagem_resumo.sk_faixa_qtd_participante', 'td_faixa_histograma_participante.sk_faixa', 'td_faixa_histograma_participante.ds_faixa_completo', 'td_faixa_histograma_participante.ds_faixa', 'td_faixa_histograma_participante.vlr_min'],
+    measures: ['tf_bilhetagem_resumo.count'],
+    filters: ticketFilters(),
+    order: { 'td_faixa_histograma_participante.vlr_min': 'asc' },
+    limit: 100,
+  };
+  const ticketQuery = {
+    dimensions: ['tf_bilhetagem_resumo.sk_faixa_qtd_bilhete', 'td_faixa_histograma_bilhete.sk_faixa', 'td_faixa_histograma_bilhete.ds_faixa_completo', 'td_faixa_histograma_bilhete.ds_faixa', 'td_faixa_histograma_bilhete.vlr_min'],
+    measures: ['tf_bilhetagem_resumo.count'],
+    filters: ticketFilters(),
+    order: { 'td_faixa_histograma_bilhete.vlr_min': 'asc' },
+    limit: 100,
+  };
+  try {
+    const results = await Promise.all([
+      cubeLoad('histograma por faixa de participantes', participantQuery),
+      cubeLoad('histograma por faixa de bilhetes', ticketQuery),
+    ]);
+    if (version !== state.version) return;
+    state.ticketHistogramRows = { participantes: results[0], bilhetes: results[1] };
+    setBlock('ticket-histogram', ticketHistogramChart());
+    bindPanelSql('ticket-histogram', results);
+  } catch (error) {
+    if (version === state.version) setBlock('ticket-histogram', '<div class="empty error">Não foi possível carregar o histograma.<br><small>' + esc(error.message || error) + '</small></div>');
+  } finally {
+    if (version === state.version) endBlockLoading('ticket-histogram');
+  }
+}
+async function loadTicketHistogramLegacy() {
+  if (isStatewideBilhetagem()) {
+    document.getElementById('ticket-histogram')?.remove();
+    return;
+  }
+  const version = state.version;
+  beginBlockLoading('ticket-histogram');
   try {
     const results = await Promise.all([
       query('histograma por faixa de participantes', { dimensions: ['td_faixa_histograma_participante.ds_faixa_completo', 'td_faixa_histograma_participante.ds_faixa', 'td_faixa_histograma_participante.vlr_min'], measures: ['tf_bilhetagem_resumo.count'], filters: ticketFilters(), order: { 'td_faixa_histograma_participante.vlr_min': 'asc' }, limit: 100 }),
@@ -1319,7 +1357,7 @@ function clearTicketTopCache() {
   state.ticketTopTotalsCache.clear();
 }
 function ticketTopContextKey() {
-  return JSON.stringify({ bilhetagem: state.bilhetagem });
+  return JSON.stringify({ bilhetagem: state.bilhetagem, search: state.ticketTopSearch.trim() });
 }
 function ticketTopTableHtml(rows, page, hasNext, totalParticipants) {
   const exportRows = rows.map(row => ({
@@ -1335,9 +1373,9 @@ function ticketTopTableHtml(rows, page, hasNext, totalParticipants) {
   const header = ['Participante', 'Nome', 'Município', 'Região fiscal', 'Quantidade de bilhetes'].map((label, index) => '<th' + (index === 4 ? ' class="measure"' : '') + '>' + esc(label) + '</th>').join('');
   const pager = '<div class="pager"><span>Total: ' + n(totalParticipants) + ' participantes</span><div><button data-ticket-top-page="-1" ' + (page === 0 ? 'disabled' : '') + '>Anterior</button><span>Página ' + (page + 1) + '</span><button data-ticket-top-page="1" ' + (!hasNext ? 'disabled' : '') + '>Próxima</button></div></div>';
   const foot = '<tfoot><tr><th colspan="4">Total (' + n(totalParticipants) + ' participantes)</th><td class="measure">' + esc(n(totalParticipants)) + '</td></tr></tfoot>';
-  return '<div class="table-actions backend-table-toolbar"><span>Ordenado pela quantidade de bilhetes em ordem decrescente.</span><span class="report-actions"><button class="text-button" data-copy-panel-sql="1">Copiar SQL</button><button class="text-button" data-copy-panel-api="1">Copiar chamada API</button><button class="text-button" data-export="ticket-top-table">Exportar página</button></span></div><div class="table-wrap"><table><thead><tr>' + header + '</tr></thead><tbody>' + body + '</tbody>' + foot + '</table></div>' + pager;
+  return '<div class="table-actions backend-table-toolbar"><label class="backend-search">Buscar CPF ou Nome<input id="ticket-top-search" value="' + esc(state.ticketTopSearch) + '" placeholder="Digite CPF ou nome e clique em Buscar"></label><button class="primary" data-ticket-top-search="1">Buscar</button><span class="report-actions"><button class="text-button" data-copy-panel-sql="1">Copiar SQL</button><button class="text-button" data-copy-panel-api="1">Copiar chamada API</button><button class="text-button" data-export="ticket-top-table">Exportar página</button></span></div><div class="table-wrap"><table><thead><tr>' + header + '</tr></thead><tbody>' + body + '</tbody>' + foot + '</table></div>' + pager;
 }
-function loadTicketTopPaged() {
+function loadTicketTopPaged(loadingOptions = {}) {
   const version = state.version;
   const requestId = ++state.ticketTopRequest;
   const page = state.ticketTopPage;
@@ -1347,13 +1385,13 @@ function loadTicketTopPaged() {
   const pageQuery = {
     dimensions: ['td_participante.id_participante', 'td_participante.nm_participante', 'td_municipio.ds_municipio_ibge', 'td_regiao_fiscal.nm_regiao_fiscal'],
     measures: ['tf_quantidade_bilhetes_participante.qtd_bilhetes'],
-    filters: filter('tf_quantidade_bilhetes_participante.sk_bilhetagem', state.bilhetagem),
+    filters: [...filter('tf_quantidade_bilhetes_participante.sk_bilhetagem', state.bilhetagem), ...(state.ticketTopSearch.trim() ? [{ or: [{ member: 'td_participante.id_participante', operator: 'contains', values: [state.ticketTopSearch.trim()] }, { member: 'td_participante.nm_participante', operator: 'contains', values: [state.ticketTopSearch.trim()] }] }] : [])],
     order: { 'tf_quantidade_bilhetes_participante.qtd_bilhetes': 'desc', 'td_participante.id_participante': 'asc' },
     limit: pageSize + 1,
     offset,
   };
   if (!document.getElementById('ticket-top')) return;
-  beginBlockLoading('ticket-top');
+  beginBlockLoading('ticket-top', loadingOptions.selector, loadingOptions.mode);
   const totalsQuery = {
     measures: ['tf_quantidade_bilhetes_participante.count'],
     filters: pageQuery.filters,
@@ -1368,7 +1406,7 @@ function loadTicketTopPaged() {
       const totalParticipants = num(val(totalsRow[0], 'tf_quantidade_bilhetes_participante.count'));
       state.resultQueries.set(rows, pageQuery);
       const pagesToPrefetch = [page - 2, page - 1, page + 1, page + 2].filter(candidate => candidate >= 0 && (candidate <= page || hasNext));
-      pagesToPrefetch.forEach(candidate => loadAwardWinnersPage(state.ticketTopPageCache, contextKey + '|page=' + candidate, 'participantes com mais bilhetes · página ' + (candidate + 1), { ...pageQuery, offset: candidate * pageSize }).catch(() => {}));
+      pagesToPrefetch.reduce((chain, candidate) => chain.then(() => loadAwardWinnersPage(state.ticketTopPageCache, contextKey + '|page=' + candidate, 'participantes com mais bilhetes · página ' + (candidate + 1), { ...pageQuery, offset: candidate * pageSize }).catch(() => {})), Promise.resolve());
       setBlock('ticket-top', ticketTopTableHtml(rows.slice(0, pageSize), page, hasNext, totalParticipants));
       bindPanelSql('ticket-top', [rows, totalsRow]);
     })
@@ -1376,10 +1414,25 @@ function loadTicketTopPaged() {
       if (requestId === state.ticketTopRequest && version === state.version) setBlock('ticket-top', '<div class="empty error">Não foi possível carregar esta seção.<br><small>' + esc(error.message || error) + '</small></div>');
     })
     .finally(() => {
-      if (version === state.version) endBlockLoading('ticket-top');
+      if (version === state.version) endBlockLoading('ticket-top', loadingOptions.selector, loadingOptions.mode);
     });
 }
 function loadTicketParticipantDistribution() {
+  loadBlock('ticket-participant-distribution', () => [
+    query('distribuição de bilhetes por participante', { dimensions: ['tf_quantidade_bilhetes_participante.qtd_bilhetes_participante'], measures: ['tf_quantidade_bilhetes_participante.count'], filters: filter('tf_quantidade_bilhetes_participante.sk_bilhetagem', state.bilhetagem), order: { 'tf_quantidade_bilhetes_participante.qtd_bilhetes_participante': 'asc' }, limit: 10000 }),
+    query('maior quantidade de bilhetes por participante', { dimensions: ['tf_quantidade_bilhetes_participante.qtd_bilhetes_participante'], measures: ['tf_quantidade_bilhetes_participante.count'], filters: filter('tf_quantidade_bilhetes_participante.sk_bilhetagem', state.bilhetagem), order: { 'tf_quantidade_bilhetes_participante.qtd_bilhetes_participante': 'desc' }, limit: 1 }),
+  ], (rows, maxRows) => {
+    const maxTickets = num(val(maxRows[0], 'tf_quantidade_bilhetes_participante.qtd_bilhetes_participante'));
+    const counts = new Map(rows.map(row => [num(val(row, 'tf_quantidade_bilhetes_participante.qtd_bilhetes_participante')), num(val(row, 'tf_quantidade_bilhetes_participante.count'))]));
+    const data = Array.from({ length: maxTickets }, (_, index) => {
+      const quantity = index + 1;
+      return { 'Quantidade de bilhetes': quantity, Participantes: counts.get(quantity) || 0 };
+    });
+    const labels = data.map(row => n(row['Quantidade de bilhetes']) + (row['Quantidade de bilhetes'] === 1 ? ' bilhete' : ' bilhetes'));
+    return chart('ticket-participant-distribution-chart', data, { grid: { left: 65, right: 25, bottom: 65 }, xAxis: { type: 'category', data: labels, name: 'Quantidade de bilhetes' }, yAxis: { type: 'value', name: 'Participantes' }, dataZoom: [{ type: 'slider', bottom: 8 }], series: [{ name: 'Participantes', data: data.map(row => row.Participantes), type: 'bar', itemStyle: { color: '#741b79' } }] }, 'Distribuição dos participantes pela quantidade de bilhetes gerados.');
+  });
+}
+function loadTicketParticipantDistributionLegacy() {
   loadBlock('ticket-participant-distribution', () => [query('distribuição de bilhetes por participante', { dimensions: ['tf_quantidade_bilhetes_participante.qtd_bilhetes_participante'], measures: ['tf_quantidade_bilhetes_participante.count'], filters: filter('tf_quantidade_bilhetes_participante.sk_bilhetagem', state.bilhetagem), order: { 'tf_quantidade_bilhetes_participante.qtd_bilhetes_participante': 'asc' }, limit: 500 })], rows => {
     const x = rows.map(row => val(row, 'tf_quantidade_bilhetes_participante.qtd_bilhetes_participante'));
     return chart('ticket-participant-distribution-chart', rows, { grid: { left: 65, right: 25, bottom: 65 }, xAxis: { type: 'category', data: x, name: 'Quantidade de bilhetes' }, yAxis: { type: 'value', name: 'Participantes' }, dataZoom: [{ type: 'slider', bottom: 8 }], series: [{ name: 'Participantes', type: 'bar', data: rows.map(row => num(val(row, 'tf_quantidade_bilhetes_participante.count'))), itemStyle: { color: '#741b79' } }] }, 'Distribuição dos participantes pela quantidade de bilhetes gerados.');
@@ -1423,6 +1476,14 @@ function ticketOverviewHtml(recentRows, upcomingRows) {
   return '<div class="ticket-overview-grid"><section class="ticket-overview-column">' + recentTable + '</section><section class="ticket-overview-column">' + upcomingTable + '</section></div>';
 }
 function loadTicketOverview() {
+  if (state.ticketOverviewCache) {
+    setBlock('ticket-overview', ticketOverviewHtml(state.ticketOverviewCache.recent, state.ticketOverviewCache.upcoming));
+    bindPanelSql('ticket-overview', [state.ticketOverviewCache.recent, state.ticketOverviewCache.upcoming]);
+    return;
+  }
+  loadTicketOverviewFromApi();
+}
+function loadTicketOverviewFromApi() {
   loadBlock('ticket-overview', () => [
     query('ultimas bilhetagens realizadas', {
       dimensions: ['tf_quantidade_bilhetes_participante.sk_bilhetagem', 'tf_quantidade_bilhetes_participante.dt_bilhetagem', 'td_bilhetagem.dt_gerar_bilhete', 'td_bilhetagem.dt_inicio_ref_compra', 'td_bilhetagem.dt_fim_ref_compra', 'td_sorteio_tipo.ds_sorteio_tipo'],
@@ -1437,7 +1498,10 @@ function loadTicketOverview() {
       order: { 'td_bilhetagem.dt_gerar_bilhete': 'asc' },
       limit: 1000,
     }),
-  ], ticketOverviewHtml);
+  ], (recent, upcoming) => {
+    state.ticketOverviewCache = { recent, upcoming };
+    return ticketOverviewHtml(recent, upcoming);
+  });
 }
 async function loadBilhetagemOptions() {
   const rows = await query('lista de bilhetagens', { dimensions: ['td_bilhetagem.sk_bilhetagem', 'td_bilhetagem.dt_gerar_bilhete', 'td_sorteio_tipo.ds_sorteio_tipo'], measures: ['td_bilhetagem.count'], order: { 'td_bilhetagem.dt_gerar_bilhete': 'desc' }, limit: 1000 });
@@ -1456,6 +1520,7 @@ async function loadBilhetagemOptions() {
 function ticketFilters() { return filter('tf_bilhetagem_resumo.sk_bilhetagem', state.bilhetagem); }
 function loadTicketBlocks() {
   if (!state.bilhetagem) return;
+  loadTicketHistogram();
   loadBlock('ticket-summary', () => [query('resumo da bilhetagem', { dimensions: ['td_bilhetagem.dt_gerar_bilhete', 'td_bilhetagem.dt_inicio_ref_compra', 'td_bilhetagem.dt_fim_ref_compra', 'td_sorteio_tipo.ds_sorteio_tipo'], measures: ['tf_bilhetagem_resumo.qtd_participante', 'tf_bilhetagem_resumo.qtd_bilhete', 'tf_bilhetagem_resumo.populacao'], filters: ticketFilters() })], rows => {
     const row = rows[0] || {}; return recordSheet([
       { label: 'Data de geração', value: formatReportDate(val(row, 'td_bilhetagem.dt_gerar_bilhete')) },
@@ -1834,8 +1899,9 @@ app.addEventListener('click', event => {
   }
   if (target.dataset.awardMatrixPage) { state.awardMatrixPage += Number(target.dataset.awardMatrixPage); renderAwardMatrix(); flashBlockLoading('award-matrix'); return; }
   if (target.dataset.awardWinnersPage) { state.awardWinnersPage += Number(target.dataset.awardWinnersPage); loadAwardWinnersPaged(); return; }
-  if (target.dataset.ticketTopPage) { state.ticketTopPage += Number(target.dataset.ticketTopPage); loadTicketTopPaged(); return; }
-  if (target.dataset.ticketShift) { const select = document.getElementById('ticket-select'); if (select) { select.selectedIndex = Math.max(0, Math.min(select.options.length - 1, select.selectedIndex + Number(target.dataset.ticketShift))); state.bilhetagem = select.value; renderCurrentPage(); } return; }
+  if (target.dataset.ticketTopSearch) { state.ticketTopSearch = document.getElementById('ticket-top-search')?.value.trim() || ''; state.ticketTopPage = 0; clearTicketTopCache(); loadTicketTopPaged({ selector: '.table-wrap', mode: 'table' }); return; }
+  if (target.dataset.ticketTopPage) { state.ticketTopPage += Number(target.dataset.ticketTopPage); loadTicketTopPaged({ selector: '.table-wrap', mode: 'table' }); return; }
+  if (target.dataset.ticketShift) { const select = document.getElementById('ticket-select'); if (select) { select.selectedIndex = Math.max(0, Math.min(select.options.length - 1, select.selectedIndex + Number(target.dataset.ticketShift))); state.bilhetagem = select.value; state.ticketTopPage = 0; clearTicketTopCache(); renderCurrentPage(); } return; }
   if (target.dataset.export) { exportExcel(target.dataset.export, (window.__nfmExports || {})[target.dataset.export] || []); return; }
   if (target.dataset.exportTable) { const source = state.tables.get(target.dataset.exportTable); if (source) exportExcel(target.dataset.exportTable, source.rows, source.columns); return; }
   if (target.dataset.exportCalls) { const blob = new Blob([JSON.stringify(state.calls, null, 2)], { type: 'application/json' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'nota-mineira-chamadas-api.json'; link.click(); URL.revokeObjectURL(link.href); return; }
@@ -1847,6 +1913,17 @@ app.addEventListener('click', event => {
   if (target.dataset.tablePage) { const source = state.tables.get(target.dataset.tablePage); source.page += Number(target.dataset.direction); renderTable(target.dataset.tablePage); flashTableLoading(target.dataset.tablePage); return; }
   if (target.dataset.drillMenu) { openDrillMenu(target.dataset.drillMenu, target.dataset.value, 'table', event, target.dataset.drillMode); return; }
   if (target.dataset.drill) { const mapping = { participant: ['participante', 'participant'], entity: ['entidade', 'entity'], municipality: ['municipio', 'municipality'], region: ['regiao', 'regionDetail'] }; const item = mapping[target.dataset.drill]; if (item) { state.page = item[0]; state.params[item[1]] = target.dataset.value; renderShell(); renderCurrentPage(); } }
+});
+
+app.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' || event.target.id !== 'award-winners-search') return;
+  event.preventDefault();
+  document.querySelector('[data-award-winners-search]')?.click();
+});
+app.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' || event.target.id !== 'ticket-top-search') return;
+  event.preventDefault();
+  document.querySelector('[data-ticket-top-search]')?.click();
 });
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') closeDrillMenu();
@@ -1903,6 +1980,7 @@ async function initialize(showMessage) {
   if (showMessage) {
     state.cache.clear();
     state.activeMunicipalCache.clear();
+    state.ticketOverviewCache = null;
   }
   renderShell();
   try {

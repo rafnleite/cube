@@ -64,6 +64,14 @@ describe('NetezzaDriver', () => {
       .toBe("LOWER(\"NM_PARTICIPANTE\") LIKE '%' || LOWER(?) || '%'");
   });
 
+  it('uses the compatible LIKE templates for native planning', () => {
+    const templates = Object.create(NetezzaQuery.prototype).sqlTemplates();
+    expect(templates.expressions.ilike).toContain('LIKE');
+    expect(templates.expressions.ilike).not.toContain('ILIKE');
+    expect(templates.tesseract.ilike).toContain('LIKE');
+    expect(templates.tesseract.ilike).not.toContain('ILIKE');
+  });
+
   it('serializes ODBC bigint results without losing precision', () => {
     expect(normalizeNetezzaResultRow({
       count: 9007199254740993n,

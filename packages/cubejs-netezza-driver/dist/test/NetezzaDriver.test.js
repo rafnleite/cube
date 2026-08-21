@@ -52,6 +52,13 @@ describe('NetezzaDriver', () => {
         expect(filter.likeIgnoreCase('"NM_PARTICIPANTE"', false, 'Rafael', 'contains'))
             .toBe("LOWER(\"NM_PARTICIPANTE\") LIKE '%' || LOWER(?) || '%'");
     });
+    it('uses the compatible LIKE templates for native planning', () => {
+        const templates = Object.create(NetezzaQuery_1.NetezzaQuery.prototype).sqlTemplates();
+        expect(templates.expressions.ilike).toContain('LIKE');
+        expect(templates.expressions.ilike).not.toContain('ILIKE');
+        expect(templates.tesseract.ilike).toContain('LIKE');
+        expect(templates.tesseract.ilike).not.toContain('ILIKE');
+    });
     it('serializes ODBC bigint results without losing precision', () => {
         expect((0, NetezzaDriver_1.normalizeNetezzaResultRow)({
             count: 9007199254740993n,
